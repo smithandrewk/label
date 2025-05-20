@@ -1,0 +1,74 @@
+body {
+    display: flex;
+    min-height: 100vh;
+    margin: 0;
+}
+.sidebar {
+    width: 250px;
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-right: 1px solid #dee2e6;
+}
+.main-content {
+    flex-grow: 1;
+    padding: 20px;
+}
+#visualization-view {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    height: 100%; /* Full viewport height */
+}
+.visualization-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 100px;
+}
+#action-buttons {
+    display: flex;
+    gap: 10px;
+}
+.plot-container {
+    position: relative;
+    display: flex;
+    height: 100%;
+    width: 100%;
+}
+#timeSeriesPlot {
+    flex-grow: 1;
+    height: 100%;
+}
+
+/* Add this to your style.css file or in a <style> tag in the head */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh; /* Full viewport height */
+    width: 250px; /* Set your desired width */
+    overflow-y: auto; /* Enable vertical scrolling */
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-right: 1px solid #dee2e6;
+    z-index: 1000;
+}
+
+.main-content {
+    margin-left: 250px; /* Same as sidebar width */
+    padding: 20px;
+    width: calc(100% - 250px);
+}
+
+.drag-overlay {
+    position: absolute;
+    height: 100%;
+    background: transparent;
+    cursor: grab;
+    z-index: 10;
+}
+.drag-overlay:active {
+    cursor: grabbing;
+}
