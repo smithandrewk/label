@@ -80,13 +80,6 @@ function populateSessions() {
             // Table
             const row = document.createElement("tr");
             let actionButton = "";
-            if (session.status === "Initial") {
-                actionButton = `<button class="btn btn-primary btn-sm" onclick="visualizeSession('${session.name}')">Visualize</button>`;
-            } else if (session.status === "Visualized") {
-                actionButton = `<button class="btn btn-primary btn-sm" onclick="visualizeSession('${session.name}')">Visualize</button>` +
-                            `<button class="btn btn-success btn-sm me-1" onclick="decideSession('${session.name}', true)">Keep</button>` +
-                            `<button class="btn btn-danger btn-sm" onclick="decideSession('${session.name}', false)">Discard</button>`;
-            }
             row.innerHTML = `
                 <td>${session.name}</td>
                 <td>${session.file}</td>
@@ -154,31 +147,85 @@ async function visualizeSession(sessionName) {
         populateSessions();
     }
 
-    const detailsDiv = document.getElementById("session-details");
-    detailsDiv.innerHTML = `
-        <p><strong>Session:</strong> ${session.name}</p>
-        <p><strong>File:</strong> ${session.file}</p>
-        <p><strong>Status:</strong> ${session.status}</p>
-        ${session.keep === false ? '<p><strong>Decision:</strong> Discarded</p>' : ''}
-    `;
-
     const actionButtons = document.getElementById("action-buttons");
     actionButtons.innerHTML = "";
-    if (session.status === "Visualized") {
-        actionButtons.innerHTML = `
-            <button class="btn btn-success btn-sm me-1" onclick="decideSession('${session.name}', true)">Keep</button>
-            <button class="btn btn-danger btn-sm" onclick="decideSession('${session.name}', false)">Discard</button>
+
+    if (isSplitting) {
+        actionButtons.innerHTML += `
+            <span id="split-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224);">
+                <i class="fa-solid fa-arrows-split-up-and-left" ></i>
+            </span>
+        `;
+    } else {
+        actionButtons.innerHTML += `
+            <span id="split-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
+                <i class="fa-solid fa-arrows-split-up-and-left" ></i>
+            </span>
         `;
     }
 
-    if (!isSplitting) {
-        actionButtons.innerHTML += `<button class="btn btn-warning btn-sm" onclick="toggleSplitMode('${session.name}')">Split</button>`;
-    } else {
-        actionButtons.innerHTML += `<button class="btn btn-info btn-sm" onclick="toggleSplitMode('${session.name}')">Click Plot to Split</button>`;
-    }
+    actionButtons.innerHTML += `
+        <span id="cancel-btn-overlay" style="display:none; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; margin-right:4px; cursor:pointer;">
+            <i id="cancel-btn" class="fa-solid fa-xmark" style="font-size:20px;"></i>
+        </span>
+        <span id="trash-btn-overlay" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:rgba(224,224,224,0); cursor:pointer;">
+            <i id="trash-btn" class="fa-solid fa-trash"></i>
+        </span>
+    `;
 
-    actionButtons.innerHTML += `<button class="btn btn-info btn-sm" onclick="splitSession('${session.name}')">SEND SPLIT</button>`;
+    let trashArmed = false;
 
+    const trash_btn_overlay = document.getElementById('trash-btn-overlay');
+    const trash_btn = document.getElementById('trash-btn');
+    const cancel_btn_overlay = document.getElementById('cancel-btn-overlay');
+
+    trash_btn_overlay.addEventListener('mouseenter', () => {
+        trash_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+    });
+    trash_btn_overlay.addEventListener('mouseleave', () => {
+        trash_btn_overlay.style.background = 'rgba(224,224,224,0)';
+    });
+
+    trash_btn_overlay.addEventListener('click', () => {
+        if (!trashArmed) {
+            // Arm the trashcan
+            trashArmed = true;
+            trash_btn.style.color = '#dc3545'; // Bootstrap red
+            cancel_btn_overlay.style.display = 'inline-flex';
+        } else {
+            // Perform delete (placeholder)
+            decideSession(currentSessionName, false);
+            // Reset state
+            trashArmed = false;
+            trash_btn.style.color = '';
+            cancel_btn_overlay.style.display = 'none';
+        }
+    });
+
+    cancel_btn_overlay.addEventListener('click', () => {
+        // Cancel delete
+        trashArmed = false;
+        trash_btn.style.color = '';
+        cancel_btn_overlay.style.display = 'none';
+    });
+
+    cancel_btn_overlay.addEventListener('mouseenter', () => {
+        cancel_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+    });
+    cancel_btn_overlay.addEventListener('mouseleave', () => {
+        cancel_btn_overlay.style.background = 'rgba(224,224,224,0)';
+    });
+
+    const split_btn_overlay = document.getElementById('split-btn-overlay');
+    split_btn_overlay.addEventListener('mouseenter', () => {
+        split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(0, 0, 0, 0.1)';
+    });
+    split_btn_overlay.addEventListener('mouseleave', () => {
+        split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(224, 224, 224, 0)';
+    });
+    split_btn_overlay.addEventListener('click', function() {
+        toggleSplitMode();
+    });
 
     const dataToPlot = session.data;
     if (!dataToPlot || dataToPlot.length === 0) {
@@ -196,8 +243,8 @@ async function visualizeSession(sessionName) {
         return;
     }
 
-    const minTimestamp = Math.min(...timestamps);
-    const maxTimestamp = Math.max(...timestamps);
+    minTimestamp = Math.min(...timestamps);
+    maxTimestamp = Math.max(...timestamps);
 
     const traces = [
         { x: timestamps, y: xValues, name: 'X Axis', type: 'scatter', mode: 'lines', line: { color: '#17BECF' } },
@@ -255,6 +302,7 @@ async function visualizeSession(sessionName) {
         });
         // Update overlays on plot relayout (pan, zoom, etc.)
         plotDiv.on('plotly_relayout', () => {
+            console.log('Plotly relayout event');
             updateAllOverlayPositions();
         });
         // Update overlays on window resize
@@ -299,6 +347,16 @@ function createBoutOverlays(index, container) {
     let originalLeft = 0;
     let originalWidth = 0;
     
+    // Add double-click event to remove the bout
+    dragOverlay.addEventListener('dblclick', function() {
+        const boutIndex = parseInt(dragOverlay.dataset.boutIndex);
+        if (dragContext.currentSession && dragContext.currentSession.bouts) {
+            dragContext.currentSession.bouts.splice(boutIndex, 1);
+            console.log(`Removed bout ${boutIndex}`);
+            updateSessionMetadata(dragContext.currentSession);
+            visualizeSession(currentSessionName); // Refresh the plot
+        }
+    });
     // Element-specific mouse events for dragging
     dragOverlay.addEventListener('mousedown', function(e) {
         isDragging = true;
@@ -521,12 +579,10 @@ function updateOverlayPositions(plotDiv, bout, index) {
     rightOverlay.style.zIndex = '1000';
 }
 // Toggle splitting mode
-function toggleSplitMode(sessionName) {
+function toggleSplitMode() {
     isSplitting = !isSplitting;
-    const splitButton = document.querySelector(`#action-buttons button[onclick="toggleSplitMode('${sessionName}')"]`);
-    splitButton.textContent = isSplitting ? 'Click Plot to Split' : 'Split';
-    splitButton.classList.toggle('btn-warning', !isSplitting);
-    splitButton.classList.toggle('btn-info', isSplitting);
+    const split_btn_overlay = document.getElementById('split-btn-overlay');
+    split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(0, 0, 0, 0)';
 }
 
 // Decide to keep or discard
@@ -538,16 +594,16 @@ async function decideSession(sessionName, keep) {
     await updateSessionMetadata(session);
     populateSessions();
     showTableView(); // Return to table view after split
-    // visualizeSession(sessionName);
 }
 
-async function splitSession(sessionName) {
+async function splitSession() {
+    console.log('Splitting session:', currentSessionName);
     if (splitPoints.length === 0) {
         alert('No split points selected');
         return;
     }
     try {
-        const response = await fetch(`/api/session/${sessionName}/split`, {
+        const response = await fetch(`/api/session/${currentSessionName}/split`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ split_points: splitPoints })
@@ -568,6 +624,24 @@ async function splitSession(sessionName) {
     }
 }
 
+function createNewBout() {
+    // Create new bout with values within min and max timestamps
+    console.log(minTimestamp, maxTimestamp);
+    const middleTimestamp = (minTimestamp + maxTimestamp) / 2;
+    const newBout = [middleTimestamp - (240*1e9), middleTimestamp + (240*1e9)];
+    // Add new bout to the session
+    if (dragContext.currentSession && dragContext.currentSession.bouts) {
+        dragContext.currentSession.bouts.push(newBout);
+        console.log(`Created new bout: [${newBout[0]}, ${newBout[1]}]`);
+        // Update the session metadata
+        updateSessionMetadata(dragContext.currentSession);
+        // Refresh the visualization
+        visualizeSession(currentSessionName);
+    } else {
+        console.error('No current session in drag context');
+    }
+}
+
 // Global drag context
 const dragContext = {
     currentSession: null  // Will store the session being modified
@@ -576,13 +650,13 @@ const dragContext = {
 const activeHandlers = [];
 
 // Create global reference to these handlers so we can remove them
-let documentMouseMoveHandler;
-let documentMouseUpHandler;
 let sessions = [];
 let currentSessionName = null;
 let currentActiveSession = null;
 let isSplitting = false;
 let splitPoints = [];
+let minTimestamp = null;
+let maxTimestamp = null;
 
 // Make functions available globally for inline event handlers
 window.visualizeSession = visualizeSession;
@@ -590,6 +664,7 @@ window.showTableView = showTableView;
 window.decideSession = decideSession;
 window.toggleSplitMode = toggleSplitMode;
 window.splitSession = splitSession;
+window.createNewBout = createNewBout;
 
 fetchSessions();
 eventListeners.addEventListeners();
