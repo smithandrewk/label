@@ -1,18 +1,6 @@
 import * as eventListeners from './eventListeners.js';
+import { ensureSessionBoutsIsArray } from './helpers.js'
 
-// Fetch projects from backend
-async function fetchProjects() {
-    try {
-        const response = await fetch('/api/projects');
-        if (!response.ok) throw new Error('Failed to fetch projects');
-        const projects = await response.json();
-        console.log('Fetched projects:', projects);
-        // populateSessions(projects);
-        // populateProjects(projects);
-    } catch (error) {
-        console.error('Error fetching projects:', error);
-    }
-}
 // Add to your script.js
 async function initializeProjects() {
     try {
@@ -33,6 +21,7 @@ async function initializeProjects() {
             a.dataset.projectId = project.project_id;
             a.onclick = function(e) {
                 e.preventDefault();
+                currentProjectId = project.project_id; // Store selected project ID
                 fetchProjectSessions(project.project_id);
                 
                 // Update active state
@@ -46,7 +35,7 @@ async function initializeProjects() {
             li.appendChild(a);
             dropdownMenu.appendChild(li);
         });
-        
+
         // Add divider and "All Projects" option
         if (projects.length > 0) {
             const divider = document.createElement('li');
@@ -59,8 +48,10 @@ async function initializeProjects() {
             allA.href = '#';
             allA.textContent = 'All Projects';
             // In your initializeProjects function, update the "All Projects" click handler:
+            // Update the All Projects click handler
             allA.onclick = function(e) {
                 e.preventDefault();
+                currentProjectId = null; // Clear the project ID
                 
                 // Update active state
                 document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
@@ -71,8 +62,7 @@ async function initializeProjects() {
                 this.setAttribute('aria-current', 'page');
                 
                 // Fetch all sessions
-                // Call fetchSession instead, which is your updated function
-                fetchSession(); // Without projectId parameter to get all sessions
+                fetchSession();
             };
             allLi.appendChild(allA);
             dropdownMenu.appendChild(allLi);
@@ -83,6 +73,7 @@ async function initializeProjects() {
             const firstProject = dropdownMenu.querySelector('.dropdown-item');
             firstProject.classList.add('active');
             firstProject.setAttribute('aria-current', 'page');
+            currentProjectId = projects[0].project_id; // ADD THIS LINE to set current project ID
             fetchProjectSessions(projects[0].project_id);
         }
     } catch (error) {
@@ -109,7 +100,7 @@ async function fetchProjectSessions(projectId) {
 }
 
 // Update the sessions list in the UI
-function updateSessionsList(sessions) {
+function updateSessionsList() {
     const sessionList = document.getElementById("session-list");
     const tbody = document.getElementById("sessions-table-body");
     
@@ -129,6 +120,8 @@ function updateSessionsList(sessions) {
     
     // Populate sessions
     sessions.forEach(session => {
+        if (session.keep == 0) return; // Skip discarded sessions
+        
         // Sidebar entry
         const li = document.createElement("li");
         li.className = "nav-item";
@@ -138,15 +131,79 @@ function updateSessionsList(sessions) {
 
         // Table row
         const row = document.createElement("tr");
-        let actionButton = `<button class="btn btn-sm btn-primary" onclick="visualizeSession('${session.session_id}')">View</button>`;
-        
+        const sessionId = session.session_id;
+        let trashButton = `
+            <div style="position: relative; display: inline-block; width: 32px; height: 32px;">
+                <span id="cancel-btn-overlay-${sessionId}" style="position: absolute; right: 100%; display: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; cursor: pointer;">
+                    <i id="cancel-btn-${sessionId}" class="fa-solid fa-xmark" style="font-size: 20px;"></i>
+                </span>
+                <span id="trash-btn-overlay-${sessionId}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer;">
+                    <i id="trash-btn-${sessionId}" class="fa-solid fa-trash"></i>
+                </span>
+            </div>
+        `;
         row.innerHTML = `
             <td>${session.session_name}</td>
-            <td>${session.project_name}</td>
+            <td>${session.project_name || ''}</td>
             <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === 0 ? ' (Discarded)' : ''}</td>
-            <td>${actionButton}</td>
+            <td>${trashButton}</td>
         `;
         tbody.appendChild(row);
+
+        // Add event listeners for this row's trash button
+        const trash_btn_overlay = document.getElementById(`trash-btn-overlay-${sessionId}`);
+        const trash_btn = document.getElementById(`trash-btn-${sessionId}`);
+        const cancel_btn_overlay = document.getElementById(`cancel-btn-overlay-${sessionId}`);
+
+        if (trash_btn_overlay && trash_btn && cancel_btn_overlay) {
+            // Track armed state for each button
+            trash_btn_overlay.dataset.armed = "false";
+            
+            // Hover effects
+            trash_btn_overlay.addEventListener('mouseenter', () => {
+                trash_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+            });
+            
+            trash_btn_overlay.addEventListener('mouseleave', () => {
+                trash_btn_overlay.style.background = 'rgba(224,224,224,0)';
+            });
+            
+            // Click handling with confirmation
+            trash_btn_overlay.addEventListener('click', () => {
+                const isArmed = trash_btn_overlay.dataset.armed === "true";
+                if (!isArmed) {
+                    // Arm the trash button
+                    trash_btn_overlay.dataset.armed = "true";
+                    trash_btn.style.color = '#dc3545'; // Bootstrap red
+                    cancel_btn_overlay.style.display = 'inline-flex';
+                } else {
+                    console.log('here')
+                    // Perform delete
+                    decideSession(sessionId, false);
+                    // Reset state
+                    trash_btn_overlay.dataset.armed = "false";
+                    trash_btn.style.color = '';
+                    cancel_btn_overlay.style.display = 'none';
+                }
+            });
+            
+            // Cancel button handling
+            cancel_btn_overlay.addEventListener('mouseenter', () => {
+                cancel_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+            });
+            
+            cancel_btn_overlay.addEventListener('mouseleave', () => {
+                cancel_btn_overlay.style.background = 'rgba(224,224,224,0)';
+            });
+            
+            cancel_btn_overlay.addEventListener('click', (e) => {
+                // Cancel delete and prevent event from bubbling to parent elements
+                e.stopPropagation();
+                trash_btn_overlay.dataset.armed = "false";
+                trash_btn.style.color = '';
+                cancel_btn_overlay.style.display = 'none';
+            });
+        }
     });
 }
 
@@ -161,51 +218,15 @@ async function fetchSession(projectId) {
         sessions = await response.json();
         
         console.log('Fetched sessions:', sessions);
-        // for (let session of sessions) {
-        //     // If your backend now returns complete session data, you might not need this
-        //     // Otherwise, keep it to fetch additional metadata
-        //     const metadata = await fetchSessionMetadata(session.session_id);
-        //     session.status = metadata.status || session.status;
-        //     session.keep = metadata.keep || session.keep;
-        //     session.data = [];
-        //     session.bouts = [];
-        // }
-        // populateSessions();
-    } catch (error) {
-        console.error('Error fetching sessions:', error);
-    }
-}
-// Fetch sessions from backend
-async function fetchSessions() {
-    try {
-        const response = await fetch('/api/sessions');
-        if (!response.ok) throw new Error('Failed to fetch sessions');
-        sessions = await response.json();
         
-        // No need to fetch additional metadata - the sessions API already provides all data
-        // Remove this loop that's causing errors:
-        /*
-        for (let session of sessions) {
-            const metadata = await fetchSessionMetadata(session.name);
-            session.status = metadata.status;
-            session.keep = metadata.keep;
-            session.data = [];
-            session.bouts = [];
-        }
-        */
-        
-        // Instead just initialize empty arrays for data and bouts
-        sessions.forEach(session => {
-            session.data = [];
-            session.bouts = [];
-        });
-        
-        // Update the UI with the sessions data
+        // Add this line to update the UI
         updateSessionsList(sessions);
+        
     } catch (error) {
         console.error('Error fetching sessions:', error);
     }
 }
+
 // Function to handle API call
 function createNewProject(formData) {
     // Use fetch API to send data to your backend
@@ -228,6 +249,7 @@ function createNewProject(formData) {
         // Refresh the project list or navigate to the new project
         // This depends on your application flow
         // For example: refreshProjectList();
+        updateSessionsList();
     })
     .catch(error => {
         // Handle errors
@@ -242,7 +264,6 @@ function showCreateProjectForm() {
     modal.show();
 }
 
-// Update session metadata
 async function updateSessionMetadata(session) {
     try {
         const response = await fetch(`/api/session/${session.session_id}/metadata`, {
@@ -251,10 +272,12 @@ async function updateSessionMetadata(session) {
             body: JSON.stringify({
                 status: session.status,
                 keep: session.keep,
-                bouts: session.bouts
+                bouts: JSON.stringify(session.bouts || [])
             })
         });
         if (!response.ok) throw new Error('Failed to update metadata');
+        const result = await response.json();
+        console.log('Metadata update result:', result);
     } catch (error) {
         console.error('Error updating metadata:', error);
     }
@@ -266,51 +289,46 @@ async function loadSessionData(sessionId) {
         const response = await fetch(`/api/session/${sessionId}`);
         if (!response.ok) throw new Error('Failed to fetch session data');
         const data = await response.json();
-        return { bouts: data.bouts, data: data.data };
+                
+        // Ensure bouts is an array
+        let bouts = data.bouts;
+        if (typeof bouts === 'string') {
+            try {
+                bouts = JSON.parse(bouts);
+            } catch (e) {
+                console.error('Error parsing bouts in loadSessionData:', e);
+                bouts = [];
+            }
+        } else if (!Array.isArray(bouts)) {
+            bouts = [];
+        }
+        return { bouts: bouts, data: data.data };
     } catch (error) {
         console.error('Error loading session data:', error);
         return { bouts: [], data: [] };
     }
 }
-function populateSessions() {
-    const sessionList = document.getElementById("session-list");
-    const tbody = document.getElementById("sessions-table-body");
-    sessionList.innerHTML = "";
-    tbody.innerHTML = "";
-    
-    sessions.forEach(session => {
-        if (session.keep !== 0) {
-            // Sidebar - Use session_name instead of name
-            const li = document.createElement("li");
-            li.className = "nav-item";
-            // Use session_name for display and session_id for the function parameter
-            const linkClass = session.session_name === currentActiveSession ? "nav-link active-session" : "nav-link";
-            li.innerHTML = `<a class="${linkClass}" href="#" onclick="visualizeSession('${session.session_id}')">${session.session_name}</a>`;
-            sessionList.appendChild(li);
-
-            // Table - Update to use session_name and project_name
-            const row = document.createElement("tr");
-            let actionButton = `<button class="btn btn-sm btn-primary" onclick="visualizeSession('${session.session_id}')">View</button>`;
-            
-            row.innerHTML = `
-                <td>${session.session_name}</td>
-                <td>${session.project_name || ''}</td>
-                <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === 0 ? ' (Discarded)' : ''}</td>
-                <td>${actionButton}</td>
-            `;
-            tbody.appendChild(row);
-        }
-    });
-}
 
 // Show table view
 function showTableView() {
-    document.getElementById("table-view").style.display = "flex";
+    document.getElementById("table-view").style.display = "block";
     document.getElementById("visualization-view").style.display = "none";
 }
 
 // Show visualization view
 async function visualizeSession(sessionId) {
+    // If we're already viewing a session and switching to another, save changes first
+    if (currentSessionId && currentSessionId !== sessionId) {
+        const currentSession = sessions.find(s => s.session_id == currentSessionId);
+        if (currentSession) {
+            try {
+                console.log(`Saving bout changes before switching from ${currentSessionId} to ${sessionId}`);
+                await updateSessionMetadata(currentSession);
+            } catch (error) {
+                console.error('Error saving bout changes before switching sessions:', error);
+            }
+        }
+    }
     // Clean up previous event handlers
     activeHandlers.forEach(h => {
         document.removeEventListener(h.type, h.handler);
@@ -329,7 +347,6 @@ async function visualizeSession(sessionId) {
     
     // Set the current session name/id
     currentSessionId = sessionId;
-    currentSessionName = session.session_name;
     currentActiveSession = session.session_name;
     
     dragContext.currentSession = session;
@@ -339,7 +356,7 @@ async function visualizeSession(sessionId) {
         session.bouts = bouts;
         session.data = data;
         if (!session.data || session.data.length === 0) {
-            console.error('No valid data for session:', sessionName);
+            console.error('No valid data for session:', currentActiveSession);
             return;
         }
     }
@@ -360,7 +377,7 @@ async function visualizeSession(sessionId) {
     if (session.status === "Initial") {
         session.status = "Visualized";
         await updateSessionMetadata(session);
-        populateSessions();
+        updateSessionsList(sessions);
     }
 
     const actionButtons = document.getElementById("action-buttons");
@@ -380,20 +397,25 @@ async function visualizeSession(sessionId) {
         `;
     }
 
+    // For the visualization view, update the trash button HTML:
     actionButtons.innerHTML += `
-        <span id="cancel-btn-overlay" style="display:none; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; margin-right:4px; cursor:pointer;">
-            <i id="cancel-btn" class="fa-solid fa-xmark" style="font-size:20px;"></i>
-        </span>
-        <span id="trash-btn-overlay" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:rgba(224,224,224,0); cursor:pointer;">
-            <i id="trash-btn" class="fa-solid fa-trash"></i>
-        </span>
+        <div style="position: relative; display: inline-block; width: 32px; height: 32px;">
+            <span id="cancel-btn-overlay" style="position: absolute; right: 100%; display: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; cursor: pointer;">
+                <i id="cancel-btn" class="fa-solid fa-xmark" style="font-size:20px;"></i>
+            </span>
+            <span id="trash-btn-overlay" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:rgba(224,224,224,0); cursor:pointer;">
+                <i id="trash-btn" class="fa-solid fa-trash"></i>
+            </span>
+        </div>
     `;
 
-    let trashArmed = false;
-
+    // And update the event handlers to use dataset instead of a local variable:
     const trash_btn_overlay = document.getElementById('trash-btn-overlay');
     const trash_btn = document.getElementById('trash-btn');
     const cancel_btn_overlay = document.getElementById('cancel-btn-overlay');
+
+    // Use dataset attribute instead of local variable
+    trash_btn_overlay.dataset.armed = "false";
 
     trash_btn_overlay.addEventListener('mouseenter', () => {
         trash_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
@@ -402,25 +424,29 @@ async function visualizeSession(sessionId) {
         trash_btn_overlay.style.background = 'rgba(224,224,224,0)';
     });
 
+    // Click handling with confirmation
     trash_btn_overlay.addEventListener('click', () => {
-        if (!trashArmed) {
-            // Arm the trashcan
-            trashArmed = true;
+        const isArmed = trash_btn_overlay.dataset.armed === "true";
+        if (!isArmed) {
+            // Arm the trash button
+            trash_btn_overlay.dataset.armed = "true";
             trash_btn.style.color = '#dc3545'; // Bootstrap red
             cancel_btn_overlay.style.display = 'inline-flex';
         } else {
             // Perform delete (placeholder)
             decideSession(currentSessionId, false);
             // Reset state
-            trashArmed = false;
+            trash_btn_overlay.dataset.armed = "false";
             trash_btn.style.color = '';
             cancel_btn_overlay.style.display = 'none';
         }
     });
 
-    cancel_btn_overlay.addEventListener('click', () => {
-        // Cancel delete
-        trashArmed = false;
+    // Cancel button handling with stopPropagation
+    cancel_btn_overlay.addEventListener('click', (e) => {
+        // Cancel delete and prevent event from bubbling to parent
+        e.stopPropagation();
+        trash_btn_overlay.dataset.armed = "false";
         trash_btn.style.color = '';
         cancel_btn_overlay.style.display = 'none';
     });
@@ -501,6 +527,9 @@ async function visualizeSession(sessionId) {
 
     Plotly.newPlot('timeSeriesPlot', traces, layout).then(() => {
         const plotDiv = document.getElementById('timeSeriesPlot');
+        console.log(session.bouts);
+
+        ensureSessionBoutsIsArray(session);
         const overlays = session.bouts.map((bout, index) => createBoutOverlays(index, container));
         // Update all overlay positions
         function updateAllOverlayPositions() {
@@ -515,7 +544,7 @@ async function visualizeSession(sessionId) {
                 const splitPoint = data.points[0].x;
                 if (!splitPoints.includes(splitPoint)) {
                     splitPoints.push(splitPoint);
-                    visualizeSession(sessionName); // Refresh plot to show new split point marker
+                    visualizeSession(sessionId); // Refresh plot to show new split point marker
                 }
             }
         });
@@ -679,7 +708,8 @@ function createBoutOverlays(index, container) {
         const mouseUpHandler = function() {
             isDragging = isResizingLeft = isResizingRight = false;
             if (dragOverlay) dragOverlay.style.cursor = 'move';
-            saveBoutChanges();
+
+            saveBoutChanges().catch(err => console.error('Error in saveBoutChanges:', err));
             
             // Remove the temporary handlers
             document.removeEventListener('mousemove', mouseMoveHandler);
@@ -722,14 +752,19 @@ function createBoutOverlays(index, container) {
         }
     }
     
-    function saveBoutChanges() {
+    // Make saveBoutChanges async and ensure it completes
+    async function saveBoutChanges() {
         if (sessions && sessions.length > 0) {
-            console.log(sessions);
-            console.log(currentSessionId);
             const session = sessions.find(s => s.session_id == currentSessionId);
             if (session) {
                 console.log(`Saving bout changes for session ${session.session_name} (ID: ${currentSessionId})`);
-                updateSessionMetadata(session);
+                try {
+                    await updateSessionMetadata(session);
+                    console.log('Successfully saved bout changes to server');
+                } catch (error) {
+                    console.error('Failed to save bout changes:', error);
+                    alert('Failed to save bout changes. Your changes may be lost when switching sessions.');
+                }
             } else {
                 console.error(`Session not found for saving: ID ${currentSessionId}`);
             }
@@ -766,7 +801,7 @@ function updateOverlayPositions(plotDiv, bout, index) {
     if (!dragOverlay || !leftOverlay || !rightOverlay) return;
     
     // Set handle size
-    const handleWidth = 10;
+    const handleWidth = 50;
     const handleHeight = yAxis._length;
     
     // Set main overlay position and size
@@ -806,21 +841,35 @@ function toggleSplitMode() {
 }
 
 async function decideSession(sessionId, keep) {
-    const session = sessions.find(s => s.session_id === sessionId);
+    const session = sessions.find(s => s.session_id == sessionId);
     if (!session) return;
     session.status = "Decision Made";
     session.keep = keep;
     await updateSessionMetadata(session);
-    populateSessions();
+    updateSessionsList(sessions);
     showTableView(); // Return to table view after split
 }
 
+// Now update the splitSession function to maintain context
 async function splitSession() {
     console.log('Splitting session:', currentSessionId);
     if (splitPoints.length === 0) {
         alert('No split points selected');
         return;
     }
+    
+    // First, ensure any pending bout changes are saved
+    const currentSession = sessions.find(s => s.session_id == currentSessionId);
+    if (currentSession) {
+        try {
+            // Wait for metadata update to complete before proceeding
+            await updateSessionMetadata(currentSession);
+            console.log('Ensured latest bout changes are saved before splitting');
+        } catch (error) {
+            console.error('Error saving bout changes before split:', error);
+        }
+    }
+    
     try {
         const response = await fetch(`/api/session/${currentSessionId}/split`, {
             method: 'POST',
@@ -832,10 +881,34 @@ async function splitSession() {
             throw new Error(errorData.error || 'Failed to split session');
         }
         const result = await response.json();
-        // Clear split points and refresh sessions
+        // Clear split points
         splitPoints = [];
         isSplitting = false;
-        await fetchSessions();
+
+        // PROBLEM: This only resets colors, not the expanded state
+        document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
+            if (!item.classList.contains('active')) {
+                item.style.backgroundColor = '';
+                item.style.color = '';
+            }
+        });
+
+        // Reset Bootstrap dropdown state
+        const dropdownToggle = document.querySelector('[data-bs-toggle="dropdown"]');
+        if (dropdownToggle) {
+            dropdownToggle.setAttribute('aria-expanded', 'false');
+            const dropdownMenu = document.getElementById('project-dropdown-menu');
+            if (dropdownMenu) dropdownMenu.classList.remove('show');
+            dropdownToggle.classList.remove('show');
+        }
+
+        // Fetch sessions based on current context
+        if (currentProjectId) {
+            await fetchProjectSessions(currentProjectId);
+        } else {
+            await fetchSession();
+        }
+        
         showTableView();
     } catch (error) {
         console.error('Error splitting session:', error);
@@ -870,7 +943,8 @@ const activeHandlers = [];
 
 // Create global reference to these handlers so we can remove them
 let sessions = [];
-let currentSessionName = null;
+// Add this variable to track the current project
+let currentProjectId = null;
 let currentSessionId = null;
 let currentActiveSession = null;
 let isSplitting = false;
@@ -888,7 +962,5 @@ window.createNewBout = createNewBout;
 window.showCreateProjectForm = showCreateProjectForm;
 window.createNewProject = createNewProject;
 
-// fetchSessions();
-fetchProjects();
 initializeProjects();
 eventListeners.addEventListeners();

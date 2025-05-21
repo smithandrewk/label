@@ -13,26 +13,25 @@
 <body>
     <!-- Sidebar -->
     <div class="sidebar">
-        <h4>Data Sessions</h4>
-
-        <button class="btn btn-success rounded-pill px-3" type="button" onclick="showCreateProjectForm();">Upload Project</button>
+        <div style="display: flex; flex-direction: row; justify-content:flex-start;">
+            <span id="upload-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
+                <i class="fa-solid fa-arrow-up-from-bracket"></i>
+            </span>
+            <a href="#" class="d-flex align-items-center col-lg-4 mb-2 mb-lg-0 link-body-emphasis text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Bootstrap menu">
+                <i class="fa-solid fa-list-ul"></i>
+            </a> 
+            <ul class="dropdown-menu text-small shadow" id="project-dropdown-menu">
+                <!-- This will be populated by JavaScript -->
+            </ul>
+        </div>
         <ul class="nav flex-column" id="session-list">
             <!-- Populated by JavaScript -->
         </ul>
     </div>
-
     <!-- Main Content -->
     <div class="main-content">
         <!-- Table View -->
         <div id="table-view">
-            <a href="#" class="d-flex align-items-center col-lg-4 mb-2 mb-lg-0 link-body-emphasis text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Bootstrap menu">
-                <button class="btn btn-dark rounded-pill px-3" type="button">Projects</button>
-                <!-- <svg class="bi me-2" width="40" height="32" aria-hidden="true"><use xlink:href="#bootstrap"></use></svg> -->
-            </a>
-            <ul class="dropdown-menu text-small shadow" id="project-dropdown-menu">
-                <!-- This will be populated by JavaScript -->
-            </ul>
-            <h2>Available Sessions</h2>
             <table class="table table-striped">
                 <thead>
                     <tr>
@@ -54,6 +53,7 @@
                 <span id="back-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
                     <i id="back-btn-icon" class="fa-solid fa-arrow-left"></i>
                 </span>
+                
                 <!-- <button class="btn btn-secondary mb-3" onclick="showTableView()">Back to Table</button> -->
                 <h2>Accelerometer Data Visualization</h2>
                 <!-- Session Details and Action Buttons -->
