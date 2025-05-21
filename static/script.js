@@ -1,11 +1,190 @@
 import * as eventListeners from './eventListeners.js';
 
+// Fetch projects from backend
+async function fetchProjects() {
+    try {
+        const response = await fetch('/api/projects');
+        if (!response.ok) throw new Error('Failed to fetch projects');
+        const projects = await response.json();
+        console.log('Fetched projects:', projects);
+        // populateSessions(projects);
+        // populateProjects(projects);
+    } catch (error) {
+        console.error('Error fetching projects:', error);
+    }
+}
+// Add to your script.js
+async function initializeProjects() {
+    try {
+        const response = await fetch('/api/projects');
+        if (!response.ok) throw new Error('Failed to fetch projects');
+        const projects = await response.json();
+        
+        // Populate the dropdown
+        const dropdownMenu = document.getElementById('project-dropdown-menu');
+        dropdownMenu.innerHTML = ''; // Clear existing items
+        
+        projects.forEach(project => {
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.className = 'dropdown-item';
+            a.href = '#';
+            a.textContent = project.project_name;
+            a.dataset.projectId = project.project_id;
+            a.onclick = function(e) {
+                e.preventDefault();
+                fetchProjectSessions(project.project_id);
+                
+                // Update active state
+                document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
+                    item.classList.remove('active');
+                    item.removeAttribute('aria-current');
+                });
+                this.classList.add('active');
+                this.setAttribute('aria-current', 'page');
+            };
+            li.appendChild(a);
+            dropdownMenu.appendChild(li);
+        });
+        
+        // Add divider and "All Projects" option
+        if (projects.length > 0) {
+            const divider = document.createElement('li');
+            divider.innerHTML = '<hr class="dropdown-divider">';
+            dropdownMenu.appendChild(divider);
+            
+            const allLi = document.createElement('li');
+            const allA = document.createElement('a');
+            allA.className = 'dropdown-item';
+            allA.href = '#';
+            allA.textContent = 'All Projects';
+            // In your initializeProjects function, update the "All Projects" click handler:
+            allA.onclick = function(e) {
+                e.preventDefault();
+                
+                // Update active state
+                document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
+                    item.classList.remove('active');
+                    item.removeAttribute('aria-current');
+                });
+                this.classList.add('active');
+                this.setAttribute('aria-current', 'page');
+                
+                // Fetch all sessions
+                // Call fetchSession instead, which is your updated function
+                fetchSession(); // Without projectId parameter to get all sessions
+            };
+            allLi.appendChild(allA);
+            dropdownMenu.appendChild(allLi);
+        }
+        
+        // Select first project by default
+        if (projects.length > 0) {
+            const firstProject = dropdownMenu.querySelector('.dropdown-item');
+            firstProject.classList.add('active');
+            firstProject.setAttribute('aria-current', 'page');
+            fetchProjectSessions(projects[0].project_id);
+        }
+    } catch (error) {
+        console.error('Error initializing projects:', error);
+    }
+}
+// Fetch sessions for a specific project
+async function fetchProjectSessions(projectId) {
+    try {
+        // Build URL with query parameter
+        const url = `/api/sessions?project_id=${projectId}`;
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to fetch sessions');
+        sessions = await response.json();
+        
+        console.log('Fetched sessions for project:', projectId, sessions);
+        
+        // Update the session table/list
+        updateSessionsList(sessions);
+    } catch (error) {
+        console.error('Error fetching project sessions:', error);
+    }
+}
+
+// Update the sessions list in the UI
+function updateSessionsList(sessions) {
+    const sessionList = document.getElementById("session-list");
+    const tbody = document.getElementById("sessions-table-body");
+    
+    // Clear existing content
+    sessionList.innerHTML = "";
+    tbody.innerHTML = "";
+    
+    if (sessions.length === 0) {
+        // Display a message for empty sessions
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="text-center">No sessions available for this project</td>
+            </tr>
+        `;
+        return;
+    }
+    
+    // Populate sessions
+    sessions.forEach(session => {
+        // Sidebar entry
+        const li = document.createElement("li");
+        li.className = "nav-item";
+        const linkClass = session.session_name === currentActiveSession ? "nav-link active-session" : "nav-link";
+        li.innerHTML = `<a class="${linkClass}" href="#" onclick="visualizeSession('${session.session_id}')">${session.session_name}</a>`;
+        sessionList.appendChild(li);
+
+        // Table row
+        const row = document.createElement("tr");
+        let actionButton = `<button class="btn btn-sm btn-primary" onclick="visualizeSession('${session.session_id}')">View</button>`;
+        
+        row.innerHTML = `
+            <td>${session.session_name}</td>
+            <td>${session.project_name}</td>
+            <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === 0 ? ' (Discarded)' : ''}</td>
+            <td>${actionButton}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+// Fetch session for each project
+async function fetchSession(projectId) {
+    try {
+        // Build URL with query parameter if projectId is provided
+        const url = projectId ? `/api/sessions?project_id=${projectId}` : '/api/sessions';
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to fetch sessions');
+        sessions = await response.json();
+        
+        console.log('Fetched sessions:', sessions);
+        // for (let session of sessions) {
+        //     // If your backend now returns complete session data, you might not need this
+        //     // Otherwise, keep it to fetch additional metadata
+        //     const metadata = await fetchSessionMetadata(session.session_id);
+        //     session.status = metadata.status || session.status;
+        //     session.keep = metadata.keep || session.keep;
+        //     session.data = [];
+        //     session.bouts = [];
+        // }
+        // populateSessions();
+    } catch (error) {
+        console.error('Error fetching sessions:', error);
+    }
+}
 // Fetch sessions from backend
 async function fetchSessions() {
     try {
         const response = await fetch('/api/sessions');
         if (!response.ok) throw new Error('Failed to fetch sessions');
         sessions = await response.json();
+        
+        // No need to fetch additional metadata - the sessions API already provides all data
+        // Remove this loop that's causing errors:
+        /*
         for (let session of sessions) {
             const metadata = await fetchSessionMetadata(session.name);
             session.status = metadata.status;
@@ -13,28 +192,60 @@ async function fetchSessions() {
             session.data = [];
             session.bouts = [];
         }
-        populateSessions();
+        */
+        
+        // Instead just initialize empty arrays for data and bouts
+        sessions.forEach(session => {
+            session.data = [];
+            session.bouts = [];
+        });
+        
+        // Update the UI with the sessions data
+        updateSessionsList(sessions);
     } catch (error) {
         console.error('Error fetching sessions:', error);
     }
 }
+// Function to handle API call
+function createNewProject(formData) {
+    // Use fetch API to send data to your backend
+    fetch('/api/project/upload', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Handle successful response
+        console.log('Success:', data);
+        
+        // Close the modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
+        modal.hide();
+        
+        // Refresh the project list or navigate to the new project
+        // This depends on your application flow
+        // For example: refreshProjectList();
+    })
+    .catch(error => {
+        // Handle errors
+        console.error('Error:', error);
+        alert('Failed to create project. Please try again.');
+    });
+}
 
-// Fetch session metadata
-async function fetchSessionMetadata(sessionName) {
-    try {
-        const response = await fetch(`/api/session/${sessionName}/metadata`);
-        if (!response.ok) throw new Error('Failed to fetch metadata');
-        return await response.json();
-    } catch (error) {
-        console.error('Error fetching metadata:', error);
-        return { status: 'Initial', keep: null, bouts: [] };
-    }
+// Show create project form
+function showCreateProjectForm() {
+    const modal = new bootstrap.Modal(document.getElementById('createProjectModal'));
+    modal.show();
 }
 
 // Update session metadata
 async function updateSessionMetadata(session) {
     try {
-        const response = await fetch(`/api/session/${session.name}/metadata`, {
+        const response = await fetch(`/api/session/${session.session_id}/metadata`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -49,41 +260,42 @@ async function updateSessionMetadata(session) {
     }
 }
 
-// Modify loadSessionData to return an object
-async function loadSessionData(sessionName) {
+// Update loadSessionData to use sessionId
+async function loadSessionData(sessionId) {
     try {
-        const response = await fetch(`/api/session/${sessionName}`);
+        const response = await fetch(`/api/session/${sessionId}`);
         if (!response.ok) throw new Error('Failed to fetch session data');
         const data = await response.json();
-        return { bouts: data.bouts, data: data.data }; // Return as an object
+        return { bouts: data.bouts, data: data.data };
     } catch (error) {
         console.error('Error loading session data:', error);
-        return { bouts: [], data: [] }; // Return default values
+        return { bouts: [], data: [] };
     }
 }
-
-// Populate sidebar and table
 function populateSessions() {
     const sessionList = document.getElementById("session-list");
     const tbody = document.getElementById("sessions-table-body");
     sessionList.innerHTML = "";
     tbody.innerHTML = "";
+    
     sessions.forEach(session => {
         if (session.keep !== 0) {
-            //Sidebar
+            // Sidebar - Use session_name instead of name
             const li = document.createElement("li");
             li.className = "nav-item";
-            const linkClass = session.name === currentActiveSession ? "nav-link active-session" : "nav-link";
-            li.innerHTML = `<a class="${linkClass}" href="#" onclick="visualizeSession('${session.name}')">${session.name}</a>`;
+            // Use session_name for display and session_id for the function parameter
+            const linkClass = session.session_name === currentActiveSession ? "nav-link active-session" : "nav-link";
+            li.innerHTML = `<a class="${linkClass}" href="#" onclick="visualizeSession('${session.session_id}')">${session.session_name}</a>`;
             sessionList.appendChild(li);
 
-            // Table
+            // Table - Update to use session_name and project_name
             const row = document.createElement("tr");
-            let actionButton = "";
+            let actionButton = `<button class="btn btn-sm btn-primary" onclick="visualizeSession('${session.session_id}')">View</button>`;
+            
             row.innerHTML = `
-                <td>${session.name}</td>
-                <td>${session.file}</td>
-                <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === false ? ' (Discarded)' : ''}</td>
+                <td>${session.session_name}</td>
+                <td>${session.project_name || ''}</td>
+                <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === 0 ? ' (Discarded)' : ''}</td>
                 <td>${actionButton}</td>
             `;
             tbody.appendChild(row);
@@ -98,28 +310,32 @@ function showTableView() {
 }
 
 // Show visualization view
-async function visualizeSession(sessionName) {
+async function visualizeSession(sessionId) {
     // Clean up previous event handlers
     activeHandlers.forEach(h => {
         document.removeEventListener(h.type, h.handler);
     });
-    activeHandlers.length = 0; // Clear the array
+    activeHandlers.length = 0;
+    
     // Also clean up any stray elements
     document.querySelectorAll('.drag-overlay, .left-overlay, .right-overlay').forEach(el => el.remove());
     
-    // Set the current session name at the beginning
-    currentSessionName = sessionName;
-    currentActiveSession = sessionName;
-    
-    const session = sessions.find(s => s.name === sessionName);
+    // Find the session by ID
+    const session = sessions.find(s => s.session_id == sessionId);
     if (!session) {
-        console.error('Session not found:', sessionName);
+        console.error('Session not found:', sessionId);
         return;
     }
+    
+    // Set the current session name/id
+    currentSessionId = sessionId;
+    currentSessionName = session.session_name;
+    currentActiveSession = session.session_name;
+    
     dragContext.currentSession = session;
 
     if (!session.data || session.data.length === 0) {
-        const { bouts, data } = await loadSessionData(sessionName);
+        const { bouts, data } = await loadSessionData(sessionId);
         session.bouts = bouts;
         session.data = data;
         if (!session.data || session.data.length === 0) {
@@ -194,7 +410,7 @@ async function visualizeSession(sessionName) {
             cancel_btn_overlay.style.display = 'inline-flex';
         } else {
             // Perform delete (placeholder)
-            decideSession(currentSessionName, false);
+            decideSession(currentSessionId, false);
             // Reset state
             trashArmed = false;
             trash_btn.style.color = '';
@@ -243,8 +459,11 @@ async function visualizeSession(sessionName) {
         return;
     }
 
-    minTimestamp = Math.min(...timestamps);
-    maxTimestamp = Math.max(...timestamps);
+    // With this more efficient approach:
+    minTimestamp = timestamps.reduce((min, val) => Math.min(min, val), Infinity);
+
+    // And similarly for maxTimestamp:
+    maxTimestamp = timestamps.reduce((max, val) => Math.max(max, val), -Infinity);
 
     const traces = [
         { x: timestamps, y: xValues, name: 'X Axis', type: 'scatter', mode: 'lines', line: { color: '#17BECF' } },
@@ -354,7 +573,7 @@ function createBoutOverlays(index, container) {
             dragContext.currentSession.bouts.splice(boutIndex, 1);
             console.log(`Removed bout ${boutIndex}`);
             updateSessionMetadata(dragContext.currentSession);
-            visualizeSession(currentSessionName); // Refresh the plot
+            visualizeSession(currentSessionId); // Refresh the plot
         }
     });
     // Element-specific mouse events for dragging
@@ -503,15 +722,16 @@ function createBoutOverlays(index, container) {
         }
     }
     
-    // Helper function to save changes
     function saveBoutChanges() {
         if (sessions && sessions.length > 0) {
-            const session = sessions.find(s => s.name === currentSessionName);
+            console.log(sessions);
+            console.log(currentSessionId);
+            const session = sessions.find(s => s.session_id == currentSessionId);
             if (session) {
-                console.log(`Saving bout changes for session ${currentSessionName}`);
+                console.log(`Saving bout changes for session ${session.session_name} (ID: ${currentSessionId})`);
                 updateSessionMetadata(session);
             } else {
-                console.error(`Session not found for saving: ${currentSessionName}`);
+                console.error(`Session not found for saving: ID ${currentSessionId}`);
             }
         } else {
             console.error("No sessions available for saving");
@@ -585,9 +805,8 @@ function toggleSplitMode() {
     split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(0, 0, 0, 0)';
 }
 
-// Decide to keep or discard
-async function decideSession(sessionName, keep) {
-    const session = sessions.find(s => s.name === sessionName);
+async function decideSession(sessionId, keep) {
+    const session = sessions.find(s => s.session_id === sessionId);
     if (!session) return;
     session.status = "Decision Made";
     session.keep = keep;
@@ -597,13 +816,13 @@ async function decideSession(sessionName, keep) {
 }
 
 async function splitSession() {
-    console.log('Splitting session:', currentSessionName);
+    console.log('Splitting session:', currentSessionId);
     if (splitPoints.length === 0) {
         alert('No split points selected');
         return;
     }
     try {
-        const response = await fetch(`/api/session/${currentSessionName}/split`, {
+        const response = await fetch(`/api/session/${currentSessionId}/split`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ split_points: splitPoints })
@@ -636,7 +855,7 @@ function createNewBout() {
         // Update the session metadata
         updateSessionMetadata(dragContext.currentSession);
         // Refresh the visualization
-        visualizeSession(currentSessionName);
+        visualizeSession(currentSessionId);
     } else {
         console.error('No current session in drag context');
     }
@@ -652,6 +871,7 @@ const activeHandlers = [];
 // Create global reference to these handlers so we can remove them
 let sessions = [];
 let currentSessionName = null;
+let currentSessionId = null;
 let currentActiveSession = null;
 let isSplitting = false;
 let splitPoints = [];
@@ -665,6 +885,10 @@ window.decideSession = decideSession;
 window.toggleSplitMode = toggleSplitMode;
 window.splitSession = splitSession;
 window.createNewBout = createNewBout;
+window.showCreateProjectForm = showCreateProjectForm;
+window.createNewProject = createNewProject;
 
-fetchSessions();
+// fetchSessions();
+fetchProjects();
+initializeProjects();
 eventListeners.addEventListeners();

@@ -72,3 +72,20 @@ body {
 .drag-overlay:active {
     cursor: grabbing;
 }
+/* Dropzone styles */
+.dropzone {
+    min-height: 150px;
+    border: 2px dashed #007bff;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 0.25rem;
+}
+.dropzone .dz-message {
+    text-align: center;
+    margin: 2em 0;
+    color: #495057;
+}
+.dropzone.dz-drag-hover {
+    border-color: #28a745;
+    background: #e9ecef;
+}

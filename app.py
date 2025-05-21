@@ -29,72 +29,230 @@ def get_db_connection():
 
 from datetime import datetime
 
-# List sessions
-@app.route('/api/sessions')
-def list_sessions():
+# Get list of projects
+@app.route('/api/projects')
+def list_projects():
     try:
-        sessions = [
-            {'name': d, 'file': 'accelerometer_data.csv'}
-            for d in os.listdir(DATA_DIR)
-            if os.path.isdir(os.path.join(DATA_DIR, d))
-        ]
-        sessions.sort(key=lambda s: datetime.strptime('_'.join(s['name'].split('_')[:4]), '%Y-%m-%d_%H_%M_%S'))
-        # Initialize sessions in DB if not present
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT p.project_id, p.project_name, p.path, pt.participant_code
+            FROM projects p
+            JOIN participants pt ON p.participant_id = pt.participant_id
+        """)
+        projects = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return jsonify(projects)
+    except Exception as e:
+        print(f"Error listing projects: {e}")
+        return jsonify({'error': str(e)}), 500
+# Upload new project
+@app.route('/api/project/upload', methods=['POST'])
+def upload_new_project():
+    try:
+        data = request.get_json()
+        print(data)
+
+        # Get database connection
         conn = get_db_connection()
         if conn is None:
             return jsonify({'error': 'Database connection failed'}), 500
         cursor = conn.cursor()
-        for session in sessions:
+
+        # First check if participant exists
+        cursor.execute("""
+            SELECT participant_id FROM participants WHERE participant_code = %s
+        """, (data['participant'],))
+        participant = cursor.fetchone()
+
+        if participant:
+            # Use existing participant
+            participant_id = participant[0]
+        else:
+            # Create new participant
             cursor.execute("""
-                INSERT IGNORE INTO sessions (session_name, status, keep, label, segments)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (session['name'], 'Initial', None, '', '{}'))
+                INSERT INTO participants (participant_code) 
+                VALUES (%s)
+            """, (data['participant'],))
+            participant_id = cursor.lastrowid
+
+        # Then insert project with the participant_id
+        cursor.execute("""
+            INSERT INTO projects (project_name, participant_id, path)
+            VALUES (%s, %s, %s)
+        """, (data['name'], participant_id, data['path']))
+
+        # Get the new project_id
+        project_id = cursor.lastrowid
+
+        # Now scan the project path for sessions and insert them
+        project_path = data['path']
+
+        if os.path.exists(project_path) and os.path.isdir(project_path):
+            # Find all session directories in this project path
+            sessions = [
+                {'name': d, 'file': 'accelerometer_data.csv'}
+                for d in os.listdir(project_path)
+                if os.path.isdir(os.path.join(project_path, d)) 
+                and os.path.exists(os.path.join(project_path, d, 'accelerometer_data.csv'))
+            ]
+            # Sort sessions by date/time in the name (assuming similar format as in list_sessions)
+            try:
+                sessions.sort(key=lambda s: datetime.strptime('_'.join(s['name'].split('_')[:4]), '%Y-%m-%d_%H_%M_%S'))
+            except:
+                # If sorting fails (due to different naming convention), keep original order
+                pass
+
+            # Insert each session into the database
+            for session in sessions:
+                try:
+                    # Look for log.csv to extract bouts data
+                    bouts_json = '{}'
+                    log_path = os.path.join(project_path, session['name'], 'log.csv')
+                    if os.path.exists(log_path):
+                        try:
+                            log = pd.read_csv(log_path, skiprows=5)
+                            bouts = pd.concat([
+                                log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True).rename({'ns_since_reboot': 'start_time'}, axis=1)['start_time'],
+                                log[log['Message'] == 'Updating walking status from true to false'].reset_index(drop=True).rename({'ns_since_reboot': 'stop_time'}, axis=1)['stop_time']
+                            ], axis=1).values.tolist()
+                            bouts_json = json.dumps(bouts)
+                        except Exception as e:
+                            print(f"Error processing log file for bouts: {e}")
+                    
+                    cursor.execute("""
+                        INSERT INTO sessions (project_id, session_name, status, keep, label, segments, bouts)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (project_id, session['name'], 'Initial', None, '', '{}', bouts_json))
+                except Exception as e:
+                    print(f"Error inserting session {session['name']}: {e}")
+                    continue  # Skip this session and continue with others
+        else:
+            return jsonify({'error': f'Project path {project_path} does not exist or is not a directory'}), 400
         conn.commit()
         cursor.close()
         conn.close()
+
+        return jsonify({
+            'message': 'Project uploaded successfully',
+            'project_id': project_id,
+            'participant_id': participant_id
+        })
+    except Exception as e:
+        print(f"Error parsing request data: {e}")
+        return jsonify({'error': 'Invalid request data'}), 400
+
+
+@app.route('/api/sessions')
+def list_sessions():
+    try:
+        project_id = request.args.get('project_id')
+        
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        if project_id:
+            # Get sessions for a specific project
+            cursor.execute("""
+                SELECT s.session_id, s.session_name, s.status, s.keep, s.label,
+                       p.project_name, p.project_id, part.participant_code
+                FROM sessions s
+                JOIN projects p ON s.project_id = p.project_id
+                JOIN participants part ON p.participant_id = part.participant_id
+                WHERE s.project_id = %s
+                ORDER BY s.session_name
+            """, (project_id,))
+        else:
+            # Get all sessions
+            cursor.execute("""
+                SELECT s.session_id, s.session_name, s.status, s.keep, s.label,
+                       p.project_name, p.project_id, part.participant_code
+                FROM sessions s
+                JOIN projects p ON s.project_id = p.project_id
+                JOIN participants part ON p.participant_id = part.participant_id
+                ORDER BY s.session_name
+            """)
+        
+        sessions = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
         return jsonify(sessions)
     except Exception as e:
         print(f"Error listing sessions: {e}")
         return jsonify({'error': str(e)}), 500
 
-# Get session data (CSV)
-@app.route('/api/session/<session_name>')
-def get_session_data(session_name):
+@app.route('/api/session/<int:session_id>')
+def get_session_data(session_id):
     try:
-        ## Labels
-        log_path = os.path.join(DATA_DIR, session_name, 'log.csv')
-        if not os.path.exists(log_path):
-            return jsonify({'error': f'CSV file not found at {log_path}'}), 404
-        log = pd.read_csv(log_path,skiprows=5)
-        bouts = pd.concat([
-            log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True).rename({'ns_since_reboot': 'start_time'}, axis=1)['start_time'],
-            log[log['Message'] == 'Updating walking status from true to false'].reset_index(drop=True).rename({'ns_since_reboot': 'stop_time'}, axis=1)['stop_time']
-        ], axis=1).values.tolist()
-        ## Labels
-
-        csv_path = os.path.join(DATA_DIR, session_name, 'accelerometer_data.csv')
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT s.session_name, p.project_id, p.project_name, 
+                   p.path AS project_path
+            FROM sessions s
+            JOIN projects p ON s.project_id = p.project_id
+            WHERE s.session_id = %s
+        """, (session_id,))
+        
+        session_info = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if not session_info:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        # Use the project path stored in the description field
+        project_path = session_info['project_path']
+        session_name = session_info['session_name']
+        
+        # Path to the session's data files
+        csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
         if not os.path.exists(csv_path):
             return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
         
+        # Continue with your existing code to process the CSV file...
         df = pd.read_csv(csv_path)
-        df = df.iloc[::10]
-        print(bouts)
-        bouts = [bout for bout in bouts if (bout[0] > df['ns_since_reboot'].min() and bout[1] < df['ns_since_reboot'].max())]
+        df = df.iloc[::30]  # Downsampling
+        
+        # Extract bouts from log file if it exists
+        bouts = []
+        log_path = os.path.join(project_path, session_name, 'log.csv')
+        if os.path.exists(log_path):
+            try:
+                log = pd.read_csv(log_path, skiprows=5)
+                bouts = pd.concat([
+                    log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True).rename({'ns_since_reboot': 'start_time'}, axis=1)['start_time'],
+                    log[log['Message'] == 'Updating walking status from true to false'].reset_index(drop=True).rename({'ns_since_reboot': 'stop_time'}, axis=1)['stop_time']
+                ], axis=1).values.tolist()
+                bouts = [bout for bout in bouts if (bout[0] > df['ns_since_reboot'].min() and bout[1] < df['ns_since_reboot'].max())]
+            except Exception as e:
+                print(f"Error processing log file: {e}")
+        
         expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
         if not all(col in df.columns for col in expected_columns):
             return jsonify({'error': f'Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}'}), 400
         
         data = df[expected_columns].to_dict(orient='records')
         data = {
-            'bouts':bouts,
+            'bouts': bouts,
             'data': data,
+            'session_info': session_info
         }
-
+        
         return jsonify(data)
     except Exception as e:
         print(f"Error retrieving session data: {e}")
         return jsonify({'error': f'Server error: {str(e)}'}), 500
-
 # Get session metadata
 @app.route('/api/session/<session_name>/metadata')
 def get_session_metadata(session_name):
@@ -252,4 +410,4 @@ def serve_index():
     return app.send_static_file('index.html')
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(host='0.0.0.0',debug=True, port=80)
