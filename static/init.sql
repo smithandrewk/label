@@ -29,12 +29,30 @@ CREATE TABLE sessions (
     session_name VARCHAR(255) NOT NULL, -- e.g., 2025-01-01
     status VARCHAR(50) DEFAULT 'Initial',
     keep BOOLEAN,
-    label VARCHAR(255) DEFAULT '',
-    segments JSON,
+    is_visible TINYINT(1) NOT NULL DEFAULT 1,
     bouts JSON,
     UNIQUE (project_id, session_name),
     FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE
 );
 
+CREATE TABLE session_lineage (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    child_session_id INT NOT NULL,
+    parent_session_id INT NOT NULL,
+    split_timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (child_session_id) REFERENCES sessions(session_id),
+    FOREIGN KEY (parent_session_id) REFERENCES sessions(session_id)
+);
+
+select * from participants;
 select * from projects;
 select * from sessions;
+select * from session_lineage;
+
+drop table session_lineage;
+drop table sessions;
+drop table projects;
+drop table participants;
+
+GRANT ALL PRIVILEGES ON adb.* TO 'root'@'localhost';
+FLUSH PRIVILEGES;

@@ -13,10 +13,10 @@ DATA_DIR = 'data'
 
 # MySQL configuration
 MYSQL_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'Password123!',
-    'database': 'accelerometer_db'
+    'host': '127.0.0.1',
+    'user': 'flaskuser',
+    'password': 'admin',
+    'database': 'adb'
 }
 
 # Initialize MySQL connection
@@ -124,9 +124,9 @@ def upload_new_project():
                             print(f"Error processing log file for bouts: {e}")
                     
                     cursor.execute("""
-                        INSERT INTO sessions (project_id, session_name, status, keep, label, segments, bouts)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """, (project_id, session['name'], 'Initial', None, '', '{}', bouts_json))
+                        INSERT INTO sessions (project_id, session_name, status, keep, bouts)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (project_id, session['name'], 'Initial', None, bouts_json))
                 except Exception as e:
                     print(f"Error inserting session {session['name']}: {e}")
                     continue  # Skip this session and continue with others
@@ -150,6 +150,7 @@ def upload_new_project():
 def list_sessions():
     try:
         project_id = request.args.get('project_id')
+        show_split = request.args.get('show_split', '0') == '1'  # Optional parameter to show split sessions
         
         conn = get_db_connection()
         if conn is None:
@@ -157,25 +158,29 @@ def list_sessions():
         
         cursor = conn.cursor(dictionary=True)
         
+        # Base query filtering out split sessions
+        visibility_condition = "" if show_split else "AND (s.status != 'Split' OR s.status IS NULL) "
+        
         if project_id:
             # Get sessions for a specific project
-            cursor.execute("""
-                SELECT s.session_id, s.session_name, s.status, s.keep, s.label,
+            cursor.execute(f"""
+                SELECT s.session_id, s.session_name, s.status, s.keep,
                        p.project_name, p.project_id, part.participant_code
                 FROM sessions s
                 JOIN projects p ON s.project_id = p.project_id
                 JOIN participants part ON p.participant_id = part.participant_id
-                WHERE s.project_id = %s
+                WHERE s.project_id = %s {visibility_condition}
                 ORDER BY s.session_name
             """, (project_id,))
         else:
             # Get all sessions
-            cursor.execute("""
-                SELECT s.session_id, s.session_name, s.status, s.keep, s.label,
+            cursor.execute(f"""
+                SELECT s.session_id, s.session_name, s.status, s.keep,
                        p.project_name, p.project_id, part.participant_code
                 FROM sessions s
                 JOIN projects p ON s.project_id = p.project_id
                 JOIN participants part ON p.participant_id = part.participant_id
+                WHERE 1=1 {visibility_condition}
                 ORDER BY s.session_name
             """)
         
@@ -197,8 +202,8 @@ def get_session_data(session_id):
         
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT s.session_name, p.project_id, p.project_name, 
-                   p.path AS project_path
+            SELECT s.session_id, s.session_name, s.status, s.keep, s.bouts,
+                p.project_id, p.project_name, p.path AS project_path
             FROM sessions s
             JOIN projects p ON s.project_id = p.project_id
             WHERE s.session_id = %s
@@ -207,7 +212,7 @@ def get_session_data(session_id):
         session_info = cursor.fetchone()
         cursor.close()
         conn.close()
-        
+        print(session_id,session_info)
         if not session_info:
             return jsonify({'error': 'Session not found'}), 404
         
@@ -217,6 +222,7 @@ def get_session_data(session_id):
         
         # Path to the session's data files
         csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
+        print(csv_path)
         if not os.path.exists(csv_path):
             return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
         
@@ -225,18 +231,7 @@ def get_session_data(session_id):
         df = df.iloc[::30]  # Downsampling
         
         # Extract bouts from log file if it exists
-        bouts = []
-        log_path = os.path.join(project_path, session_name, 'log.csv')
-        if os.path.exists(log_path):
-            try:
-                log = pd.read_csv(log_path, skiprows=5)
-                bouts = pd.concat([
-                    log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True).rename({'ns_since_reboot': 'start_time'}, axis=1)['start_time'],
-                    log[log['Message'] == 'Updating walking status from true to false'].reset_index(drop=True).rename({'ns_since_reboot': 'stop_time'}, axis=1)['stop_time']
-                ], axis=1).values.tolist()
-                bouts = [bout for bout in bouts if (bout[0] > df['ns_since_reboot'].min() and bout[1] < df['ns_since_reboot'].max())]
-            except Exception as e:
-                print(f"Error processing log file: {e}")
+        bouts = session_info['bouts']
         
         expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
         if not all(col in df.columns for col in expected_columns):
@@ -276,42 +271,74 @@ def get_session_metadata(session_name):
         return jsonify({'error': str(e)}), 500
 
 # Update session metadata
-@app.route('/api/session/<session_name>/metadata', methods=['PUT'])
-def update_session_metadata(session_name):
+@app.route('/api/session/<int:session_id>/metadata', methods=['PUT'])
+def update_session_metadata(session_id):
     try:
         data = request.get_json()
         status = data.get('status')
         keep = data.get('keep')
-        label = data.get('label')
-        segments = data.get('segments')
-
+        bouts = data.get('bouts')
+        
         conn = get_db_connection()
         if conn is None:
             return jsonify({'error': 'Database connection failed'}), 500
+        
         cursor = conn.cursor()
+        # Update the SQL query to use session_id
         cursor.execute("""
             UPDATE sessions
-            SET status = %s, keep = %s, label = %s, segments = %s
-            WHERE session_name = %s
-        """, (status, keep, label, json.dumps(segments), session_name))
+            SET status = %s, keep = %s, bouts = %s
+            WHERE session_id = %s
+        """, (status, keep, bouts, session_id))
+        
+        # Check if any rows were updated
+        rows_affected = cursor.rowcount
         conn.commit()
         cursor.close()
         conn.close()
-        return jsonify({'message': 'Metadata updated'})
+        
+        if rows_affected == 0:
+            return jsonify({'warning': 'No session found with that ID'}), 200
+            
+        return jsonify({'message': 'Metadata updated', 'rows_affected': rows_affected})
     except Exception as e:
+        print(f"Error updating session metadata: {e}")
         return jsonify({'error': str(e)}), 500
 
 # Split session
-@app.route('/api/session/<session_name>/split', methods=['POST'])
-def split_session(session_name):
+@app.route('/api/session/<int:session_id>/split', methods=['POST'])
+def split_session(session_id):
     try:
         data = request.get_json()
         split_points = data.get('split_points')  # Array of ns_since_reboot timestamps
         if not split_points or not isinstance(split_points, list) or len(split_points) == 0:
             return jsonify({'error': 'At least one split point required'}), 400
 
-        # Read original CSV
-        csv_path = os.path.join(DATA_DIR, session_name, 'accelerometer_data.csv')
+        # First get session info including project path
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT s.session_id, s.session_name, s.status, s.keep, s.project_id, s.bouts, 
+                   p.path AS project_path
+            FROM sessions s
+            JOIN projects p ON s.project_id = p.project_id
+            WHERE s.session_id = %s
+        """, (session_id,))
+        
+        session_info = cursor.fetchone()
+        if not session_info:
+            conn.close()
+            return jsonify({'error': 'Session not found'}), 404
+        
+        session_name = session_info['session_name']
+        project_path = session_info['project_path']
+        print(session_info['bouts'])
+        
+        # Read original CSV from the project directory
+        csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
         if not os.path.exists(csv_path):
             return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
         
@@ -350,64 +377,99 @@ def split_session(session_name):
         if len(segments) < 2:
             return jsonify({'error': 'Split would not create multiple valid recordings'}), 400
 
-        # Get original metadata
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({'error': 'Database connection failed'}), 500
-        with conn.cursor(dictionary=True) as cursor:
-            cursor.execute("""
-                SELECT status, keep, label, segments
-                FROM sessions
-                WHERE session_name = %s
-            """, (session_name,))
-            metadata = cursor.fetchone()
-        if not metadata:
-            conn.close()
-            return jsonify({'error': 'Session metadata not found'}), 404
-
-        # Create new session names
+        # Create new session names and directories
+        new_sessions = []
+        # Inside split_session function
         new_sessions = []
         for i, segment in enumerate(segments):
-            suffix = chr(65 + i)  # A, B, C, ...
-            new_name = f"{session_name}_{suffix}"
-            new_dir = os.path.join(DATA_DIR, new_name)
-            if os.path.exists(new_dir):
-                conn.close()
-                return jsonify({'error': f'New session name {new_name} already exists'}), 400
+            # Generate unique name instead of using suffix
+            new_name = generate_unique_session_name(session_name, project_path, conn, session_info['project_id'])
+            new_dir = os.path.join(project_path, new_name)
+            
             os.makedirs(new_dir)
             segment.to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
             new_sessions.append(new_name)
 
         # Copy original log file to new directories
-        log_path = os.path.join(DATA_DIR, session_name, 'log.csv')
+        log_path = os.path.join(project_path, session_name, 'log.csv')
         if os.path.exists(log_path):
             for new_name in new_sessions:
-                shutil.copy(log_path, os.path.join(DATA_DIR, new_name, 'log.csv'))
+                shutil.copy(log_path, os.path.join(project_path, new_name, 'log.csv'))
         else:
             print(f"Log file not found at {log_path}. Skipping copy.")
+            
         # Insert new sessions into database
         with conn.cursor() as cursor:
+            # Store the original session ID before deleting it
+            parent_id = session_id
             for new_name in new_sessions:
+                # Keep the same project_id
                 cursor.execute("""
-                    INSERT INTO sessions (session_name, status, keep, label, segments)
+                    INSERT INTO sessions (project_id, session_name, status, keep, bouts)
                     VALUES (%s, %s, %s, %s, %s)
-                """, (new_name, 'Initial', metadata['keep'], metadata['label'], '{}'))
+                """, (
+                    session_info['project_id'], 
+                    new_name, 
+                    'Initial', 
+                    session_info['keep'], 
+                    '{}'
+                ))
+                # Get the new session ID
+                child_id = cursor.lastrowid
+
+                # Record lineage
+                cursor.execute("""
+                    INSERT INTO session_lineage (child_session_id, parent_session_id)
+                    VALUES (%s, %s)
+                """, (child_id, parent_id))
+                
             # Delete original session
-            cursor.execute("DELETE FROM sessions WHERE session_name = %s", (session_name,))
-        
+            cursor.execute("""
+                UPDATE sessions
+                SET status = 'Split', 
+                    keep = 0,
+                    is_visible = 0  # Add this column to your sessions table
+                WHERE session_id = %s
+            """, (session_id,))        
         conn.commit()
         conn.close()
 
         # Delete original session directory
-        shutil.rmtree(os.path.join(DATA_DIR, session_name))
+        shutil.rmtree(os.path.join(project_path, session_name))
 
         return jsonify({'message': 'Session split successfully', 'new_sessions': new_sessions})
     except Exception as e:
+        print(f"Error splitting session: {e}")
         return jsonify({'error': str(e)}), 500
-    
+
+def generate_unique_session_name(original_name, project_path, conn, project_id):
+    """Generate a unique session name by adding numeric suffixes"""
+    base_counter = 1
+    while True:
+        candidate_name = f"{original_name}.{base_counter}"
+        
+        # Check filesystem for collision
+        if os.path.exists(os.path.join(project_path, candidate_name)):
+            base_counter += 1
+            continue
+            
+        # Check database for collision
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT COUNT(*) FROM sessions 
+            WHERE session_name = %s AND project_id = %s
+        """, (candidate_name, project_id))
+        count = cursor.fetchone()[0]
+        cursor.close()
+        
+        if count == 0:
+            return candidate_name
+        
+        base_counter += 1
+
 @app.route('/')
 def serve_index():
     return app.send_static_file('index.html')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0',debug=True, port=80)
+    app.run(host='0.0.0.0',debug=True, port=5000)
