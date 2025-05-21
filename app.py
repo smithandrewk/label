@@ -14,8 +14,8 @@ DATA_DIR = 'data'
 # MySQL configuration
 MYSQL_CONFIG = {
     'host': 'localhost',
-    'user': 'app_user',
-    'password': 'app_user_password',
+    'user': 'root',
+    'password': 'Password123!',
     'database': 'accelerometer_db'
 }
 

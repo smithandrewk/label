@@ -9,6 +9,7 @@
     <!-- Plotly.js -->
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <link href="static/style.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
     <!-- Sidebar -->
@@ -42,12 +43,15 @@
         <!-- Visualization View -->
         <div id="visualization-view">
             <div class="visualization-container">
-                <button class="btn btn-secondary mb-3" onclick="showTableView()">Back to Table</button>
+                <span id="back-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
+                    <i id="back-btn-icon" class="fa-solid fa-arrow-left"></i>
+                </span>
+                <!-- <button class="btn btn-secondary mb-3" onclick="showTableView()">Back to Table</button> -->
                 <h2>Accelerometer Data Visualization</h2>
                 <!-- Session Details and Action Buttons -->
-                <div id="session-details"></div>
                 <div id="action-buttons" class="mb-3">
                     <!-- Dynamic buttons based on status -->
+
                 </div>
             </div>
             <!-- Plot Container -->
