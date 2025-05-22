@@ -79,25 +79,42 @@ def upload_new_project():
             """, (data['participant'],))
             participant_id = cursor.lastrowid
 
+        # Validate original project path
+        original_path = data['path']
+        if not os.path.exists(original_path) or not os.path.isdir(original_path):
+            return jsonify({'error': f'Project path {original_path} does not exist or is not a directory'}), 400
+ 
+         # Create new directory in central data store
+        central_data_dir = os.path.expanduser(DATA_DIR)
+        os.makedirs(central_data_dir, exist_ok=True)
+        
+        # Create a unique project directory name
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        project_dir_name = f"{data['name']}_{data['participant']}_{timestamp}"
+        new_project_path = os.path.join(central_data_dir, project_dir_name)
+        
+        # Copy the project data to the central location
+        try:
+            shutil.copytree(original_path, new_project_path)
+        except Exception as e:
+            return jsonify({'error': f'Failed to copy project data: {str(e)}'}), 500
+
         # Then insert project with the participant_id
         cursor.execute("""
             INSERT INTO projects (project_name, participant_id, path)
             VALUES (%s, %s, %s)
-        """, (data['name'], participant_id, data['path']))
+        """, (data['name'], participant_id, new_project_path))
 
         # Get the new project_id
         project_id = cursor.lastrowid
 
-        # Now scan the project path for sessions and insert them
-        project_path = data['path']
-
-        if os.path.exists(project_path) and os.path.isdir(project_path):
+        if os.path.exists(new_project_path) and os.path.isdir(new_project_path):
             # Find all session directories in this project path
             sessions = [
                 {'name': d, 'file': 'accelerometer_data.csv'}
-                for d in os.listdir(project_path)
-                if os.path.isdir(os.path.join(project_path, d)) 
-                and os.path.exists(os.path.join(project_path, d, 'accelerometer_data.csv'))
+                for d in os.listdir(new_project_path)
+                if os.path.isdir(os.path.join(new_project_path, d)) 
+                and os.path.exists(os.path.join(new_project_path, d, 'accelerometer_data.csv'))
             ]
             # Sort sessions by date/time in the name (assuming similar format as in list_sessions)
             try:
@@ -111,7 +128,7 @@ def upload_new_project():
                 try:
                     # Look for log.csv to extract bouts data
                     bouts_json = '{}'
-                    log_path = os.path.join(project_path, session['name'], 'log.csv')
+                    log_path = os.path.join(new_project_path, session['name'], 'log.csv')
                     if os.path.exists(log_path):
                         try:
                             log = pd.read_csv(log_path, skiprows=5)
@@ -131,7 +148,7 @@ def upload_new_project():
                     print(f"Error inserting session {session['name']}: {e}")
                     continue  # Skip this session and continue with others
         else:
-            return jsonify({'error': f'Project path {project_path} does not exist or is not a directory'}), 400
+            return jsonify({'error': f'Project path {new_project_path} does not exist or is not a directory'}), 400
         conn.commit()
         cursor.close()
         conn.close()
@@ -139,7 +156,9 @@ def upload_new_project():
         return jsonify({
             'message': 'Project uploaded successfully',
             'project_id': project_id,
-            'participant_id': participant_id
+            'participant_id': participant_id,
+            'original_path': original_path,
+            'central_path': new_project_path
         })
     except Exception as e:
         print(f"Error parsing request data: {e}")
