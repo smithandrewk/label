@@ -354,7 +354,15 @@ def split_session(session_id):
         
         session_name = session_info['session_name']
         project_path = session_info['project_path']
-        print(session_info['bouts'])
+        
+        # Parse the bouts from the session info
+        try:
+            parent_bouts = json.loads(session_info['bouts'] or '[]')
+            # Convert to list if it's not already
+            if isinstance(parent_bouts, str):
+                parent_bouts = json.loads(parent_bouts)
+        except json.JSONDecodeError:
+            parent_bouts = []
         
         # Read original CSV from the project directory
         csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
@@ -369,13 +377,16 @@ def split_session(session_id):
         # Find split indices
         split_points = sorted(set(float(p) for p in split_points))  # Ensure unique and sorted
         split_indices = []
+        split_timestamps = []  # Store the actual timestamps at split points
         for point in split_points:
             df['time_diff'] = abs(df['ns_since_reboot'] - point)
             split_index = df['time_diff'].idxmin()
             if split_index == 0 or split_index == len(df) - 1:
                 continue  # Skip points at start or end
             split_indices.append(split_index)
+            split_timestamps.append(df.loc[split_index, 'ns_since_reboot'])
         split_indices = sorted(set(split_indices))  # Ensure unique and sorted
+        split_timestamps = sorted(set(split_timestamps))  # Ensure unique and sorted
 
         if not split_indices:
             return jsonify({'error': 'No valid split points provided'}), 400
@@ -396,9 +407,49 @@ def split_session(session_id):
         if len(segments) < 2:
             return jsonify({'error': 'Split would not create multiple valid recordings'}), 400
 
+        # Define time ranges for each segment
+        segment_ranges = []
+        for i, segment in enumerate(segments):
+            start_time = segment['ns_since_reboot'].min()
+            end_time = segment['ns_since_reboot'].max()
+            segment_ranges.append((start_time, end_time))
+        
+        # Assign bouts to segments based on time ranges
+        segment_bouts = [[] for _ in segments]
+        
+        for bout in parent_bouts:
+            # Each bout is [start_time, stop_time]
+            if len(bout) != 2:
+                continue  # Skip malformed bouts
+                
+            bout_start = bout[0]
+            bout_end = bout[1]
+            
+            for i, (segment_start, segment_end) in enumerate(segment_ranges):
+                # If bout is entirely within segment
+                if segment_start <= bout_start <= segment_end and segment_start <= bout_end <= segment_end:
+                    segment_bouts[i].append(bout)
+                    break
+                # If bout overlaps with segment start
+                elif bout_start < segment_start and segment_start <= bout_end <= segment_end:
+                    # Adjust bout to start at segment boundary
+                    adjusted_bout = [float(segment_start), float(bout_end)]
+                    segment_bouts[i].append(adjusted_bout)
+                    break
+                # If bout overlaps with segment end
+                elif segment_start <= bout_start <= segment_end and bout_end > segment_end:
+                    # Adjust bout to end at segment boundary
+                    adjusted_bout = [float(bout_start), float(segment_end)]
+                    segment_bouts[i].append(adjusted_bout)
+                    break
+                # If bout spans entire segment
+                elif bout_start < segment_start and bout_end > segment_end:
+                    # Create a bout for the entire segment
+                    adjusted_bout = [float(segment_start), float(segment_end)]
+                    segment_bouts[i].append(adjusted_bout)
+                    break
+
         # Create new session names and directories
-        new_sessions = []
-        # Inside split_session function
         new_sessions = []
         for i, segment in enumerate(segments):
             # Generate unique name instead of using suffix
@@ -407,13 +458,16 @@ def split_session(session_id):
             
             os.makedirs(new_dir)
             segment.to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
-            new_sessions.append(new_name)
+            new_sessions.append({
+                'name': new_name,
+                'bouts': segment_bouts[i]
+            })
 
         # Copy original log file to new directories
         log_path = os.path.join(project_path, session_name, 'log.csv')
         if os.path.exists(log_path):
-            for new_name in new_sessions:
-                shutil.copy(log_path, os.path.join(project_path, new_name, 'log.csv'))
+            for session_data in new_sessions:
+                shutil.copy(log_path, os.path.join(project_path, session_data['name'], 'log.csv'))
         else:
             print(f"Log file not found at {log_path}. Skipping copy.")
             
@@ -421,17 +475,17 @@ def split_session(session_id):
         with conn.cursor() as cursor:
             # Store the original session ID before deleting it
             parent_id = session_id
-            for new_name in new_sessions:
+            for session_data in new_sessions:
                 # Keep the same project_id
                 cursor.execute("""
                     INSERT INTO sessions (project_id, session_name, status, keep, bouts)
                     VALUES (%s, %s, %s, %s, %s)
                 """, (
                     session_info['project_id'], 
-                    new_name, 
+                    session_data['name'], 
                     'Initial', 
                     session_info['keep'], 
-                    '{}'
+                    json.dumps(session_data['bouts'])
                 ))
                 # Get the new session ID
                 child_id = cursor.lastrowid
@@ -447,7 +501,7 @@ def split_session(session_id):
                 UPDATE sessions
                 SET status = 'Split', 
                     keep = 0,
-                    is_visible = 0  # Add this column to your sessions table
+                    is_visible = 0  # Make sure to add this column to your sessions table
                 WHERE session_id = %s
             """, (session_id,))        
         conn.commit()
@@ -456,11 +510,13 @@ def split_session(session_id):
         # Delete original session directory
         shutil.rmtree(os.path.join(project_path, session_name))
 
-        return jsonify({'message': 'Session split successfully', 'new_sessions': new_sessions})
+        return jsonify({
+            'message': 'Session split successfully', 
+            'new_sessions': [s['name'] for s in new_sessions]
+        })
     except Exception as e:
         print(f"Error splitting session: {e}")
         return jsonify({'error': str(e)}), 500
-
 def generate_unique_session_name(original_name, project_path, conn, project_id):
     """Generate a unique session name by adding numeric suffixes"""
     base_counter = 1
