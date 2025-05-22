@@ -5,18 +5,19 @@ import mysql.connector
 from mysql.connector import Error
 import json
 import shutil
+from datetime import datetime
 
 app = Flask(__name__, static_folder='static')
 
 # Directory containing session data
-DATA_DIR = 'data'
+DATA_DIR = '~/.delta/data'
 
 # MySQL configuration
 MYSQL_CONFIG = {
-    'host': '127.0.0.1',
-    'user': 'flaskuser',
-    'password': 'admin',
-    'database': 'adb'
+    'host': 'localhost',
+    'user': 'root',
+    'password': 'Password123!',
+    'database': 'smoking_data'
 }
 
 # Initialize MySQL connection
@@ -26,8 +27,6 @@ def get_db_connection():
     except Error as e:
         print(f"Error connecting to MySQL: {e}")
         return None
-
-from datetime import datetime
 
 # Get list of projects
 @app.route('/api/projects')
@@ -49,6 +48,7 @@ def list_projects():
     except Exception as e:
         print(f"Error listing projects: {e}")
         return jsonify({'error': str(e)}), 500
+
 # Upload new project
 @app.route('/api/project/upload', methods=['POST'])
 def upload_new_project():
@@ -145,7 +145,6 @@ def upload_new_project():
         print(f"Error parsing request data: {e}")
         return jsonify({'error': 'Invalid request data'}), 400
 
-
 @app.route('/api/sessions')
 def list_sessions():
     try:
@@ -228,7 +227,7 @@ def get_session_data(session_id):
         
         # Continue with your existing code to process the CSV file...
         df = pd.read_csv(csv_path)
-        df = df.iloc[::30]  # Downsampling
+        df = df.iloc[::20]  # Downsampling
         
         # Extract bouts from log file if it exists
         bouts = session_info['bouts']
@@ -248,6 +247,7 @@ def get_session_data(session_id):
     except Exception as e:
         print(f"Error retrieving session data: {e}")
         return jsonify({'error': f'Server error: {str(e)}'}), 500
+
 # Get session metadata
 @app.route('/api/session/<session_name>/metadata')
 def get_session_metadata(session_name):
@@ -472,4 +472,4 @@ def serve_index():
     return app.send_static_file('index.html')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0',debug=True, port=5000)
+    app.run(host='0.0.0.0',debug=True, port=5050)

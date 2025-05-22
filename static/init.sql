@@ -1,5 +1,5 @@
-CREATE DATABASE accelerometer_db;
-USE accelerometer_db;
+CREATE DATABASE adb;
+USE adb;
 
 CREATE TABLE participants (
     participant_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -44,15 +44,15 @@ CREATE TABLE session_lineage (
     FOREIGN KEY (parent_session_id) REFERENCES sessions(session_id)
 );
 
+GRANT ALL PRIVILEGES ON adb.* TO 'root'@'localhost';
+FLUSH PRIVILEGES;
+
 select * from participants;
 select * from projects;
 select * from sessions;
 select * from session_lineage;
 
-drop table session_lineage;
-drop table sessions;
-drop table projects;
-drop table participants;
-
-GRANT ALL PRIVILEGES ON adb.* TO 'root'@'localhost';
-FLUSH PRIVILEGES;
+-- drop table session_lineage;
+-- drop table sessions;
+-- drop table projects;
+-- drop table participants;
