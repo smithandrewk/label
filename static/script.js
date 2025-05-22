@@ -801,7 +801,7 @@ function updateOverlayPositions(plotDiv, bout, index) {
     if (!dragOverlay || !leftOverlay || !rightOverlay) return;
     
     // Set handle size
-    const handleWidth = 50;
+    const handleWidth = 20;
     const handleHeight = yAxis._length;
     
     // Set main overlay position and size
@@ -917,18 +917,68 @@ async function splitSession() {
 }
 
 function createNewBout() {
-    // Create new bout with values within min and max timestamps
-    console.log(minTimestamp, maxTimestamp);
-    const middleTimestamp = (minTimestamp + maxTimestamp) / 2;
+    // Get the current plotly visualization
+    const plotDiv = document.getElementById('timeSeriesPlot');
+    
+    // If there's no active plot, fall back to the full dataset range
+    if (!plotDiv || !plotDiv._fullLayout || !plotDiv._fullLayout.xaxis) {
+        // Fallback to using full dataset range
+        const middleTimestamp = (minTimestamp + maxTimestamp) / 2;
+        const newBout = [middleTimestamp - (240*1e9), middleTimestamp + (240*1e9)];
+        addBoutToSession(newBout);
+        return;
+    }
+    
+    // Get the current visible x-axis range
+    const xAxis = plotDiv._fullLayout.xaxis;
+    const visibleMin = xAxis.range[0];
+    const visibleMax = xAxis.range[1];
+    
+    // Save current zoom level
+    const currentViewState = {
+        xrange: [visibleMin, visibleMax],
+        yrange: plotDiv._fullLayout.yaxis.range.slice()
+    };
+    
+    // Calculate the midpoint of the visible range
+    const middleTimestamp = (visibleMin + visibleMax) / 2;
+    
+    // Create a 480s wide bout (240s on each side of the midpoint)
     const newBout = [middleTimestamp - (240*1e9), middleTimestamp + (240*1e9)];
-    // Add new bout to the session
+    
+    // Add the bout to the session and maintain view state
+    addBoutToSession(newBout, currentViewState);
+}
+
+// Helper function to add bout to session and update display
+function addBoutToSession(newBout, viewState = null) {
     if (dragContext.currentSession && dragContext.currentSession.bouts) {
+        // Add the new bout to the session
         dragContext.currentSession.bouts.push(newBout);
-        console.log(`Created new bout: [${newBout[0]}, ${newBout[1]}]`);
-        // Update the session metadata
-        updateSessionMetadata(dragContext.currentSession);
-        // Refresh the visualization
-        visualizeSession(currentSessionId);
+        
+        // Update the session metadata in the background
+        updateSessionMetadata(dragContext.currentSession).then(() => {
+            // Instead of full reloading, just add the new overlay
+            const container = document.querySelector('.plot-container');
+            
+            // Create and add the new overlay elements
+            const boutIndex = dragContext.currentSession.bouts.length - 1;
+            createBoutOverlays(boutIndex, container);
+            
+            // Position the new overlay
+            const plotDiv = document.getElementById('timeSeriesPlot');
+            updateOverlayPositions(plotDiv, newBout, boutIndex);
+            
+            // Apply the previous view state if provided
+            if (viewState) {
+                Plotly.relayout(plotDiv, {
+                    'xaxis.range': viewState.xrange,
+                    'yaxis.range': viewState.yrange
+                });
+            }
+        }).catch(error => {
+            console.error('Error saving new bout:', error);
+        });
     } else {
         console.error('No current session in drag context');
     }
