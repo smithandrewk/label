@@ -1084,6 +1084,8 @@ window.splitSession = splitSession;
 window.createNewBout = createNewBout;
 window.showCreateProjectForm = showCreateProjectForm;
 window.createNewProject = createNewProject;
+window.navigateToNextSession = navigateToNextSession;
+window.navigateToPreviousSession = navigateToPreviousSession;
 
 // Delete project function
 async function deleteProject(projectId, projectName) {
@@ -1280,6 +1282,55 @@ function showProgressError(message) {
             </td>
         </tr>
     `;
+}
+
+// Helper function to get filtered sessions (excludes discarded sessions)
+function getFilteredSessions() {
+    return sessions.filter(session => session.keep !== 0);
+}
+
+// Navigate to the next session
+function navigateToNextSession() {
+    const filteredSessions = getFilteredSessions();
+    if (filteredSessions.length <= 1) {
+        console.log('No next session available');
+        return;
+    }
+    
+    const currentIndex = filteredSessions.findIndex(s => s.session_id == currentSessionId);
+    if (currentIndex === -1) {
+        console.error('Current session not found in filtered sessions');
+        return;
+    }
+    
+    // Get next session with wraparound
+    const nextIndex = (currentIndex + 1) % filteredSessions.length;
+    const nextSession = filteredSessions[nextIndex];
+    
+    console.log(`Navigating to next session: ${nextSession.session_name}`);
+    visualizeSession(nextSession.session_id);
+}
+
+// Navigate to the previous session
+function navigateToPreviousSession() {
+    const filteredSessions = getFilteredSessions();
+    if (filteredSessions.length <= 1) {
+        console.log('No previous session available');
+        return;
+    }
+    
+    const currentIndex = filteredSessions.findIndex(s => s.session_id == currentSessionId);
+    if (currentIndex === -1) {
+        console.error('Current session not found in filtered sessions');
+        return;
+    }
+    
+    // Get previous session with wraparound
+    const prevIndex = currentIndex === 0 ? filteredSessions.length - 1 : currentIndex - 1;
+    const prevSession = filteredSessions[prevIndex];
+    
+    console.log(`Navigating to previous session: ${prevSession.session_name}`);
+    visualizeSession(prevSession.session_id);
 }
 
 initializeProjects();
