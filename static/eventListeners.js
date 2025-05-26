@@ -1,3 +1,16 @@
+/**
+ * KEYBOARD NAVIGATION SHORTCUTS (Visualization View Only):
+ * - 'n': Navigate to next session (with wraparound)
+ * - 'p': Navigate to previous session (with wraparound)
+ * - 's': Toggle split mode
+ * - 'r': Create new bout
+ * - Ctrl/Cmd + 's': Split session
+ * - Ctrl/Cmd + 'd': Return to table view
+ * 
+ * Navigation automatically saves any pending bout changes before switching sessions.
+ * Only non-discarded sessions (keep != 0) are included in navigation.
+ */
+
 export function addEventListeners() {
     document.addEventListener('keydown', function(event) {
         // Check if visualization view is active
@@ -20,6 +33,14 @@ export function addEventListeners() {
             console.log('Creating new bout...');
             event.preventDefault(); // Prevent browser refresh
             createNewBout();
+        } else if (event.key.toLowerCase() === 'n' && !(event.metaKey || event.ctrlKey)) {
+            // Navigate to next session
+            event.preventDefault();
+            navigateToNextSession();
+        } else if (event.key.toLowerCase() === 'p' && !(event.metaKey || event.ctrlKey)) {
+            // Navigate to previous session
+            event.preventDefault();
+            navigateToPreviousSession();
         }
     }
     });

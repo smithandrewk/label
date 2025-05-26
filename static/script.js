@@ -110,6 +110,15 @@ async function fetchProjectSessions(projectId) {
         
         console.log('Fetched sessions for project:', projectId, sessions);
         
+        // Debug: Log keep values for each session to understand the data structure
+        sessions.forEach(session => {
+            console.log(`Session ${session.session_id} (${session.session_name}): keep=${session.keep}, type=${typeof session.keep}`);
+        });
+        
+        // Log filtered sessions
+        const filteredSessions = getFilteredSessions();
+        console.log('Filtered sessions count:', filteredSessions.length, 'out of', sessions.length);
+        
         // Update the session table/list
         updateSessionsList(sessions);
     } catch (error) {
@@ -389,6 +398,8 @@ function showTableView() {
 
 // Show visualization view
 async function visualizeSession(sessionId) {
+    console.log(`Attempting to visualize session: ${sessionId}`);
+    
     // If we're already viewing a session and switching to another, save changes first
     if (currentSessionId && currentSessionId !== sessionId) {
         const currentSession = sessions.find(s => s.session_id == currentSessionId);
@@ -414,6 +425,22 @@ async function visualizeSession(sessionId) {
     const session = sessions.find(s => s.session_id == sessionId);
     if (!session) {
         console.error('Session not found:', sessionId);
+        return;
+    }
+    
+    // Check if the session is actually available (not deleted)
+    if (session.keep === 0) {
+        console.error('Attempted to visualize deleted session:', sessionId);
+        
+        // Find an available session to visualize instead
+        const availableSessions = getFilteredSessions();
+        if (availableSessions.length > 0) {
+            console.log('Redirecting to first available session');
+            visualizeSession(availableSessions[0].session_id);
+        } else {
+            console.log('No available sessions');
+            showTableView();
+        }
         return;
     }
     
@@ -445,6 +472,9 @@ async function visualizeSession(sessionId) {
 
     document.getElementById("table-view").style.display = "none";
     document.getElementById("visualization-view").style.display = "flex";
+
+    // Update sidebar highlighting for the current session
+    updateSidebarHighlighting();
 
     if (session.status === "Initial") {
         session.status = "Visualized";
@@ -915,11 +945,58 @@ function toggleSplitMode() {
 async function decideSession(sessionId, keep) {
     const session = sessions.find(s => s.session_id == sessionId);
     if (!session) return;
+    
+    const wasCurrentlyVisualized = (currentSessionId == sessionId);
+    
+    // Find the next session before marking this one as deleted
+    let nextSessionToShow = null;
+    if (!keep && wasCurrentlyVisualized) {
+        const currentSessionsBeforeDeletion = getFilteredSessions();
+        const currentIndex = currentSessionsBeforeDeletion.findIndex(s => s.session_id == sessionId);
+        
+        // If there are other sessions, find the next one to navigate to
+        if (currentSessionsBeforeDeletion.length > 1) {
+            const nextIndex = (currentIndex + 1) % currentSessionsBeforeDeletion.length;
+            // If we're at the end, go to the previous one
+            if (currentIndex === currentSessionsBeforeDeletion.length - 1 && currentIndex > 0) {
+                nextSessionToShow = currentSessionsBeforeDeletion[currentIndex - 1];
+            } else {
+                nextSessionToShow = currentSessionsBeforeDeletion[nextIndex];
+            }
+        }
+    }
+    
+    // Update the session status
     session.status = "Decision Made";
-    session.keep = keep;
+    // Explicitly set keep to 0 or 1, rather than false/true
+    session.keep = keep ? 1 : 0;
     await updateSessionMetadata(session);
+    
+    // Update the UI with the new session list
     updateSessionsList(sessions);
-    showTableView(); // Return to table view after split
+    
+    // Handle navigation after deletion
+    if (!keep && wasCurrentlyVisualized) {
+        if (nextSessionToShow && nextSessionToShow.session_id != sessionId) {
+            // Navigate to the next session in sequence
+            console.log(`Deleted currently visualized session, navigating to: ${nextSessionToShow.session_name}`);
+            visualizeSession(nextSessionToShow.session_id);
+        } else {
+            // If we couldn't find a proper next session or only this session exists
+            const remainingSessions = getFilteredSessions();
+            if (remainingSessions.length > 0) {
+                console.log(`Navigating to first available session: ${remainingSessions[0].session_name}`);
+                visualizeSession(remainingSessions[0].session_id);
+            } else {
+                // No sessions left, return to table view
+                console.log('No sessions available after deletion, returning to table view');
+                showTableView();
+            }
+        }
+    } else {
+        // Return to table view for non-current sessions or when keeping sessions
+        showTableView();
+    }
 }
 
 // Now update the splitSession function to maintain context
@@ -1084,6 +1161,9 @@ window.splitSession = splitSession;
 window.createNewBout = createNewBout;
 window.showCreateProjectForm = showCreateProjectForm;
 window.createNewProject = createNewProject;
+window.navigateToNextSession = navigateToNextSession;
+window.navigateToPreviousSession = navigateToPreviousSession;
+window.updateSidebarHighlighting = updateSidebarHighlighting;
 
 // Delete project function
 async function deleteProject(projectId, projectName) {
@@ -1280,6 +1360,91 @@ function showProgressError(message) {
             </td>
         </tr>
     `;
+}
+
+// Helper function to get filtered sessions (excludes discarded sessions)
+function getFilteredSessions() {
+    // Only filter out sessions explicitly marked as discarded (keep === 0)
+    return sessions.filter(session => {
+        // Session is available unless explicitly marked as keep=0
+        return session.keep !== 0;
+    });
+}
+
+// Update sidebar highlighting for the active session
+function updateSidebarHighlighting() {
+    // Remove active-session class from all links
+    document.querySelectorAll('#session-list .nav-link').forEach(link => {
+        link.classList.remove('active-session');
+    });
+    
+    // Add active-session class to the current session
+    if (currentActiveSession) {
+        const activeLink = document.querySelector(`#session-list .nav-link[onclick*="'${currentSessionId}'"]`);
+        if (activeLink) {
+            activeLink.classList.add('active-session');
+        }
+    }
+}
+
+// Navigate to the next session
+function navigateToNextSession() {
+    const filteredSessions = getFilteredSessions();
+    if (filteredSessions.length === 0) {
+        console.log('No available sessions');
+        showTableView();
+        return;
+    }
+    
+    if (filteredSessions.length === 1) {
+        console.log('Only one session available');
+        return;
+    }
+    
+    const currentIndex = filteredSessions.findIndex(s => s.session_id == currentSessionId);
+    if (currentIndex === -1) {
+        // Current session not found (probably deleted), navigate to first available session
+        console.log('Current session not found, navigating to first available session');
+        visualizeSession(filteredSessions[0].session_id);
+        return;
+    }
+    
+    // Get next session with wraparound
+    const nextIndex = (currentIndex + 1) % filteredSessions.length;
+    const nextSession = filteredSessions[nextIndex];
+    
+    console.log(`Navigating to next session: ${nextSession.session_name}`);
+    visualizeSession(nextSession.session_id);
+}
+
+// Navigate to the previous session
+function navigateToPreviousSession() {
+    const filteredSessions = getFilteredSessions();
+    if (filteredSessions.length === 0) {
+        console.log('No available sessions');
+        showTableView();
+        return;
+    }
+    
+    if (filteredSessions.length === 1) {
+        console.log('Only one session available');
+        return;
+    }
+    
+    const currentIndex = filteredSessions.findIndex(s => s.session_id == currentSessionId);
+    if (currentIndex === -1) {
+        // Current session not found (probably deleted), navigate to first available session
+        console.log('Current session not found, navigating to first available session');
+        visualizeSession(filteredSessions[0].session_id);
+        return;
+    }
+    
+    // Get previous session with wraparound
+    const prevIndex = currentIndex === 0 ? filteredSessions.length - 1 : currentIndex - 1;
+    const prevSession = filteredSessions[prevIndex];
+    
+    console.log(`Navigating to previous session: ${prevSession.session_name}`);
+    visualizeSession(prevSession.session_id);
 }
 
 initializeProjects();
