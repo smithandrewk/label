@@ -6,6 +6,7 @@ from mysql.connector import Error
 import json
 import shutil
 from datetime import datetime
+import numpy as np
 
 app = Flask(__name__, static_folder='static')
 
@@ -123,7 +124,8 @@ def upload_new_project():
                 # If sorting fails (due to different naming convention), keep original order
                 pass
 
-            # Insert each session into the database
+            # Process each session (with automatic splitting on time gaps)
+            all_created_sessions = []
             for session in sessions:
                 try:
                     # Look for log.csv to extract bouts data
@@ -140,12 +142,14 @@ def upload_new_project():
                         except Exception as e:
                             print(f"Error processing log file for bouts: {e}")
                     
-                    cursor.execute("""
-                        INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (project_id, session['name'], 'Initial', None, bouts_json))
+                    # Auto-split session on time gaps larger than 30 minutes
+                    created_sessions = auto_split_session_on_upload(
+                        session['name'], new_project_path, project_id, bouts_json, conn
+                    )
+                    all_created_sessions.extend(created_sessions)
+                    
                 except Exception as e:
-                    print(f"Error inserting session {session['name']}: {e}")
+                    print(f"Error processing session {session['name']}: {e}")
                     continue  # Skip this session and continue with others
         else:
             return jsonify({'error': f'Project path {new_project_path} does not exist or is not a directory'}), 400
@@ -158,7 +162,10 @@ def upload_new_project():
             'project_id': project_id,
             'participant_id': participant_id,
             'original_path': original_path,
-            'central_path': new_project_path
+            'central_path': new_project_path,
+            'sessions_created': all_created_sessions,
+            'total_sessions': len(all_created_sessions),
+            'auto_split_applied': len(all_created_sessions) > len(sessions)
         })
     except Exception as e:
         print(f"Error parsing request data: {e}")
@@ -546,5 +553,243 @@ def generate_unique_session_name(original_name, project_path, conn, project_id):
 def serve_index():
     return app.send_static_file('index.html')
 
+# Detect time gaps larger than 30 minutes in accelerometer data and return split points
+def detect_time_gaps(csv_path, gap_threshold_minutes=30):
+    """
+    Detect time gaps larger than the threshold in accelerometer data.
+    Returns list of timestamps where splits should occur.
+    
+    Args:
+        csv_path: Path to the accelerometer_data.csv file
+        gap_threshold_minutes: Minimum gap size in minutes to trigger a split
+    
+    Returns:
+        List of ns_since_reboot timestamps where splits should occur
+    """
+    try:
+        df = pd.read_csv(csv_path)
+        expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
+        if not all(col in df.columns for col in expected_columns):
+            print(f"Invalid CSV format in {csv_path}. Expected columns: {expected_columns}, Found: {list(df.columns)}")
+            return []
+        
+        if len(df) < 2:
+            return []
+        
+        # Convert gap threshold from minutes to nanoseconds
+        gap_threshold_ns = gap_threshold_minutes * 60 * 1_000_000_000  # 30 minutes in nanoseconds
+        
+        # Sort by timestamp to ensure proper order
+        df = df.sort_values('ns_since_reboot').reset_index(drop=True)
+        
+        # Calculate time differences between consecutive readings
+        time_diffs = df['ns_since_reboot'].diff()
+        
+        # Find gaps larger than threshold
+        gap_indices = time_diffs[time_diffs > gap_threshold_ns].index
+        
+        # Get the timestamps where gaps end (start of new segment)
+        split_points = []
+        for idx in gap_indices:
+            if idx > 0 and idx < len(df) - 1:  # Don't split at very beginning or end
+                split_points.append(float(df.loc[idx, 'ns_since_reboot']))
+        
+        return split_points
+        
+    except Exception as e:
+        print(f"Error detecting time gaps in {csv_path}: {e}")
+        return []
+
+def auto_split_session_on_upload(session_name, project_path, project_id, bouts_json, conn):
+    """
+    Automatically split a session based on time gaps during upload.
+    
+    Args:
+        session_name: Name of the session to potentially split
+        project_path: Path to the project directory
+        project_id: Database project ID
+        bouts_json: JSON string of bouts data
+        conn: Database connection
+    
+    Returns:
+        List of session names that were created (original name if no split occurred)
+    """
+    try:
+        csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
+        split_points = detect_time_gaps(csv_path)
+        
+        if not split_points:
+            # No splits needed, just insert the original session
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (project_id, session_name, 'Initial', None, bouts_json))
+            return [session_name]
+        
+        print(f"Auto-splitting session {session_name} at {len(split_points)} time gaps")
+        
+        # Read the CSV data
+        df = pd.read_csv(csv_path)
+        expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
+        df = df.sort_values('ns_since_reboot').reset_index(drop=True)
+        
+        # Parse bouts data
+        try:
+            parent_bouts = json.loads(bouts_json or '[]')
+            if isinstance(parent_bouts, str):
+                parent_bouts = json.loads(parent_bouts)
+        except json.JSONDecodeError:
+            parent_bouts = []
+        
+        # Find split indices
+        split_points = sorted(set(float(p) for p in split_points))
+        split_indices = []
+        for point in split_points:
+            df['time_diff'] = abs(df['ns_since_reboot'] - point)
+            split_index = df['time_diff'].idxmin()
+            if split_index > 0 and split_index < len(df) - 1:
+                split_indices.append(split_index)
+        split_indices = sorted(set(split_indices))
+        
+        if not split_indices:
+            # No valid split points, insert original session
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (project_id, session_name, 'Initial', None, bouts_json))
+            return [session_name]
+        
+        # Split data into segments
+        segments = []
+        start_idx = 0
+        for idx in split_indices:
+            segment = df.iloc[start_idx:idx + 1][expected_columns]
+            if not segment.empty:
+                segments.append(segment)
+            start_idx = idx + 1
+        # Add final segment
+        final_segment = df.iloc[start_idx:][expected_columns]
+        if not final_segment.empty:
+            segments.append(final_segment)
+        
+        if len(segments) < 2:
+            # Split didn't create multiple segments, insert original
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (project_id, session_name, 'Initial', None, bouts_json))
+            return [session_name]
+        
+        # Define time ranges for each segment
+        segment_ranges = []
+        for segment in segments:
+            start_time = segment['ns_since_reboot'].min()
+            end_time = segment['ns_since_reboot'].max()
+            segment_ranges.append((start_time, end_time))
+        
+        # Assign bouts to segments based on time ranges
+        segment_bouts = [[] for _ in segments]
+        for bout in parent_bouts:
+            if len(bout) != 2:
+                continue
+                
+            bout_start = bout[0]
+            bout_end = bout[1]
+            
+            for i, (segment_start, segment_end) in enumerate(segment_ranges):
+                # If bout is entirely within segment
+                if segment_start <= bout_start <= segment_end and segment_start <= bout_end <= segment_end:
+                    segment_bouts[i].append(bout)
+                    break
+                # If bout overlaps with segment start
+                elif bout_start < segment_start and segment_start <= bout_end <= segment_end:
+                    adjusted_bout = [float(segment_start), float(bout_end)]
+                    segment_bouts[i].append(adjusted_bout)
+                    break
+                # If bout overlaps with segment end
+                elif segment_start <= bout_start <= segment_end and bout_end > segment_end:
+                    adjusted_bout = [float(bout_start), float(segment_end)]
+                    segment_bouts[i].append(adjusted_bout)
+                    break
+                # If bout spans entire segment
+                elif bout_start < segment_start and bout_end > segment_end:
+                    adjusted_bout = [float(segment_start), float(segment_end)]
+                    segment_bouts[i].append(adjusted_bout)
+                    break
+        
+        # Create new session names and directories
+        new_sessions = []
+        cursor = conn.cursor()
+        
+        for i, segment in enumerate(segments):
+            # Generate unique name
+            new_name = generate_unique_session_name_upload(session_name, project_path, conn, project_id)
+            new_dir = os.path.join(project_path, new_name)
+            
+            # Create directory and save CSV
+            os.makedirs(new_dir, exist_ok=True)
+            segment.to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
+            
+            # Copy log file if it exists
+            log_path = os.path.join(project_path, session_name, 'log.csv')
+            if os.path.exists(log_path):
+                shutil.copy(log_path, os.path.join(new_dir, 'log.csv'))
+            
+            # Insert session into database
+            cursor.execute("""
+                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (project_id, new_name, 'Initial', None, json.dumps(segment_bouts[i])))
+            
+            new_sessions.append(new_name)
+        
+        # Remove the original session directory
+        original_dir = os.path.join(project_path, session_name)
+        if os.path.exists(original_dir):
+            shutil.rmtree(original_dir)
+        
+        return new_sessions
+        
+    except Exception as e:
+        print(f"Error auto-splitting session {session_name}: {e}")
+        # Fallback: insert original session
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (project_id, session_name, 'Initial', None, bouts_json))
+            return [session_name]
+        except:
+            return []
+
+def generate_unique_session_name_upload(original_name, project_path, conn, project_id):
+    """Generate a unique session name by adding numeric suffixes (for upload process)"""
+    base_counter = 1
+    while True:
+        candidate_name = f"{original_name}.{base_counter}"
+        
+        # Check filesystem for collision
+        if os.path.exists(os.path.join(project_path, candidate_name)):
+            base_counter += 1
+            continue
+            
+        # Check database for collision
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT COUNT(*) FROM sessions 
+            WHERE session_name = %s AND project_id = %s
+        """, (candidate_name, project_id))
+        count = cursor.fetchone()[0]
+        cursor.close()
+        
+        if count == 0:
+            return candidate_name
+        
+        base_counter += 1
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0',debug=True, port=5050)
+    app.run(host='0.0.0.0', debug=True, port=5050)
