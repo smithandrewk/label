@@ -602,6 +602,61 @@ def serve_index():
     return app.send_static_file('index.html')
 
 # Detect time gaps larger than 30 minutes in accelerometer data and return split points
+def validate_session_data(csv_path, min_rows=10):
+    """
+    Validate that the accelerometer data file contains valid data.
+    
+    Args:
+        csv_path: Path to the accelerometer_data.csv file
+        min_rows: Minimum number of data rows required
+    
+    Returns:
+        bool: True if data is valid, False otherwise
+    """
+    try:
+        # Check if file exists and has content
+        if not os.path.exists(csv_path):
+            print(f"Data file does not exist: {csv_path}")
+            return False
+        
+        # Check file size (empty files or very small files are invalid)
+        file_size = os.path.getsize(csv_path)
+        if file_size < 100:  # Less than 100 bytes is likely empty or just headers
+            print(f"Data file is too small ({file_size} bytes): {csv_path}")
+            return False
+        
+        # Try to read the CSV and validate content
+        df = pd.read_csv(csv_path)
+        expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
+        
+        # Check if required columns exist
+        if not all(col in df.columns for col in expected_columns):
+            print(f"Invalid CSV format in {csv_path}. Expected columns: {expected_columns}, Found: {list(df.columns)}")
+            return False
+        
+        # Check if we have enough data rows
+        if len(df) < min_rows:
+            print(f"Insufficient data rows ({len(df)}) in {csv_path}. Minimum required: {min_rows}")
+            return False
+        
+        # Check for valid timestamp data (not all NaN or zeros)
+        if df['ns_since_reboot'].isna().all() or (df['ns_since_reboot'] == 0).all():
+            print(f"Invalid timestamp data in {csv_path}")
+            return False
+        
+        # Check for valid accelerometer data (not all NaN)
+        accel_cols = ['x', 'y', 'z']
+        if df[accel_cols].isna().all().all():
+            print(f"No valid accelerometer data in {csv_path}")
+            return False
+        
+        print(f"Data validation passed for {csv_path}: {len(df)} rows")
+        return True
+        
+    except Exception as e:
+        print(f"Error validating data in {csv_path}: {e}")
+        return False
+
 def detect_time_gaps(csv_path, gap_threshold_minutes=30):
     """
     Detect time gaps larger than the threshold in accelerometer data.
@@ -660,10 +715,22 @@ def auto_split_session_on_upload(session_name, project_path, project_id, bouts_j
         conn: Database connection
     
     Returns:
-        List of session names that were created (original name if no split occurred)
+        List of session names that were created (empty list if session was invalid/skipped)
     """
     try:
         csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
+        
+        # First, validate that the session has valid data
+        if not validate_session_data(csv_path):
+            print(f"Skipping session {session_name} - no valid data found")
+            # Remove the invalid session directory
+            session_dir = os.path.join(project_path, session_name)
+            if os.path.exists(session_dir):
+                shutil.rmtree(session_dir)
+                print(f"Removed invalid session directory: {session_dir}")
+            return []  # Return empty list to indicate session was skipped
+        
+        # If data is valid, proceed with time gap detection
         split_points = detect_time_gaps(csv_path)
         
         if not split_points:
@@ -1006,6 +1073,7 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
             return
         
         all_created_sessions = []
+        skipped_sessions = []  # Track sessions that were skipped due to invalid data
         
         for i, session in enumerate(sessions):
             try:
@@ -1020,6 +1088,24 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                 
                 # Add a small delay to make progress visible
                 time.sleep(0.5)
+                
+                # First, validate the session data
+                csv_path = os.path.join(new_project_path, session['name'], 'accelerometer_data.csv')
+                upload_progress[upload_id]['message'] = f'Validating data for {session["name"]}...'
+                time.sleep(0.3)
+                
+                if not validate_session_data(csv_path):
+                    print(f"Skipping session {session['name']} - no valid data")
+                    skipped_sessions.append(session['name'])
+                    upload_progress[upload_id]['message'] = f'Skipped {session["name"]} - no valid data'
+                    
+                    # Remove the invalid session directory
+                    session_dir = os.path.join(new_project_path, session['name'])
+                    if os.path.exists(session_dir):
+                        shutil.rmtree(session_dir)
+                    
+                    time.sleep(1)
+                    continue  # Skip to next session
                 
                 # Look for log.csv to extract bouts data
                 bouts_json = '{}'
@@ -1044,15 +1130,21 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                 created_sessions = auto_split_session_on_upload(
                     session['name'], new_project_path, project_id, bouts_json, conn
                 )
-                all_created_sessions.extend(created_sessions)
+                
+                # Only add to all_created_sessions if sessions were actually created
+                if created_sessions:
+                    all_created_sessions.extend(created_sessions)
                 
                 # Update progress with created sessions
                 upload_progress[upload_id]['sessions_created'] = all_created_sessions
+                upload_progress[upload_id]['skipped_sessions'] = skipped_sessions
                 
                 if len(created_sessions) > 1:
                     upload_progress[upload_id]['message'] = f'Split {session["name"]} into {len(created_sessions)} sessions'
-                else:
+                elif len(created_sessions) == 1:
                     upload_progress[upload_id]['message'] = f'No splitting needed for {session["name"]}'
+                else:
+                    upload_progress[upload_id]['message'] = f'Session {session["name"]} was filtered out'
                 
                 print(f"Completed processing {session['name']}, created {len(created_sessions)} sessions")
                 time.sleep(1)  # Additional delay to show progress
@@ -1064,14 +1156,20 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                 continue  # Skip this session and continue with others
         
         # Mark as complete
+        completion_message = f'Upload complete! Created {len(all_created_sessions)} sessions'
+        if len(skipped_sessions) > 0:
+            completion_message += f', skipped {len(skipped_sessions)} sessions with no data'
+        
         upload_progress[upload_id].update({
             'status': 'complete',
-            'message': f'Upload complete! Created {len(all_created_sessions)} sessions',
+            'message': completion_message,
             'total_sessions_created': len(all_created_sessions),
-            'auto_split_applied': len(all_created_sessions) > len(sessions)
+            'total_sessions_skipped': len(skipped_sessions),
+            'skipped_sessions': skipped_sessions,
+            'auto_split_applied': len(all_created_sessions) > (len(sessions) - len(skipped_sessions))
         })
         
-        print(f"Async processing complete for upload {upload_id}. Created {len(all_created_sessions)} sessions")
+        print(f"Async processing complete for upload {upload_id}. Created {len(all_created_sessions)} sessions, skipped {len(skipped_sessions)} sessions")
         
         conn.commit()
         conn.close()
