@@ -15,11 +15,15 @@ async function initializeProjects() {
         projects.forEach(project => {
             const li = document.createElement('li');
             const a = document.createElement('a');
-            a.className = 'dropdown-item';
+            a.className = 'dropdown-item d-flex justify-content-between align-items-center';
             a.href = '#';
-            a.textContent = project.project_name;
             a.dataset.projectId = project.project_id;
-            a.onclick = function(e) {
+            
+            // Create project name span
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = project.project_name;
+            nameSpan.style.flexGrow = '1';
+            nameSpan.onclick = function(e) {
                 e.preventDefault();
                 currentProjectId = project.project_id; // Store selected project ID
                 fetchProjectSessions(project.project_id);
@@ -29,9 +33,23 @@ async function initializeProjects() {
                     item.classList.remove('active');
                     item.removeAttribute('aria-current');
                 });
-                this.classList.add('active');
-                this.setAttribute('aria-current', 'page');
+                a.classList.add('active');
+                a.setAttribute('aria-current', 'page');
             };
+            
+            // Create delete button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn btn-sm btn-outline-danger ms-2';
+            deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+            deleteBtn.title = 'Delete Project';
+            deleteBtn.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                deleteProject(project.project_id, project.project_name);
+            };
+            
+            a.appendChild(nameSpan);
+            a.appendChild(deleteBtn);
             li.appendChild(a);
             dropdownMenu.appendChild(li);
         });
@@ -1011,6 +1029,63 @@ window.splitSession = splitSession;
 window.createNewBout = createNewBout;
 window.showCreateProjectForm = showCreateProjectForm;
 window.createNewProject = createNewProject;
+
+// Delete project function
+async function deleteProject(projectId, projectName) {
+    // Show confirmation dialog
+    const confirmDelete = confirm(
+        `Are you sure you want to delete the project "${projectName}"?\n\n` +
+        `This will permanently delete:\n` +
+        `• All sessions in this project\n` +
+        `• All data files and directories\n` +
+        `• The participant record (if no other projects exist)\n\n` +
+        `This action cannot be undone.`
+    );
+    
+    if (!confirmDelete) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/project/${projectId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to delete project');
+        }
+        
+        const result = await response.json();
+        
+        // Show success message
+        alert(
+            `Project deleted successfully!\n\n` +
+            `Project: ${result.project_name}\n` +
+            `Participant: ${result.participant_code}\n` +
+            `Sessions deleted: ${result.sessions_deleted}\n` +
+            `Directory deleted: ${result.directory_deleted ? 'Yes' : 'No'}\n` +
+            `Participant deleted: ${result.participant_deleted ? 'Yes' : 'No'}`
+        );
+        
+        // Refresh the projects list
+        await initializeProjects();
+        
+        // If the deleted project was currently selected, clear the session view
+        if (currentProjectId === projectId) {
+            currentProjectId = null;
+            document.getElementById('sessions-table-body').innerHTML = '';
+            showTableView(); // Go back to table view if in visualization
+        }
+        
+    } catch (error) {
+        console.error('Error deleting project:', error);
+        alert(`Failed to delete project: ${error.message}`);
+    }
+}
 
 initializeProjects();
 eventListeners.addEventListeners();

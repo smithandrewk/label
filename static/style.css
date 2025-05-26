@@ -89,3 +89,26 @@ body {
     border-color: #28a745;
     background: #e9ecef;
 }
+
+/* Project dropdown delete button styling */
+.dropdown-item .btn-outline-danger {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    border: 1px solid #dc3545;
+    color: #dc3545;
+    background: transparent;
+}
+
+.dropdown-item .btn-outline-danger:hover {
+    background-color: #dc3545;
+    color: white;
+}
+
+.dropdown-item:hover .btn-outline-danger {
+    opacity: 1;
+}
+
+.dropdown-item .btn-outline-danger {
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
