@@ -791,5 +791,107 @@ def generate_unique_session_name_upload(original_name, project_path, conn, proje
         
         base_counter += 1
 
+# Delete project
+@app.route('/api/project/<int:project_id>', methods=['DELETE'])
+def delete_project(project_id):
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # First, get project information including path
+        cursor.execute("""
+            SELECT p.project_id, p.project_name, p.path, p.participant_id,
+                   pt.participant_code
+            FROM projects p
+            JOIN participants pt ON p.participant_id = pt.participant_id
+            WHERE p.project_id = %s
+        """, (project_id,))
+        
+        project_info = cursor.fetchone()
+        if not project_info:
+            cursor.close()
+            conn.close()
+            return jsonify({'error': 'Project not found'}), 404
+        
+        project_path = project_info['path']
+        participant_id = project_info['participant_id']
+        
+        # Get list of sessions before deletion for cleanup
+        cursor.execute("""
+            SELECT session_name FROM sessions WHERE project_id = %s
+        """, (project_id,))
+        sessions_to_delete = cursor.fetchall()
+        
+        # Delete session lineage records first (due to foreign key constraints)
+        cursor.execute("""
+            DELETE sl FROM session_lineage sl
+            JOIN sessions s ON (sl.child_session_id = s.session_id OR sl.parent_session_id = s.session_id)
+            WHERE s.project_id = %s
+        """, (project_id,))
+        
+        # Delete sessions (this will cascade due to foreign key)
+        cursor.execute("""
+            DELETE FROM sessions WHERE project_id = %s
+        """, (project_id,))
+        sessions_deleted = cursor.rowcount
+        
+        # Delete the project
+        cursor.execute("""
+            DELETE FROM projects WHERE project_id = %s
+        """, (project_id,))
+        
+        if cursor.rowcount == 0:
+            cursor.close()
+            conn.close()
+            return jsonify({'error': 'Project not found or already deleted'}), 404
+        
+        # Check if participant has any other projects
+        cursor.execute("""
+            SELECT COUNT(*) as project_count FROM projects WHERE participant_id = %s
+        """, (participant_id,))
+        remaining_projects = cursor.fetchone()['project_count']
+        
+        participant_deleted = False
+        if remaining_projects == 0:
+            # Delete participant if they have no other projects
+            cursor.execute("""
+                DELETE FROM participants WHERE participant_id = %s
+            """, (participant_id,))
+            participant_deleted = True
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Delete project directory from filesystem
+        import shutil
+        directory_deleted = False
+        if project_path and os.path.exists(project_path):
+            try:
+                shutil.rmtree(project_path)
+                directory_deleted = True
+                print(f"Deleted project directory: {project_path}")
+            except Exception as e:
+                print(f"Warning: Could not delete project directory {project_path}: {e}")
+                # Don't fail the entire operation if directory deletion fails
+        
+        return jsonify({
+            'message': 'Project deleted successfully',
+            'project_id': project_id,
+            'project_name': project_info['project_name'],
+            'participant_code': project_info['participant_code'],
+            'sessions_deleted': sessions_deleted,
+            'directory_deleted': directory_deleted,
+            'participant_deleted': participant_deleted,
+            'directory_path': project_path
+        })
+        
+    except Exception as e:
+        print(f"Error deleting project: {e}")
+        return jsonify({'error': f'Failed to delete project: {str(e)}'}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5050)
