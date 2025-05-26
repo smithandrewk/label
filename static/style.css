@@ -112,3 +112,43 @@ body {
     opacity: 0.7;
     transition: opacity 0.2s ease;
 }
+
+/* Progress tracking styles */
+#progress-row td {
+    padding: 2rem 1rem;
+    background-color: #f8f9fa;
+}
+
+.progress {
+    height: 8px;
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    background-color: #007bff;
+    transition: width 0.3s ease;
+}
+
+#progress-details {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Success/Error indicators */
+.progress-complete {
+    background-color: #d4edda !important;
+    border-color: #c3e6cb !important;
+}
+
+.progress-error {
+    background-color: #f8d7da !important;
+    border-color: #f5c6cb !important;
+}
