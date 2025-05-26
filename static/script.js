@@ -247,13 +247,21 @@ async function fetchSession(projectId) {
 
 // Function to handle API call
 function createNewProject(formData) {
+    // Create a FormData object to handle file uploads
+    const uploadData = new FormData();
+    uploadData.append('name', formData.name);
+    uploadData.append('participant', formData.participant);
+    uploadData.append('folderName', formData.folderName);
+    
+    // Add all files to the FormData
+    formData.files.forEach((file, index) => {
+        uploadData.append('files', file);
+    });
+    
     // Use fetch API to send data to your backend
     fetch('/api/project/upload', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
+        body: uploadData  // Don't set Content-Type header, let browser set it for FormData
     })
     .then(response => response.json())
     .then(data => {
@@ -264,10 +272,11 @@ function createNewProject(formData) {
         const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
         modal.hide();
         
-        // Refresh the project list or navigate to the new project
-        // This depends on your application flow
-        // For example: refreshProjectList();
-        updateSessionsList();
+        // Reset the form
+        document.getElementById('create-project-form').reset();
+        
+        // Refresh the project list
+        initializeProjects();
     })
     .catch(error => {
         // Handle errors

@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, send_from_directory, request
+from werkzeug.utils import secure_filename
 import os
 import pandas as pd
 import mysql.connector
@@ -54,8 +55,22 @@ def list_projects():
 @app.route('/api/project/upload', methods=['POST'])
 def upload_new_project():
     try:
-        data = request.get_json()
-        print(data)
+        # Handle multipart form data for file uploads
+        if 'files' not in request.files:
+            return jsonify({'error': 'No files uploaded'}), 400
+        
+        # Get form data
+        project_name = request.form.get('name')
+        participant_code = request.form.get('participant')
+        folder_name = request.form.get('folderName')
+        
+        if not all([project_name, participant_code, folder_name]):
+            return jsonify({'error': 'Missing required fields: name, participant, or folderName'}), 400
+        
+        # Get uploaded files
+        uploaded_files = request.files.getlist('files')
+        if not uploaded_files:
+            return jsonify({'error': 'No files uploaded'}), 400
 
         # Get database connection
         conn = get_db_connection()
@@ -66,7 +81,7 @@ def upload_new_project():
         # First check if participant exists
         cursor.execute("""
             SELECT participant_id FROM participants WHERE participant_code = %s
-        """, (data['participant'],))
+        """, (participant_code,))
         participant = cursor.fetchone()
 
         if participant:
@@ -77,51 +92,72 @@ def upload_new_project():
             cursor.execute("""
                 INSERT INTO participants (participant_code) 
                 VALUES (%s)
-            """, (data['participant'],))
+            """, (participant_code,))
             participant_id = cursor.lastrowid
 
-        # Validate original project path
-        original_path = data['path']
-        if not os.path.exists(original_path) or not os.path.isdir(original_path):
-            return jsonify({'error': f'Project path {original_path} does not exist or is not a directory'}), 400
- 
-         # Create new directory in central data store
+        # Create new directory in central data store
         central_data_dir = os.path.expanduser(DATA_DIR)
         os.makedirs(central_data_dir, exist_ok=True)
         
         # Create a unique project directory name
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        project_dir_name = f"{data['name']}_{data['participant']}_{timestamp}"
+        project_dir_name = f"{project_name}_{participant_code}_{timestamp}"
         new_project_path = os.path.join(central_data_dir, project_dir_name)
         
-        # Copy the project data to the central location
+        # Create the project directory structure from uploaded files
         try:
-            shutil.copytree(original_path, new_project_path)
+            os.makedirs(new_project_path, exist_ok=True)
+            
+            # Process uploaded files and recreate directory structure
+            for file in uploaded_files:
+                if file.filename and file.filename != '':
+                    # Get relative path within the selected folder
+                    relative_path = file.filename
+                    if '/' in relative_path:
+                        # Remove the root folder name from the path since we're creating our own structure
+                        path_parts = relative_path.split('/')
+                        if len(path_parts) > 1:
+                            relative_path = '/'.join(path_parts[1:])  # Remove the first part (root folder name)
+                    
+                    # Create full file path
+                    file_path = os.path.join(new_project_path, relative_path)
+                    
+                    # Create directories if they don't exist
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                    
+                    # Save the file
+                    file.save(file_path)
+                    
         except Exception as e:
-            return jsonify({'error': f'Failed to copy project data: {str(e)}'}), 500
+            # Clean up on error
+            if os.path.exists(new_project_path):
+                shutil.rmtree(new_project_path)
+            return jsonify({'error': f'Failed to save uploaded files: {str(e)}'}), 500
 
-        # Then insert project with the participant_id
+        # Insert project with the participant_id
         cursor.execute("""
             INSERT INTO projects (project_name, participant_id, path)
             VALUES (%s, %s, %s)
-        """, (data['name'], participant_id, new_project_path))
+        """, (project_name, participant_id, new_project_path))
 
         # Get the new project_id
         project_id = cursor.lastrowid
 
-        if os.path.exists(new_project_path) and os.path.isdir(new_project_path):
-            # Find all session directories in this project path
-            sessions = [
-                {'name': d, 'file': 'accelerometer_data.csv'}
-                for d in os.listdir(new_project_path)
-                if os.path.isdir(os.path.join(new_project_path, d)) 
-                and os.path.exists(os.path.join(new_project_path, d, 'accelerometer_data.csv'))
-            ]
-            # Sort sessions by date/time in the name (assuming similar format as in list_sessions)
+        # Find all session directories in the uploaded project
+        sessions = []
+        if os.path.exists(new_project_path):
+            for item in os.listdir(new_project_path):
+                item_path = os.path.join(new_project_path, item)
+                if os.path.isdir(item_path):
+                    accel_file = os.path.join(item_path, 'accelerometer_data.csv')
+                    if os.path.exists(accel_file):
+                        sessions.append({'name': item, 'file': 'accelerometer_data.csv'})
+            
+            # Sort sessions by date/time in the name
             try:
                 sessions.sort(key=lambda s: datetime.strptime('_'.join(s['name'].split('_')[:4]), '%Y-%m-%d_%H_%M_%S'))
             except:
-                # If sorting fails (due to different naming convention), keep original order
+                # If sorting fails, keep original order
                 pass
 
             # Process each session (with automatic splitting on time gaps)
@@ -151,8 +187,7 @@ def upload_new_project():
                 except Exception as e:
                     print(f"Error processing session {session['name']}: {e}")
                     continue  # Skip this session and continue with others
-        else:
-            return jsonify({'error': f'Project path {new_project_path} does not exist or is not a directory'}), 400
+                    
         conn.commit()
         cursor.close()
         conn.close()
@@ -161,15 +196,16 @@ def upload_new_project():
             'message': 'Project uploaded successfully',
             'project_id': project_id,
             'participant_id': participant_id,
-            'original_path': original_path,
             'central_path': new_project_path,
             'sessions_created': all_created_sessions,
             'total_sessions': len(all_created_sessions),
-            'auto_split_applied': len(all_created_sessions) > len(sessions)
+            'auto_split_applied': len(all_created_sessions) > len(sessions) if sessions else False,
+            'files_uploaded': len(uploaded_files)
         })
+        
     except Exception as e:
-        print(f"Error parsing request data: {e}")
-        return jsonify({'error': 'Invalid request data'}), 400
+        print(f"Error in upload_new_project: {e}")
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
 @app.route('/api/sessions')
 def list_sessions():
