@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, send_from_directory, request
+from flask import Flask, jsonify, send_from_directory, request, Response
 from werkzeug.utils import secure_filename
 import os
 import pandas as pd
@@ -8,11 +8,17 @@ import json
 import shutil
 from datetime import datetime
 import numpy as np
+import threading
+import time
+import uuid
 
 app = Flask(__name__, static_folder='static')
 
 # Directory containing session data
 DATA_DIR = '~/.delta/data'
+
+# Global dictionary to track upload progress
+upload_progress = {}
 
 # MySQL configuration
 MYSQL_CONFIG = {
@@ -88,11 +94,26 @@ def upload_new_project():
             # Use existing participant
             participant_id = participant[0]
         else:
-            # Create new participant
-            cursor.execute("""
-                INSERT INTO participants (participant_code) 
-                VALUES (%s)
-            """, (participant_code,))
+            # Create new participant - use INSERT IGNORE to handle race conditions
+            try:
+                cursor.execute("""
+                    INSERT INTO participants (participant_code) 
+                    VALUES (%s)
+                """, (participant_code,))
+                participant_id = cursor.lastrowid
+            except mysql.connector.IntegrityError as e:
+                if e.errno == 1062:  # Duplicate entry error
+                    # Another process created the participant, fetch it
+                    cursor.execute("""
+                        SELECT participant_id FROM participants WHERE participant_code = %s
+                    """, (participant_code,))
+                    participant = cursor.fetchone()
+                    if participant:
+                        participant_id = participant[0]
+                    else:
+                        raise Exception("Failed to create or find participant")
+                else:
+                    raise e
             participant_id = cursor.lastrowid
 
         # Create new directory in central data store
@@ -160,47 +181,38 @@ def upload_new_project():
                 # If sorting fails, keep original order
                 pass
 
-            # Process each session (with automatic splitting on time gaps)
-            all_created_sessions = []
-            for session in sessions:
-                try:
-                    # Look for log.csv to extract bouts data
-                    bouts_json = '{}'
-                    log_path = os.path.join(new_project_path, session['name'], 'log.csv')
-                    if os.path.exists(log_path):
-                        try:
-                            log = pd.read_csv(log_path, skiprows=5)
-                            bouts = pd.concat([
-                                log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True).rename({'ns_since_reboot': 'start_time'}, axis=1)['start_time'],
-                                log[log['Message'] == 'Updating walking status from true to false'].reset_index(drop=True).rename({'ns_since_reboot': 'stop_time'}, axis=1)['stop_time']
-                            ], axis=1).values.tolist()
-                            bouts_json = json.dumps(bouts)
-                        except Exception as e:
-                            print(f"Error processing log file for bouts: {e}")
-                    
-                    # Auto-split session on time gaps larger than 30 minutes
-                    created_sessions = auto_split_session_on_upload(
-                        session['name'], new_project_path, project_id, bouts_json, conn
-                    )
-                    all_created_sessions.extend(created_sessions)
-                    
-                except Exception as e:
-                    print(f"Error processing session {session['name']}: {e}")
-                    continue  # Skip this session and continue with others
+        # Generate unique upload ID for progress tracking
+        upload_id = str(uuid.uuid4())
+        
+        # Start async processing in a separate thread
+        if sessions:
+            processing_thread = threading.Thread(
+                target=process_sessions_async,
+                args=(upload_id, sessions, new_project_path, project_id)
+            )
+            processing_thread.daemon = True
+            processing_thread.start()
+        else:
+            # No sessions to process
+            upload_progress[upload_id] = {
+                'status': 'complete',
+                'message': 'No sessions found in uploaded project',
+                'total_sessions_created': 0
+            }
                     
         conn.commit()
         cursor.close()
         conn.close()
 
         return jsonify({
-            'message': 'Project uploaded successfully',
+            'message': 'Project upload started',
             'project_id': project_id,
             'participant_id': participant_id,
             'central_path': new_project_path,
-            'sessions_created': all_created_sessions,
-            'total_sessions': len(all_created_sessions),
-            'auto_split_applied': len(all_created_sessions) > len(sessions) if sessions else False,
-            'files_uploaded': len(uploaded_files)
+            'upload_id': upload_id,
+            'sessions_found': len(sessions),
+            'files_uploaded': len(uploaded_files),
+            'progress_url': f'/api/upload-progress/{upload_id}'
         })
         
     except Exception as e:
@@ -928,6 +940,148 @@ def delete_project(project_id):
     except Exception as e:
         print(f"Error deleting project: {e}")
         return jsonify({'error': f'Failed to delete project: {str(e)}'}), 500
+
+# Server-Sent Events endpoint for upload progress
+@app.route('/api/upload-progress/<upload_id>')
+def upload_progress_stream(upload_id):
+    print(f"SSE connection established for upload {upload_id}")
+    print(f"Current upload_progress keys: {list(upload_progress.keys())}")
+    
+    def generate_progress():
+        # Check if upload_id exists before starting
+        if upload_id not in upload_progress:
+            print(f"Upload ID {upload_id} not found in progress tracking")
+            yield f"data: {json.dumps({'status': 'error', 'message': 'Upload not found'})}\n\n"
+            return
+            
+        while upload_id in upload_progress:
+            progress_data = upload_progress[upload_id]
+            print(f"Sending progress update for {upload_id}: {progress_data}")
+            yield f"data: {json.dumps(progress_data)}\n\n"
+            
+            # If upload is complete, send final message and stop
+            if progress_data.get('status') == 'complete':
+                print(f"Upload {upload_id} complete, closing SSE connection")
+                # Clean up progress data after a short delay
+                threading.Timer(5.0, lambda: upload_progress.pop(upload_id, None)).start()
+                break
+            elif progress_data.get('status') == 'error':
+                print(f"Upload {upload_id} error, closing SSE connection")
+                threading.Timer(5.0, lambda: upload_progress.pop(upload_id, None)).start()
+                break
+                
+            time.sleep(0.5)  # Update every 500ms
+    
+    response = Response(generate_progress(), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['Connection'] = 'keep-alive'
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
+# Async function to process sessions with progress tracking
+def process_sessions_async(upload_id, sessions, new_project_path, project_id):
+    try:
+        print(f"Starting async processing for upload {upload_id} with {len(sessions)} sessions")
+        
+        # Initialize progress tracking
+        upload_progress[upload_id] = {
+            'status': 'processing',
+            'current_session': 0,
+            'total_sessions': len(sessions),
+            'current_file': '',
+            'sessions_created': [],
+            'message': 'Starting session processing...'
+        }
+        
+        # Small delay to ensure frontend connects to SSE
+        time.sleep(1)
+        
+        # Get new database connection for this thread
+        conn = get_db_connection()
+        if conn is None:
+            upload_progress[upload_id] = {
+                'status': 'error',
+                'message': 'Database connection failed'
+            }
+            return
+        
+        all_created_sessions = []
+        
+        for i, session in enumerate(sessions):
+            try:
+                print(f"Processing session {i+1}/{len(sessions)}: {session['name']}")
+                
+                # Update progress
+                upload_progress[upload_id].update({
+                    'current_session': i + 1,
+                    'current_file': session['name'],
+                    'message': f'Processing session {i + 1} of {len(sessions)}: {session["name"]}'
+                })
+                
+                # Add a small delay to make progress visible
+                time.sleep(0.5)
+                
+                # Look for log.csv to extract bouts data
+                bouts_json = '{}'
+                log_path = os.path.join(new_project_path, session['name'], 'log.csv')
+                if os.path.exists(log_path):
+                    try:
+                        upload_progress[upload_id]['message'] = f'Analyzing log file for {session["name"]}...'
+                        log = pd.read_csv(log_path, skiprows=5)
+                        bouts = pd.concat([
+                            log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True).rename({'ns_since_reboot': 'start_time'}, axis=1)['start_time'],
+                            log[log['Message'] == 'Updating walking status from true to false'].reset_index(drop=True).rename({'ns_since_reboot': 'stop_time'}, axis=1)['stop_time']
+                        ], axis=1).values.tolist()
+                        bouts_json = json.dumps(bouts)
+                    except Exception as e:
+                        print(f"Error processing log file for bouts: {e}")
+                
+                # Update progress for splitting
+                upload_progress[upload_id]['message'] = f'Checking for time gaps in {session["name"]}...'
+                time.sleep(0.5)
+                
+                # Auto-split session on time gaps larger than 30 minutes
+                created_sessions = auto_split_session_on_upload(
+                    session['name'], new_project_path, project_id, bouts_json, conn
+                )
+                all_created_sessions.extend(created_sessions)
+                
+                # Update progress with created sessions
+                upload_progress[upload_id]['sessions_created'] = all_created_sessions
+                
+                if len(created_sessions) > 1:
+                    upload_progress[upload_id]['message'] = f'Split {session["name"]} into {len(created_sessions)} sessions'
+                else:
+                    upload_progress[upload_id]['message'] = f'No splitting needed for {session["name"]}'
+                
+                print(f"Completed processing {session['name']}, created {len(created_sessions)} sessions")
+                time.sleep(1)  # Additional delay to show progress
+                    
+            except Exception as e:
+                print(f"Error processing session {session['name']}: {e}")
+                upload_progress[upload_id]['message'] = f'Error processing {session["name"]}: {str(e)}'
+                time.sleep(1)
+                continue  # Skip this session and continue with others
+        
+        # Mark as complete
+        upload_progress[upload_id].update({
+            'status': 'complete',
+            'message': f'Upload complete! Created {len(all_created_sessions)} sessions',
+            'total_sessions_created': len(all_created_sessions),
+            'auto_split_applied': len(all_created_sessions) > len(sessions)
+        })
+        
+        print(f"Async processing complete for upload {upload_id}. Created {len(all_created_sessions)} sessions")
+        
+        conn.commit()
+        conn.close()
+        
+    except Exception as e:
+        print(f"Error in async processing: {e}")
+        upload_progress[upload_id] = {
+            'status': 'error',
+            'message': f'Processing failed: {str(e)}'
+        }
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=5050)

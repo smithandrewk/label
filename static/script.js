@@ -122,6 +122,23 @@ function updateSessionsList() {
     const sessionList = document.getElementById("session-list");
     const tbody = document.getElementById("sessions-table-body");
     
+    // Check if there's an active upload - don't clear the table body
+    if (activeUploadId) {
+        console.log('[DEBUG] Active upload in progress, not clearing table body. Upload ID:', activeUploadId);
+        // Clear sidebar only
+        sessionList.innerHTML = "";
+        return;
+    }
+    
+    // Check if there's an active progress row - don't clear it
+    const progressRow = document.getElementById('progress-row');
+    if (progressRow) {
+        console.log('[DEBUG] Found active progress row, not clearing table body');
+        // Clear sidebar only
+        sessionList.innerHTML = "";
+        return;
+    }
+    
     // Clear existing content
     sessionList.innerHTML = "";
     tbody.innerHTML = "";
@@ -266,7 +283,9 @@ function createNewProject(formData) {
     .then(response => response.json())
     .then(data => {
         // Handle successful response
-        console.log('Success:', data);
+        console.log('Upload started:', data);
+        console.log('Upload ID:', data.upload_id);
+        console.log('Sessions found:', data.sessions_found);
         
         // Close the modal
         const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
@@ -276,7 +295,33 @@ function createNewProject(formData) {
         document.getElementById('create-project-form').reset();
         
         // Refresh the project list
-        initializeProjects();
+        initializeProjects().then(() => {
+            // Navigate to the new project
+            currentProjectId = data.project_id;
+            console.log('Navigating to project:', data.project_id);
+            
+            // Update active state in dropdown
+            document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
+                item.classList.remove('active');
+                item.removeAttribute('aria-current');
+                if (item.dataset.projectId == data.project_id) {
+                    item.classList.add('active');
+                    item.setAttribute('aria-current', 'page');
+                }
+            });
+            
+            // Start progress tracking BEFORE fetching sessions
+            console.log('Checking if should start progress tracking...');
+            console.log('upload_id:', data.upload_id, 'sessions_found:', data.sessions_found);
+            if (data.upload_id && data.sessions_found > 0) {
+                console.log('Starting progress tracking now...');
+                startProgressTracking(data.upload_id, data.project_id);
+            } else {
+                console.log('NOT starting progress tracking - upload_id:', data.upload_id, 'sessions_found:', data.sessions_found);
+                // If no upload progress needed, fetch sessions normally
+                fetchProjectSessions(data.project_id);
+            }
+        });
     })
     .catch(error => {
         // Handle errors
@@ -1025,6 +1070,7 @@ let currentProjectId = null;
 let currentSessionId = null;
 let currentActiveSession = null;
 let isSplitting = false;
+let activeUploadId = null; // Track active upload
 let splitPoints = [];
 let minTimestamp = null;
 let maxTimestamp = null;
@@ -1094,6 +1140,146 @@ async function deleteProject(projectId, projectName) {
         console.error('Error deleting project:', error);
         alert(`Failed to delete project: ${error.message}`);
     }
+}
+
+// Progress tracking for session processing
+function startProgressTracking(uploadId, projectId) {
+    console.log(`[DEBUG] startProgressTracking called with uploadId: ${uploadId}, projectId: ${projectId}`);
+    
+    // Set global upload tracking
+    activeUploadId = uploadId;
+    
+    // Show progress indicator in the sessions table
+    const tableBody = document.getElementById('sessions-table-body');
+    console.log(`[DEBUG] Found tableBody element:`, tableBody);
+    
+    if (!tableBody) {
+        console.error('[ERROR] Could not find sessions-table-body element!');
+        return;
+    }
+    
+    tableBody.innerHTML = `
+        <tr id="progress-row">
+            <td colspan="4" class="text-center">
+                <div class="d-flex align-items-center justify-content-center">
+                    <div class="spinner-border spinner-border-sm me-2" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span id="progress-message">Starting upload processing...</span>
+                </div>
+                <div class="mt-2">
+                    <div class="progress">
+                        <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <small id="progress-details" class="text-muted">Initializing...</small>
+                </div>
+            </td>
+        </tr>
+    `;
+    
+    console.log(`[DEBUG] Progress UI injected. Current innerHTML length:`, tableBody.innerHTML.length);
+    
+    // Start EventSource for progress updates
+    const eventSource = new EventSource(`/api/upload-progress/${uploadId}`);
+    console.log(`[DEBUG] EventSource created for ${uploadId}`);
+    
+    eventSource.onopen = function(event) {
+        console.log('[DEBUG] EventSource connection opened', event);
+    };
+    
+    eventSource.onmessage = function(event) {
+        console.log('[DEBUG] Progress update received:', event.data);
+        try {
+            const progress = JSON.parse(event.data);
+            console.log('[DEBUG] Parsed progress:', progress);
+            updateProgressDisplay(progress);
+            
+            // If complete, refresh the session list and close connection
+            if (progress.status === 'complete') {
+                console.log('[DEBUG] Upload complete, closing EventSource');
+                activeUploadId = null; // Clear active upload
+                eventSource.close();
+                setTimeout(() => {
+                    console.log('[DEBUG] Refreshing session list');
+                    fetchProjectSessions(projectId);
+                }, 1000); // Small delay to ensure all sessions are saved
+            } else if (progress.status === 'error') {
+                console.log('[DEBUG] Upload error, closing EventSource');
+                activeUploadId = null; // Clear active upload
+                eventSource.close();
+                showProgressError(progress.message);
+            }
+        } catch (e) {
+            console.error('[ERROR] Error parsing progress data:', e);
+        }
+    };
+    
+    eventSource.onerror = function(event) {
+        console.error('[ERROR] Progress tracking error:', event);
+        activeUploadId = null; // Clear active upload
+        eventSource.close();
+        showProgressError('Connection lost. Refreshing...');
+        setTimeout(() => {
+            fetchProjectSessions(projectId);
+        }, 2000);
+    };
+}
+
+function updateProgressDisplay(progress) {
+    console.log('[DEBUG] updateProgressDisplay called with:', progress);
+    
+    const messageEl = document.getElementById('progress-message');
+    const progressBar = document.getElementById('progress-bar');
+    const detailsEl = document.getElementById('progress-details');
+    
+    console.log('[DEBUG] Progress elements found:', {
+        messageEl: !!messageEl,
+        progressBar: !!progressBar,
+        detailsEl: !!detailsEl
+    });
+    
+    if (messageEl) {
+        messageEl.textContent = progress.message || 'Processing...';
+        console.log('[DEBUG] Updated message to:', messageEl.textContent);
+    }
+    
+    if (progressBar && progress.total_sessions > 0) {
+        const percentage = (progress.current_session / progress.total_sessions) * 100;
+        progressBar.style.width = `${percentage}%`;
+        progressBar.setAttribute('aria-valuenow', percentage);
+        console.log('[DEBUG] Updated progress bar to:', percentage + '%');
+    }
+    
+    if (detailsEl) {
+        const details = [];
+        if (progress.current_session && progress.total_sessions) {
+            details.push(`Session ${progress.current_session} of ${progress.total_sessions}`);
+        }
+        if (progress.current_file) {
+            details.push(`File: ${progress.current_file}`);
+        }
+        if (progress.sessions_created && progress.sessions_created.length > 0) {
+            details.push(`Created: ${progress.sessions_created.length} sessions`);
+        }
+        detailsEl.textContent = details.join(' • ');
+        console.log('[DEBUG] Updated details to:', detailsEl.textContent);
+    }
+}
+
+function showProgressError(message) {
+    const tableBody = document.getElementById('sessions-table-body');
+    tableBody.innerHTML = `
+        <tr>
+            <td colspan="4" class="text-center text-danger">
+                <i class="fa-solid fa-exclamation-triangle me-2"></i>
+                ${message}
+                <br>
+                <button class="btn btn-sm btn-outline-primary mt-2" onclick="fetchProjectSessions(currentProjectId)">
+                    Refresh
+                </button>
+            </td>
+        </tr>
+    `;
 }
 
 initializeProjects();
