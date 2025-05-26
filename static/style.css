@@ -152,3 +152,17 @@ body {
     background-color: #f8d7da !important;
     border-color: #f5c6cb !important;
 }
+
+/* Active session highlighting in sidebar */
+.nav-link.active-session {
+    background-color: #e9ecef !important;
+    color: #495057 !important;
+    font-weight: 600;
+    border-left: 4px solid #007bff;
+    padding-left: 12px !important;
+}
+
+.nav-link.active-session:hover {
+    background-color: #dee2e6 !important;
+    color: #495057 !important;
+}
