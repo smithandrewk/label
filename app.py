@@ -1115,13 +1115,35 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                     try:
                         upload_progress[upload_id]['message'] = f'Analyzing log file for {session["name"]}...'
                         log = pd.read_csv(log_path, skiprows=5)
-                        bouts = pd.concat([
-                            log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True).rename({'ns_since_reboot': 'start_time'}, axis=1)['start_time'],
-                            log[log['Message'] == 'Updating walking status from true to false'].reset_index(drop=True).rename({'ns_since_reboot': 'stop_time'}, axis=1)['stop_time']
-                        ], axis=1).values.tolist()
+                        
+                        # Extract start and stop transitions
+                        start_transitions = log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True)['ns_since_reboot'].tolist()
+                        stop_transitions = log.loc[log['Message'] == 'Updating walking status from true to false'].reset_index(drop=True)['ns_since_reboot'].tolist()
+                        
+                        # Handle cases where session starts with "true to false" or ends with "false to true"
+                        bouts = []
+                        
+                        # If we have stop transitions but no start transitions, or first stop comes before first start
+                        if stop_transitions and (not start_transitions or stop_transitions[0] < start_transitions[0]):
+                            # Remove the first stop transition (session started in walking state)
+                            stop_transitions = stop_transitions[1:]
+                        
+                        # If we have start transitions but no stop transitions, or last start comes after last stop
+                        if start_transitions and (not stop_transitions or start_transitions[-1] > (stop_transitions[-1] if stop_transitions else 0)):
+                            # Remove the last start transition (session ended in walking state)
+                            start_transitions = start_transitions[:-1]
+                        
+                        # Now pair up the remaining transitions
+                        min_length = min(len(start_transitions), len(stop_transitions))
+                        for i in range(min_length):
+                            bouts.append([start_transitions[i], stop_transitions[i]])
+                        
                         bouts_json = json.dumps(bouts)
+                        print(f"Extracted {len(bouts)} valid bouts from {session['name']}")
+                        
                     except Exception as e:
                         print(f"Error processing log file for bouts: {e}")
+                        bouts_json = '[]'
                 
                 # Update progress for splitting
                 upload_progress[upload_id]['message'] = f'Checking for time gaps in {session["name"]}...'
