@@ -186,10 +186,19 @@ function updateSessionsList() {
                 </span>
             </div>
         `;
+        
+        // Create verified checkbox
+        const verifiedCheckbox = `
+            <span id="verified-btn-overlay-${sessionId}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer;">
+                <i id="verified-btn-${sessionId}" class="fa-solid fa-check" style="color: ${session.verified ? '#28a745' : '#dee2e6'}; font-size: 18px;"></i>
+            </span>
+        `;
+        
         row.innerHTML = `
             <td>${session.session_name}</td>
             <td>${session.project_name || ''}</td>
             <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === 0 ? ' (Discarded)' : ''}</td>
+            <td>${verifiedCheckbox}</td>
             <td>${trashButton}</td>
         `;
         tbody.appendChild(row);
@@ -246,6 +255,44 @@ function updateSessionsList() {
                 trash_btn_overlay.dataset.armed = "false";
                 trash_btn.style.color = '';
                 cancel_btn_overlay.style.display = 'none';
+            });
+        }
+        
+        // Add event listeners for verified checkbox
+        const verified_btn_overlay = document.getElementById(`verified-btn-overlay-${sessionId}`);
+        const verified_btn = document.getElementById(`verified-btn-${sessionId}`);
+        
+        if (verified_btn_overlay && verified_btn) {
+            // Hover effects
+            verified_btn_overlay.addEventListener('mouseenter', () => {
+                verified_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+            });
+            
+            verified_btn_overlay.addEventListener('mouseleave', () => {
+                verified_btn_overlay.style.background = 'rgba(224,224,224,0)';
+            });
+            
+            // Click handling to toggle verified status
+            verified_btn_overlay.addEventListener('click', async () => {
+                const currentSession = sessions.find(s => s.session_id == sessionId);
+                if (currentSession) {
+                    // Toggle verified status
+                    currentSession.verified = currentSession.verified ? 0 : 1;
+                    
+                    // Update the visual state immediately
+                    verified_btn.style.color = currentSession.verified ? '#28a745' : '#dee2e6';
+                    
+                    // Save to backend
+                    try {
+                        await updateSessionMetadata(currentSession);
+                        console.log(`Session ${sessionId} verified status updated to: ${currentSession.verified}`);
+                    } catch (error) {
+                        console.error('Error updating verified status:', error);
+                        // Revert the visual change on error
+                        currentSession.verified = currentSession.verified ? 0 : 1;
+                        verified_btn.style.color = currentSession.verified ? '#28a745' : '#dee2e6';
+                    }
+                }
             });
         }
     });
@@ -353,6 +400,7 @@ async function updateSessionMetadata(session) {
             body: JSON.stringify({
                 status: session.status,
                 keep: session.keep,
+                verified: session.verified || 0,
                 bouts: JSON.stringify(session.bouts || [])
             })
         });
@@ -509,6 +557,9 @@ async function visualizeSession(sessionId) {
                 <i id="trash-btn" class="fa-solid fa-trash"></i>
             </span>
         </div>
+        <span id="verified-btn-overlay-viz" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer; margin-left: 8px;">
+            <i id="verified-btn-viz" class="fa-solid fa-check" style="color: ${session.verified ? '#28a745' : '#dee2e6'}; font-size: 18px;"></i>
+        </span>
     `;
 
     // And update the event handlers to use dataset instead of a local variable:
@@ -570,6 +621,44 @@ async function visualizeSession(sessionId) {
     split_btn_overlay.addEventListener('click', function() {
         toggleSplitMode();
     });
+
+    // Add event listeners for verified button in visualization view
+    const verified_btn_overlay_viz = document.getElementById('verified-btn-overlay-viz');
+    const verified_btn_viz = document.getElementById('verified-btn-viz');
+    
+    if (verified_btn_overlay_viz && verified_btn_viz) {
+        // Hover effects
+        verified_btn_overlay_viz.addEventListener('mouseenter', () => {
+            verified_btn_overlay_viz.style.background = 'rgba(0,0,0,0.1)';
+        });
+        
+        verified_btn_overlay_viz.addEventListener('mouseleave', () => {
+            verified_btn_overlay_viz.style.background = 'rgba(224,224,224,0)';
+        });
+        
+        // Click handling to toggle verified status
+        verified_btn_overlay_viz.addEventListener('click', async () => {
+            // Toggle verified status
+            session.verified = session.verified ? 0 : 1;
+            
+            // Update the visual state immediately
+            verified_btn_viz.style.color = session.verified ? '#28a745' : '#dee2e6';
+            
+            // Save to backend
+            try {
+                await updateSessionMetadata(session);
+                console.log(`Session ${sessionId} verified status updated to: ${session.verified}`);
+                
+                // Also update the sessions list if we're in table view or sidebar
+                updateSessionsList();
+            } catch (error) {
+                console.error('Error updating verified status:', error);
+                // Revert the visual change on error
+                session.verified = session.verified ? 0 : 1;
+                verified_btn_viz.style.color = session.verified ? '#28a745' : '#dee2e6';
+            }
+        });
+    }
 
     const dataToPlot = session.data;
     if (!dataToPlot || dataToPlot.length === 0) {

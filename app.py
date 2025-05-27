@@ -237,7 +237,7 @@ def list_sessions():
         if project_id:
             # Get sessions for a specific project
             cursor.execute(f"""
-                SELECT s.session_id, s.session_name, s.status, s.keep,
+                SELECT s.session_id, s.session_name, s.status, s.keep, s.verified,
                        p.project_name, p.project_id, part.participant_code
                 FROM sessions s
                 JOIN projects p ON s.project_id = p.project_id
@@ -248,7 +248,7 @@ def list_sessions():
         else:
             # Get all sessions
             cursor.execute(f"""
-                SELECT s.session_id, s.session_name, s.status, s.keep,
+                SELECT s.session_id, s.session_name, s.status, s.keep, s.verified,
                        p.project_name, p.project_id, part.participant_code
                 FROM sessions s
                 JOIN projects p ON s.project_id = p.project_id
@@ -275,7 +275,7 @@ def get_session_data(session_id):
         
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT s.session_id, s.session_name, s.status, s.keep, s.bouts,
+            SELECT s.session_id, s.session_name, s.status, s.keep, s.verified, s.bouts,
                 p.project_id, p.project_name, p.path AS project_path
             FROM sessions s
             JOIN projects p ON s.project_id = p.project_id
@@ -352,18 +352,19 @@ def update_session_metadata(session_id):
         status = data.get('status')
         keep = data.get('keep')
         bouts = data.get('bouts')
+        verified = data.get('verified')
         
         conn = get_db_connection()
         if conn is None:
             return jsonify({'error': 'Database connection failed'}), 500
         
         cursor = conn.cursor()
-        # Update the SQL query to use session_id
+        # Update the SQL query to use session_id and include verified
         cursor.execute("""
             UPDATE sessions
-            SET status = %s, keep = %s, bouts = %s
+            SET status = %s, keep = %s, bouts = %s, verified = %s
             WHERE session_id = %s
-        """, (status, keep, bouts, session_id))
+        """, (status, keep, bouts, verified, session_id))
         
         # Check if any rows were updated
         rows_affected = cursor.rowcount
