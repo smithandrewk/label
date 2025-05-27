@@ -1182,5 +1182,203 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
             'message': f'Processing failed: {str(e)}'
         }
 
+# Export labels for all projects and sessions
+@app.route('/api/export/labels')
+def export_labels():
+    """Export all labels for all projects and sessions"""
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Get all sessions with their project and participant information
+        cursor.execute("""
+            SELECT 
+                s.session_id, 
+                s.session_name, 
+                s.status, 
+                s.keep, 
+                s.verified,
+                s.bouts,
+                p.project_id,
+                p.project_name, 
+                p.path AS project_path,
+                pt.participant_code,
+                pt.participant_id
+            FROM sessions s
+            JOIN projects p ON s.project_id = p.project_id
+            JOIN participants pt ON p.participant_id = pt.participant_id
+            WHERE s.keep != 0 OR s.keep IS NULL  -- Only include non-discarded sessions
+            ORDER BY pt.participant_code, p.project_name, s.session_name
+        """)
+        
+        sessions = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        # Process the data for export - hierarchical structure
+        projects_dict = {}
+        total_labels_count = 0
+        
+        for session in sessions:
+            # Parse bouts data
+            bouts = []
+            if session['bouts']:
+                try:
+                    bouts_data = session['bouts']
+                    if isinstance(bouts_data, str):
+                        bouts = json.loads(bouts_data)
+                    elif isinstance(bouts_data, (list, dict)):
+                        bouts = bouts_data
+                except (json.JSONDecodeError, TypeError) as e:
+                    print(f"Error parsing bouts for session {session['session_id']}: {e}")
+                    bouts = []
+            
+            # Process bouts into structured format
+            processed_bouts = []
+            if isinstance(bouts, list) and len(bouts) > 0:
+                for i, bout in enumerate(bouts):
+                    if isinstance(bout, list) and len(bout) >= 2:
+                        processed_bout = {
+                            'bout_index': i,
+                            'start_time': bout[0] if len(bout) > 0 else None,
+                            'end_time': bout[1] if len(bout) > 1 else None,
+                            'duration_ns': bout[1] - bout[0] if len(bout) >= 2 else None,
+                            'duration_seconds': (bout[1] - bout[0]) / 1e9 if len(bout) >= 2 else None,
+                            'label': bout[2] if len(bout) > 2 else 'smoking',  # Default label
+                            'confidence': bout[3] if len(bout) > 3 else None
+                        }
+                        processed_bouts.append(processed_bout)
+                        total_labels_count += 1
+            
+            # Create session object
+            session_obj = {
+                'session_id': session['session_id'],
+                'session_name': session['session_name'],
+                'status': session['status'],
+                'verified': bool(session['verified']),
+                'bout_count': len(processed_bouts),
+                'bouts': processed_bouts
+            }
+            
+            # Group by project
+            project_key = session['project_id']
+            if project_key not in projects_dict:
+                projects_dict[project_key] = {
+                    'project_id': session['project_id'],
+                    'project_name': session['project_name'],
+                    'project_path': session['project_path'],
+                    'participant': {
+                        'participant_id': session['participant_id'],
+                        'participant_code': session['participant_code']
+                    },
+                    'session_count': 0,
+                    'total_bouts': 0,
+                    'sessions': []
+                }
+            
+            # Add session to project
+            projects_dict[project_key]['sessions'].append(session_obj)
+            projects_dict[project_key]['session_count'] += 1
+            projects_dict[project_key]['total_bouts'] += len(processed_bouts)
+        
+        # Convert to list format
+        projects_list = list(projects_dict.values())
+        
+        return jsonify({
+            'success': True,
+            'total_projects': len(projects_list),
+            'total_sessions': len(sessions),
+            'total_labels': total_labels_count,
+            'export_timestamp': datetime.now().isoformat(),
+            'projects': projects_list
+        })
+        
+    except Exception as e:
+        print(f"Error exporting labels: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/export/labels/csv')
+def export_labels_csv():
+    """Export all labels as a downloadable CSV file - flattened from hierarchical structure"""
+    try:
+        # Get the hierarchical JSON data
+        response = export_labels()
+        if response.status_code != 200:
+            return response
+        
+        data = response.get_json()
+        if not data['success']:
+            return jsonify({'error': 'Failed to get export data'}), 500
+        
+        # Flatten the hierarchical structure for CSV
+        flattened_data = []
+        
+        for project in data['projects']:
+            for session in project['sessions']:
+                if session['bouts']:
+                    # Create a row for each bout
+                    for bout in session['bouts']:
+                        flattened_data.append({
+                            'participant_id': project['participant']['participant_id'],
+                            'participant_code': project['participant']['participant_code'],
+                            'project_id': project['project_id'],
+                            'project_name': project['project_name'],
+                            'session_id': session['session_id'],
+                            'session_name': session['session_name'],
+                            'session_status': session['status'],
+                            'session_verified': session['verified'],
+                            'bout_index': bout['bout_index'],
+                            'start_time': bout['start_time'],
+                            'end_time': bout['end_time'],
+                            'duration_ns': bout['duration_ns'],
+                            'duration_seconds': bout['duration_seconds'],
+                            'label': bout['label'],
+                            'confidence': bout['confidence']
+                        })
+                else:
+                    # Include sessions without bouts for completeness
+                    flattened_data.append({
+                        'participant_id': project['participant']['participant_id'],
+                        'participant_code': project['participant']['participant_code'],
+                        'project_id': project['project_id'],
+                        'project_name': project['project_name'],
+                        'session_id': session['session_id'],
+                        'session_name': session['session_name'],
+                        'session_status': session['status'],
+                        'session_verified': session['verified'],
+                        'bout_index': None,
+                        'start_time': None,
+                        'end_time': None,
+                        'duration_ns': None,
+                        'duration_seconds': None,
+                        'label': None,
+                        'confidence': None
+                    })
+        
+        # Convert to DataFrame for CSV export
+        df = pd.DataFrame(flattened_data)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'smoking_labels_export_{timestamp}.csv'
+        
+        # Create CSV content
+        csv_content = df.to_csv(index=False)
+        
+        # Return as downloadable file
+        response = Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename={filename}'}
+        )
+        return response
+        
+    except Exception as e:
+        print(f"Error exporting CSV: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True, port=5050)
+    app.run(debug=True)
