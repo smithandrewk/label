@@ -11,21 +11,25 @@ import numpy as np
 import threading
 import time
 import uuid
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__, static_folder='static')
 
 # Directory containing session data
-DATA_DIR = '~/.delta/data'
+DATA_DIR = os.getenv('DATA_DIR', '~/.delta/data')
 
 # Global dictionary to track upload progress
 upload_progress = {}
 
-# MySQL configuration
+# MySQL configuration from environment variables
 MYSQL_CONFIG = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'Password123!',
-    'database': 'smoking_data'
+    'host': os.getenv('MYSQL_HOST', 'localhost'),
+    'user': os.getenv('MYSQL_USER', 'smoking_app'),
+    'password': os.getenv('MYSQL_PASSWORD'),
+    'database': os.getenv('MYSQL_DATABASE', 'smoking_data')
 }
 
 # Initialize MySQL connection
