@@ -11,7 +11,20 @@
 <body>
     <!-- Sidebar -->
     <div class="sidebar">
-        <div style="display: flex; flex-direction: row; justify-content:flex-start;">
+        <!-- Navigation Icons -->
+        <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 15px;">
+            <div style="display: flex; flex-direction: row; justify-content: center; gap: 15px; margin-bottom: 15px;">
+                <span id="sessions-nav-btn" class="nav-icon active" title="Sessions View" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 8px; background: #0d6efd; color: white; cursor: pointer; transition: all 0.3s;">
+                    <i class="fa-solid fa-chart-gantt" style="font-size: 18px;"></i>
+                </span>
+                <span id="participants-nav-btn" class="nav-icon" title="Participants View" style="display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 8px; background: rgba(224, 224, 224, 0.3); color: #666; cursor: pointer; transition: all 0.3s;">
+                    <i class="fa-solid fa-users" style="font-size: 18px;"></i>
+                </span>
+            </div>
+        </div>
+        
+        <!-- Project Controls -->
+        <div style="display: flex; flex-direction: row; justify-content:flex-start; margin-bottom: 15px;">
             <span id="upload-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
                 <i class="fa-solid fa-arrow-up-from-bracket"></i>
             </span>
@@ -22,9 +35,21 @@
                 <!-- This will be populated by JavaScript -->
             </ul>
         </div>
-        <ul class="nav flex-column" id="session-list">
-            <!-- Populated by JavaScript -->
-        </ul>
+        
+        <!-- Session List (for sessions page) -->
+        <div id="sessions-sidebar-content" style="display: block;">
+            <ul class="nav flex-column" id="session-list">
+                <!-- Populated by JavaScript -->
+            </ul>
+        </div>
+        
+        <!-- Participants List (for participants page) -->
+        <div id="participants-sidebar-content" style="display: none;">
+            <div class="text-muted small mb-2 px-2">Participants</div>
+            <ul class="nav flex-column" id="participants-sidebar-list">
+                <!-- Populated by JavaScript -->
+            </ul>
+        </div>
     </div>
     <!-- Main Content -->
     <div class="main-content">
@@ -32,7 +57,9 @@
         <div id="table-view">
             <!-- Export Controls -->
             <div class="mb-3 d-flex justify-content-between align-items-center">
-                <h3>Sessions</h3>
+                <div class="d-flex align-items-center">
+                    <h3 class="me-3">Sessions</h3>
+                </div>
                 <div class="btn-group" role="group">
                     <button type="button" class="btn btn-outline-primary" id="export-json-btn" onclick="exportLabelsJSON()">
                         <i class="fa-solid fa-download me-2"></i>Export JSON
@@ -113,6 +140,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+    <script src="/static/navigation.js"></script>
     <script type="module" src="/static/script.js"></script>
 </body>
 </html>
