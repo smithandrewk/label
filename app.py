@@ -1466,5 +1466,244 @@ def export_labels_csv():
         print(f"Error exporting CSV: {e}")
         return jsonify({'error': str(e)}), 500
 
+# Get list of participants with their projects
+@app.route('/api/participants')
+def list_participants():
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        cursor = conn.cursor(dictionary=True)
+        
+        # Get all participants with their project information
+        cursor.execute("""
+            SELECT 
+                pt.participant_id, 
+                pt.participant_code, 
+                pt.first_name, 
+                pt.last_name, 
+                pt.email, 
+                pt.notes,
+                pt.created_at,
+                COUNT(DISTINCT p.project_id) as project_count,
+                GROUP_CONCAT(DISTINCT p.project_name SEPARATOR ', ') as project_names,
+                GROUP_CONCAT(DISTINCT p.project_id SEPARATOR ',') as project_ids,
+                SUM(CASE WHEN s.keep != 0 OR s.keep IS NULL THEN 1 ELSE 0 END) as total_sessions
+            FROM participants pt
+            LEFT JOIN projects p ON pt.participant_id = p.participant_id
+            LEFT JOIN sessions s ON p.project_id = s.project_id 
+                AND (s.status != 'Split' OR s.status IS NULL)
+            GROUP BY pt.participant_id, pt.participant_code, pt.first_name, pt.last_name, pt.email, pt.notes, pt.created_at
+            ORDER BY pt.participant_code
+        """)
+        participants = cursor.fetchall()
+        
+        # Process the results to convert project_ids from string to array
+        for participant in participants:
+            if participant['project_ids']:
+                participant['project_ids'] = [int(id.strip()) for id in participant['project_ids'].split(',')]
+            else:
+                participant['project_ids'] = []
+                
+            if not participant['project_names']:
+                participant['project_names'] = ''
+        
+        cursor.close()
+        conn.close()
+        return jsonify(participants)
+    except Exception as e:
+        print(f"Error listing participants: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# Create new participant
+@app.route('/api/participants', methods=['POST'])
+def create_participant():
+    try:
+        data = request.get_json()
+        participant_code = data.get('participant_code')
+        first_name = data.get('first_name', '')
+        last_name = data.get('last_name', '')
+        email = data.get('email', '')
+        notes = data.get('notes', '')
+        
+        if not participant_code:
+            return jsonify({'error': 'Participant code is required'}), 400
+        
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                INSERT INTO participants (participant_code, first_name, last_name, email, notes)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (participant_code, first_name, last_name, email, notes))
+            participant_id = cursor.lastrowid
+            conn.commit()
+            
+            cursor.close()
+            conn.close()
+            
+            return jsonify({
+                'message': 'Participant created successfully',
+                'participant_id': participant_id,
+                'participant_code': participant_code
+            })
+        except mysql.connector.IntegrityError as e:
+            if e.errno == 1062:  # Duplicate entry error
+                return jsonify({'error': f'Participant code "{participant_code}" already exists'}), 400
+            else:
+                raise e
+                
+    except Exception as e:
+        print(f"Error creating participant: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# Update participant
+@app.route('/api/participants/<int:participant_id>', methods=['PUT'])
+def update_participant(participant_id):
+    try:
+        data = request.get_json()
+        participant_code = data.get('participant_code')
+        first_name = data.get('first_name', '')
+        last_name = data.get('last_name', '')
+        email = data.get('email', '')
+        notes = data.get('notes', '')
+        
+        if not participant_code:
+            return jsonify({'error': 'Participant code is required'}), 400
+        
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                UPDATE participants 
+                SET participant_code = %s, first_name = %s, last_name = %s, email = %s, notes = %s
+                WHERE participant_id = %s
+            """, (participant_code, first_name, last_name, email, notes, participant_id))
+            
+            if cursor.rowcount == 0:
+                cursor.close()
+                conn.close()
+                return jsonify({'error': 'Participant not found'}), 404
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            return jsonify({
+                'message': 'Participant updated successfully',
+                'participant_id': participant_id,
+                'participant_code': participant_code
+            })
+        except mysql.connector.IntegrityError as e:
+            if e.errno == 1062:  # Duplicate entry error
+                return jsonify({'error': f'Participant code "{participant_code}" already exists'}), 400
+            else:
+                raise e
+                
+    except Exception as e:
+        print(f"Error updating participant: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# Delete participant
+@app.route('/api/participants/<int:participant_id>', methods=['DELETE'])
+def delete_participant(participant_id):
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # First, get participant information
+        cursor.execute("""
+            SELECT participant_id, participant_code FROM participants WHERE participant_id = %s
+        """, (participant_id,))
+        
+        participant_info = cursor.fetchone()
+        if not participant_info:
+            cursor.close()
+            conn.close()
+            return jsonify({'error': 'Participant not found'}), 404
+        
+        # Get all projects for this participant to delete associated data
+        cursor.execute("""
+            SELECT project_id, project_name, path FROM projects WHERE participant_id = %s
+        """, (participant_id,))
+        projects_to_delete = cursor.fetchall()
+        
+        # Count sessions to be deleted
+        cursor.execute("""
+            SELECT COUNT(*) as session_count FROM sessions s
+            JOIN projects p ON s.project_id = p.project_id
+            WHERE p.participant_id = %s
+        """, (participant_id,))
+        session_count = cursor.fetchone()['session_count']
+        
+        # Delete session lineage records first (due to foreign key constraints)
+        cursor.execute("""
+            DELETE sl FROM session_lineage sl
+            JOIN sessions s ON (sl.child_session_id = s.session_id OR sl.parent_session_id = s.session_id)
+            JOIN projects p ON s.project_id = p.project_id
+            WHERE p.participant_id = %s
+        """, (participant_id,))
+        
+        # Delete sessions
+        cursor.execute("""
+            DELETE s FROM sessions s
+            JOIN projects p ON s.project_id = p.project_id
+            WHERE p.participant_id = %s
+        """, (participant_id,))
+        sessions_deleted = cursor.rowcount
+        
+        # Delete projects
+        cursor.execute("""
+            DELETE FROM projects WHERE participant_id = %s
+        """, (participant_id,))
+        projects_deleted = cursor.rowcount
+        
+        # Delete participant
+        cursor.execute("""
+            DELETE FROM participants WHERE participant_id = %s
+        """, (participant_id,))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Delete project directories from filesystem
+        import shutil
+        for project in projects_to_delete:
+            project_path = project['path']
+            if project_path and os.path.exists(project_path):
+                try:
+                    shutil.rmtree(project_path)
+                    print(f"Deleted project directory: {project_path}")
+                except Exception as e:
+                    print(f"Warning: Could not delete project directory {project_path}: {e}")
+                    # Don't fail the entire operation if directory deletion fails
+        
+        return jsonify({
+            'message': 'Participant deleted successfully',
+            'participant_id': participant_id,
+            'participant_code': participant_info['participant_code'],
+            'projects_deleted': projects_deleted,
+            'sessions_deleted': sessions_deleted
+        })
+        
+    except Exception as e:
+        print(f"Error deleting participant: {e}")
+        return jsonify({'error': f'Failed to delete participant: {str(e)}'}), 500
+
+# Serve participants page
+@app.route('/participants')
+def serve_participants():
+    return send_from_directory(app.static_folder, 'participants.html')
+
 if __name__ == '__main__':
     app.run(debug=True)

@@ -1,6 +1,21 @@
 import * as eventListeners from './eventListeners.js';
 import { ensureSessionBoutsIsArray } from './helpers.js'
 
+// Check URL parameters on page load
+function checkUrlParameters() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const participantCode = urlParams.get('participant');
+    const createProject = urlParams.get('create_project');
+    
+    if (participantCode && createProject === 'true') {
+        // Pre-fill participant code and show create project modal
+        setTimeout(() => {
+            document.getElementById('project-participant').value = participantCode;
+            showCreateProjectForm();
+        }, 500); // Small delay to ensure page is loaded
+    }
+}
+
 // Add to your script.js
 async function initializeProjects() {
     try {
@@ -312,6 +327,11 @@ async function fetchSession(projectId) {
         
         // Add this line to update the UI
         updateSessionsList(sessions);
+        
+        // Update unified sidebar if function is available
+        if (window.updateSessionsSidebarList) {
+            window.updateSessionsSidebarList(sessions, projectId);
+        }
         
     } catch (error) {
         console.error('Error fetching sessions:', error);
@@ -1641,3 +1661,5 @@ function navigateToPreviousSession() {
 
 initializeProjects();
 eventListeners.addEventListeners();
+checkUrlParameters();
+checkUrlParameters();
