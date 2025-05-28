@@ -857,6 +857,11 @@ def auto_split_session_on_upload(session_name, project_path, project_id, bouts_j
             log_path = os.path.join(project_path, session_name, 'log.csv')
             if os.path.exists(log_path):
                 shutil.copy(log_path, os.path.join(new_dir, 'log.csv'))
+                
+            # Copy labels.json file if it exists
+            labels_path = os.path.join(project_path, session_name, 'labels.json')
+            if os.path.exists(labels_path):
+                shutil.copy(labels_path, os.path.join(new_dir, 'labels.json'))
             
             # Insert session into database
             cursor.execute("""
@@ -1112,13 +1117,68 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                     time.sleep(1)
                     continue  # Skip to next session
                 
-                # Look for log.csv to extract bouts data
+                # Look for labels.json first, then fall back to log.csv for bout extraction
                 bouts_json = '{}'
-                log_path = os.path.join(new_project_path, session['name'], 'log.csv')
-                if os.path.exists(log_path):
+                labels_json_path = os.path.join(new_project_path, session['name'], 'labels.json')
+                log_csv_path = os.path.join(new_project_path, session['name'], 'log.csv')
+                
+                if os.path.exists(labels_json_path):
+                    try:
+                        upload_progress[upload_id]['message'] = f'Loading labels from labels.json for {session["name"]}...'
+                        with open(labels_json_path, 'r') as f:
+                            labels_data = json.load(f)
+                        
+                        # Extract bouts from labels.json
+                        # Expected format: array of objects with "start" and "end" properties
+                        bouts = []
+                        
+                        if isinstance(labels_data, list):
+                            # Direct array of bout objects or bout arrays
+                            bouts = labels_data
+                        elif isinstance(labels_data, dict):
+                            # Check for common keys that might contain bouts
+                            if 'bouts' in labels_data:
+                                bouts = labels_data['bouts']
+                            elif 'labels' in labels_data:
+                                bouts = labels_data['labels']
+                            elif 'smoking_bouts' in labels_data:
+                                bouts = labels_data['smoking_bouts']
+                            else:
+                                # If no recognized key, try to use the whole dict as bouts
+                                bouts = labels_data
+                        
+                        # Validate and clean the bouts data
+                        valid_bouts = []
+                        for bout in bouts:
+                            if isinstance(bout, dict) and 'start' in bout and 'end' in bout:
+                                # Handle object format: {"start": 123, "end": 456}
+                                start_time = bout['start']
+                                end_time = bout['end']
+                                if isinstance(start_time, (int, float)) and isinstance(end_time, (int, float)):
+                                    # Convert to array format [start, end] for consistency with existing code
+                                    bout_array = [start_time, end_time]
+                                    # Add label and confidence if present
+                                    if 'label' in bout:
+                                        bout_array.append(bout['label'])
+                                    if 'confidence' in bout:
+                                        bout_array.append(bout['confidence'])
+                                    valid_bouts.append(bout_array)
+                            elif isinstance(bout, list) and len(bout) >= 2:
+                                # Handle array format: [start, end] or [start, end, label, confidence]
+                                if isinstance(bout[0], (int, float)) and isinstance(bout[1], (int, float)):
+                                    valid_bouts.append(bout)
+                        
+                        bouts_json = json.dumps(valid_bouts)
+                        print(f"Loaded {len(valid_bouts)} valid bouts from labels.json for {session['name']}")
+                        
+                    except Exception as e:
+                        print(f"Error processing labels.json file for bouts: {e}")
+                        bouts_json = '[]'
+                
+                elif os.path.exists(log_csv_path):
                     try:
                         upload_progress[upload_id]['message'] = f'Analyzing log file for {session["name"]}...'
-                        log = pd.read_csv(log_path, skiprows=5)
+                        log = pd.read_csv(log_csv_path, skiprows=5)
                         
                         # Extract start and stop transitions
                         start_transitions = log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True)['ns_since_reboot'].tolist()
@@ -1143,7 +1203,7 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                             bouts.append([start_transitions[i], stop_transitions[i]])
                         
                         bouts_json = json.dumps(bouts)
-                        print(f"Extracted {len(bouts)} valid bouts from {session['name']}")
+                        print(f"Extracted {len(bouts)} valid bouts from log.csv for {session['name']}")
                         
                     except Exception as e:
                         print(f"Error processing log file for bouts: {e}")
