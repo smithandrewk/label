@@ -1,9 +1,13 @@
-# Configuration variables
-DB_NAME = smoking_data
-DB_USER = root
-DB_PASSWORD = Password123!
-DB_HOST = localhost
-DB_PORT = 3306
+# Load environment variables from .env file
+include .env
+export
+
+# Use environment variables with fallback defaults
+DB_NAME ?= $(MYSQL_DATABASE)
+DB_USER ?= $(MYSQL_USER)
+DB_PASSWORD ?= $(MYSQL_PASSWORD)
+DB_HOST ?= $(MYSQL_HOST)
+DB_PORT ?= 3306
 MYSQL = mysql -u$(DB_USER) -p$(DB_PASSWORD) -h$(DB_HOST) -P$(DB_PORT)
 SCRIPTS_DIR = ./static
 
