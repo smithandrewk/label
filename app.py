@@ -479,11 +479,13 @@ def split_session(session_id):
         
         for bout in parent_bouts:
             # Each bout is [start_time, stop_time]
-            if len(bout) != 2:
-                continue  # Skip malformed bouts
+            # if len(bout) != 2:
+                # continue  # Skip malformed bouts
                 
             bout_start = bout[0]
             bout_end = bout[1]
+            bout_label = bout[2]
+            bout_confidence = bout[3]
             
             for i, (segment_start, segment_end) in enumerate(segment_ranges):
                 # If bout is entirely within segment
@@ -493,19 +495,19 @@ def split_session(session_id):
                 # If bout overlaps with segment start
                 elif bout_start < segment_start and segment_start <= bout_end <= segment_end:
                     # Adjust bout to start at segment boundary
-                    adjusted_bout = [float(segment_start), float(bout_end)]
+                    adjusted_bout = [float(segment_start), float(bout_end),str(bout_label),float(bout_confidence)]
                     segment_bouts[i].append(adjusted_bout)
                     break
                 # If bout overlaps with segment end
                 elif segment_start <= bout_start <= segment_end and bout_end > segment_end:
                     # Adjust bout to end at segment boundary
-                    adjusted_bout = [float(bout_start), float(segment_end)]
+                    adjusted_bout = [float(bout_start), float(segment_end),str(bout_label),float(bout_confidence)]
                     segment_bouts[i].append(adjusted_bout)
                     break
                 # If bout spans entire segment
                 elif bout_start < segment_start and bout_end > segment_end:
                     # Create a bout for the entire segment
-                    adjusted_bout = [float(segment_start), float(segment_end)]
+                    adjusted_bout = [float(segment_start), float(segment_end),str(bout_label),float(bout_confidence)]
                     segment_bouts[i].append(adjusted_bout)
                     break
 
