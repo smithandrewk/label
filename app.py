@@ -471,11 +471,13 @@ def split_session(session_id):
         
         for bout in parent_bouts:
             # Each bout is [start_time, stop_time]
-            if len(bout) != 2:
-                continue  # Skip malformed bouts
+            # if len(bout) != 2:
+                # continue  # Skip malformed bouts
                 
             bout_start = bout[0]
             bout_end = bout[1]
+            bout_label = bout[2]
+            bout_confidence = bout[3]
             
             for i, (segment_start, segment_end) in enumerate(segment_ranges):
                 # If bout is entirely within segment
@@ -485,19 +487,19 @@ def split_session(session_id):
                 # If bout overlaps with segment start
                 elif bout_start < segment_start and segment_start <= bout_end <= segment_end:
                     # Adjust bout to start at segment boundary
-                    adjusted_bout = [float(segment_start), float(bout_end)]
+                    adjusted_bout = [float(segment_start), float(bout_end),str(bout_label),float(bout_confidence)]
                     segment_bouts[i].append(adjusted_bout)
                     break
                 # If bout overlaps with segment end
                 elif segment_start <= bout_start <= segment_end and bout_end > segment_end:
                     # Adjust bout to end at segment boundary
-                    adjusted_bout = [float(bout_start), float(segment_end)]
+                    adjusted_bout = [float(bout_start), float(segment_end),str(bout_label),float(bout_confidence)]
                     segment_bouts[i].append(adjusted_bout)
                     break
                 # If bout spans entire segment
                 elif bout_start < segment_start and bout_end > segment_end:
                     # Create a bout for the entire segment
-                    adjusted_bout = [float(segment_start), float(segment_end)]
+                    adjusted_bout = [float(segment_start), float(segment_end),str(bout_label),float(bout_confidence)]
                     segment_bouts[i].append(adjusted_bout)
                     break
 
@@ -1192,9 +1194,11 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                         # Now pair up the remaining transitions
                         min_length = min(len(start_transitions), len(stop_transitions))
                         for i in range(min_length):
-                            bouts.append([start_transitions[i], stop_transitions[i]])
+                            bouts.append([start_transitions[i], stop_transitions[i],'smoking',1])
                         
                         bouts_json = json.dumps(bouts)
+
+                        print(bouts_json)
                         print(f"Extracted {len(bouts)} valid bouts from log.csv for {session['name']}")
                         
                     except Exception as e:
@@ -1205,14 +1209,16 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                 upload_progress[upload_id]['message'] = f'Checking for time gaps in {session["name"]}...'
                 time.sleep(0.5)
                 
-                # Auto-split session on time gaps larger than 30 minutes
-                created_sessions = auto_split_session_on_upload(
-                    session['name'], new_project_path, project_id, bouts_json, conn
-                )
-                
-                # Only add to all_created_sessions if sessions were actually created
-                if created_sessions:
-                    all_created_sessions.extend(created_sessions)
+                auto_split = True # manually turn off autosplit for now
+                if auto_split:
+                    # Auto-split session on time gaps larger than 30 minutes
+                    created_sessions = auto_split_session_on_upload(
+                        session['name'], new_project_path, project_id, bouts_json, conn
+                    )
+                    
+                    # Only add to all_created_sessions if sessions were actually created
+                    if created_sessions:
+                        all_created_sessions.extend(created_sessions)
                 
                 # Update progress with created sessions
                 upload_progress[upload_id]['sessions_created'] = all_created_sessions
