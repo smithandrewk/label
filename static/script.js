@@ -866,10 +866,30 @@ function createBoutOverlays(index, container) {
     dragOverlay.addEventListener('dblclick', function() {
         const boutIndex = parseInt(dragOverlay.dataset.boutIndex);
         if (dragContext.currentSession && dragContext.currentSession.bouts) {
+            // Store current zoom level before removing the bout
+            const plotDiv = document.getElementById('timeSeriesPlot');
+            let currentXRange, currentYRange;
+            
+            // Only try to get the range if the plot is initialized
+            if (plotDiv && plotDiv._fullLayout) {
+                currentXRange = plotDiv._fullLayout.xaxis.range.slice(); // Clone the range array
+                currentYRange = plotDiv._fullLayout.yaxis.range.slice();
+            }
+            
+            // Remove the bout
             dragContext.currentSession.bouts.splice(boutIndex, 1);
             console.log(`Removed bout ${boutIndex}`);
+            
+            // Save the changes
             updateSessionMetadata(dragContext.currentSession);
-            visualizeSession(currentSessionId); // Refresh the plot
+            
+            // Remove the overlay elements for this bout
+            document.getElementById(`drag-overlay-${boutIndex}`)?.remove();
+            document.getElementById(`left-overlay-${boutIndex}`)?.remove();
+            document.getElementById(`right-overlay-${boutIndex}`)?.remove();
+            
+            // Re-render the session bouts without redrawing the entire plot
+            refreshBoutOverlays(dragContext.currentSession, currentXRange, currentYRange);
         }
     });
     // Element-specific mouse events for dragging
@@ -1301,11 +1321,14 @@ function createNewBout() {
     
     // Calculate the midpoint of the visible range
     const middleTimestamp = (visibleMin + visibleMax) / 2;
-    
+    console.log((visibleMax-visibleMin)*1e-9);
+    let defaultBoutLength = (visibleMax - visibleMin) * 1e-9; // Convert to seconds
+    defaultBoutLength = defaultBoutLength / 20;
+    console.log('Default bout length:', defaultBoutLength, 'seconds');
     // Create a 480s wide bout (240s on each side of the midpoint) with label and color
     const newBout = [
-        middleTimestamp - (240*1e9), 
-        middleTimestamp + (240*1e9),
+        middleTimestamp - (defaultBoutLength*1e9), 
+        middleTimestamp + (defaultBoutLength*1e9),
         currentLabelClass.name,
         1.0  // Default confidence
     ];
@@ -1378,7 +1401,7 @@ let maxTimestamp = null;
 let currentLabelClass = { name: 'smoking', color: '#28a745' }; // Default to smoking
 let labelClasses = [
     { name: 'smoking', color: '#28a745', id: 1, visible: true },
-    { name: 'eating', color: '#007bff', id: 2, visible: true },
+    { name: 'puff', color: '#007bff', id: 2, visible: true },
     { name: 'drinking', color: '#dc3545', id: 3, visible: true },
     { name: 'other', color: '#17a2b8', id: 4, visible: true }
 ];
@@ -1802,16 +1825,16 @@ function selectLabelClass(className, color) {
     }
     
     // Close dropdown
-    const dropdown = bootstrap.Dropdown.getInstance(document.getElementById('label-classes-dropdown'));
-    if (dropdown) {
-        dropdown.hide();
-    }
+    // const dropdown = bootstrap.Dropdown.getInstance(document.getElementById('label-classes-dropdown'));
+    // if (dropdown) {
+    //     dropdown.hide();
+    // }
     
     // Update cursor or UI indication that a label is selected
     document.body.style.cursor = 'crosshair';
     
     // Show a temporary notification
-    showLabelSelectionNotification(className, color);
+    // showLabelSelectionNotification(className, color);
 }
 
 // Add new label class
