@@ -552,7 +552,58 @@ async function visualizeSession(sessionId) {
 
     const actionButtons = document.getElementById("action-buttons");
     actionButtons.innerHTML = "";
+    
+    actionButtons.innerHTML += `
+        <a href="#" class="d-flex align-items-center link-body-emphasis text-decoration-none dropdown-toggle" 
+            id="label-classes-dropdown" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Label classes menu"> 
+            <i class="fa-solid fa-tags"></i>
+        </a>
+        <div class="dropdown-menu p-0 rounded-3 shadow overflow-hidden" style="width: 280px;" aria-labelledby="label-classes-dropdown">
+            <!-- Filter input -->
+            <form class="p-2 mb-2 bg-body-tertiary border-bottom">
+                <input type="search" class="form-control form-control-sm" id="label-filter" autocomplete="false" placeholder="Type to filter...">
+            </form>
+            
+            <!-- Label classes list -->
+            <ul class="list-unstyled mb-0" id="label-classes-list">
+                <!-- Dynamic content will be populated by updateLabelClassesDropdown() -->
+            </ul>
+            
+            <!-- Add new label form -->
+            <div class="border-top p-2 bg-light">
+                <form id="add-label-form" onsubmit="addNewLabelClass(event)">
+                    <div class="mb-2">
+                        <input type="text" class="form-control form-control-sm" id="new-label-name" placeholder="New label name" required>
+                    </div>
+                    <div class="mb-2">
+                        <select class="form-select form-select-sm" id="new-label-color">
+                            <option value="#28a745">Green</option>
+                            <option value="#007bff">Blue</option>
+                            <option value="#dc3545">Red</option>
+                            <option value="#ffc107">Yellow</option>
+                            <option value="#6f42c1">Purple</option>
+                            <option value="#fd7e14">Orange</option>
+                            <option value="#20c997">Teal</option>
+                            <option value="#e83e8c">Pink</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary w-100">
+                        <i class="fa-solid fa-plus me-1"></i>Add Label
+                    </button>
+                </form>
+            </div>
+        </div>
+        `;
 
+    // Add event listener for label filter
+    const labelFilter = document.getElementById('label-filter');
+    if (labelFilter) {
+        labelFilter.addEventListener('input', filterLabelClasses);
+    }
+    
+    // Populate the label classes dropdown with current data
+    updateLabelClassesDropdown();
+    
     if (isSplitting) {
         actionButtons.innerHTML += `
             <span id="split-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224);">
@@ -749,13 +800,16 @@ async function visualizeSession(sessionId) {
         }
         updateAllOverlayPositions();
 
+        // Apply visibility settings to all overlays
+        updateAllBoutVisibility();
+
         // Handle plot click for splitting
         plotDiv.on('plotly_click', function(data) {
             if (isSplitting) {
                 const splitPoint = data.points[0].x;
                 if (!splitPoints.includes(splitPoint)) {
                     splitPoints.push(splitPoint);
-                    visualizeSession(sessionId); // Refresh plot to show new split point marker
+                    visualizeSession(sessionId); // Refresh plot to show new split point
                 }
             }
         });
@@ -763,11 +817,13 @@ async function visualizeSession(sessionId) {
         plotDiv.on('plotly_relayout', () => {
             console.log('Plotly relayout event');
             updateAllOverlayPositions();
+            updateAllBoutVisibility();
         });
         // Update overlays on window resize
         window.addEventListener('resize', () => {
             Plotly.Plots.resize(plotDiv).then(() => {
                 updateAllOverlayPositions();
+                updateAllBoutVisibility();
             });
         });
     });
@@ -988,6 +1044,24 @@ function createBoutOverlays(index, container) {
 }
 
 
+// Helper function to get color for a label
+function getLabelColor(labelName) {
+    if (!labelName) return 'rgba(127, 249, 61, 0.2)'; // Default green for unlabeled bouts
+    
+    const labelClass = labelClasses.find(label => label.name.toLowerCase() === labelName.toLowerCase());
+    if (labelClass) {
+        // Convert hex to rgba with transparency
+        const hex = labelClass.color;
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, 0.3)`;
+    }
+    
+    // Fallback color for unknown labels
+    return 'rgba(128, 128, 128, 0.3)';
+}
+
 // Add this function to update the overlay positions
 function updateOverlayPositions(plotDiv, bout, index) {
     // Ensure the plotDiv is available and initialized
@@ -1011,9 +1085,25 @@ function updateOverlayPositions(plotDiv, bout, index) {
     
     if (!dragOverlay || !leftOverlay || !rightOverlay) return;
     
+    // Check if this label should be visible
+    const boutLabel = bout.length > 2 ? bout[2] : null;
+    const labelClass = labelClasses.find(l => l.name === boutLabel);
+    const isVisible = labelClass ? labelClass.visible : true; // Default to visible for unlabeled bouts
+    
+    // Set visibility for all overlay elements
+    dragOverlay.style.display = isVisible ? 'block' : 'none';
+    leftOverlay.style.display = isVisible ? 'block' : 'none';
+    rightOverlay.style.display = isVisible ? 'block' : 'none';
+    
+    // If not visible, no need to update positions
+    if (!isVisible) return;
+    
     // Set handle size
     const handleWidth = 20;
     const handleHeight = yAxis._length;
+    
+    // Get label color (bout[2] is the label) - use existing boutLabel variable
+    const backgroundColor = getLabelColor(boutLabel);
     
     // Set main overlay position and size
     dragOverlay.style.position = 'absolute';
@@ -1021,7 +1111,7 @@ function updateOverlayPositions(plotDiv, bout, index) {
     dragOverlay.style.width = `${pixelX1 - pixelX0}px`;
     dragOverlay.style.top = `${yAxis._offset}px`;
     dragOverlay.style.height = `${handleHeight}px`;
-    dragOverlay.style.backgroundColor = 'rgba(127, 249, 61, 0.2)';
+    dragOverlay.style.backgroundColor = backgroundColor;
     dragOverlay.style.border = '2px solid black';
     
     // Set left handle position and size
@@ -1175,6 +1265,12 @@ async function splitSession() {
 }
 
 function createNewBout() {
+    // Check if a label class is selected
+    if (!currentLabelClass) {
+        alert('Please select a label class from the dropdown before creating a bout.');
+        return;
+    }
+    
     // Get the current plotly visualization
     const plotDiv = document.getElementById('timeSeriesPlot');
     
@@ -1182,7 +1278,12 @@ function createNewBout() {
     if (!plotDiv || !plotDiv._fullLayout || !plotDiv._fullLayout.xaxis) {
         // Fallback to using full dataset range
         const middleTimestamp = (minTimestamp + maxTimestamp) / 2;
-        const newBout = [middleTimestamp - (240*1e9), middleTimestamp + (240*1e9)];
+        const newBout = [
+            middleTimestamp - (240*1e9), 
+            middleTimestamp + (240*1e9),
+            currentLabelClass.name,
+            1.0  // Default confidence
+        ];
         addBoutToSession(newBout);
         return;
     }
@@ -1201,8 +1302,20 @@ function createNewBout() {
     // Calculate the midpoint of the visible range
     const middleTimestamp = (visibleMin + visibleMax) / 2;
     
-    // Create a 480s wide bout (240s on each side of the midpoint)
-    const newBout = [middleTimestamp - (240*1e9), middleTimestamp + (240*1e9)];
+    // Create a 480s wide bout (240s on each side of the midpoint) with label and color
+    const newBout = [
+        middleTimestamp - (240*1e9), 
+        middleTimestamp + (240*1e9),
+        currentLabelClass.name,
+        1.0  // Default confidence
+    ];
+    
+    console.log('Creating new labeled bout:', {
+        label: currentLabelClass.name,
+        color: currentLabelClass.color,
+        start: new Date(newBout[0] / 1e6),
+        end: new Date(newBout[1] / 1e6)
+    });
     
     // Add the bout to the session and maintain view state
     addBoutToSession(newBout, currentViewState);
@@ -1261,6 +1374,15 @@ let splitPoints = [];
 let minTimestamp = null;
 let maxTimestamp = null;
 
+// Label class management
+let currentLabelClass = { name: 'smoking', color: '#28a745' }; // Default to smoking
+let labelClasses = [
+    { name: 'smoking', color: '#28a745', id: 1, visible: true },
+    { name: 'eating', color: '#007bff', id: 2, visible: true },
+    { name: 'drinking', color: '#dc3545', id: 3, visible: true },
+    { name: 'other', color: '#17a2b8', id: 4, visible: true }
+];
+
 // Make functions available globally for inline event handlers
 window.visualizeSession = visualizeSession;
 window.showTableView = showTableView;
@@ -1272,6 +1394,10 @@ window.showCreateProjectForm = showCreateProjectForm;
 window.createNewProject = createNewProject;
 window.navigateToNextSession = navigateToNextSession;
 window.navigateToPreviousSession = navigateToPreviousSession;
+window.selectLabelClass = selectLabelClass;
+window.addNewLabelClass = addNewLabelClass;
+window.clearLabelSelection = clearLabelSelection;
+window.toggleLabelVisibility = toggleLabelVisibility;
 window.updateSidebarHighlighting = updateSidebarHighlighting;
 
 // Export functions
@@ -1659,7 +1785,226 @@ function navigateToPreviousSession() {
     visualizeSession(prevSession.session_id);
 }
 
+// Select a label class for new bouts
+function selectLabelClass(className, color) {
+    currentLabelClass = { name: className, color: color };
+    console.log('Selected label class:', currentLabelClass);
+    
+    // Update UI to show selected state
+    document.querySelectorAll('#label-classes-list .dropdown-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // Find and mark the selected item as active
+    const selectedItem = document.querySelector(`#label-classes-list .dropdown-item[onclick*="'${className}'"]`);
+    if (selectedItem) {
+        selectedItem.classList.add('active');
+    }
+    
+    // Close dropdown
+    const dropdown = bootstrap.Dropdown.getInstance(document.getElementById('label-classes-dropdown'));
+    if (dropdown) {
+        dropdown.hide();
+    }
+    
+    // Update cursor or UI indication that a label is selected
+    document.body.style.cursor = 'crosshair';
+    
+    // Show a temporary notification
+    showLabelSelectionNotification(className, color);
+}
+
+// Add new label class
+function addNewLabelClass(event) {
+    event.preventDefault();
+    
+    const nameInput = document.getElementById('new-label-name');
+    const colorSelect = document.getElementById('new-label-color');
+    
+    const newName = nameInput.value.trim();
+    const newColor = colorSelect.value;
+    
+    if (!newName) {
+        alert('Please enter a label name');
+        return;
+    }
+    
+    // Check if label already exists
+    const exists = labelClasses.some(label => label.name.toLowerCase() === newName.toLowerCase());
+    if (exists) {
+        alert('A label with this name already exists');
+        return;
+    }
+    
+    // Add to label classes array
+    const newId = Math.max(...labelClasses.map(l => l.id)) + 1;
+    const newLabel = { name: newName, color: newColor, id: newId, visible: true };
+    labelClasses.push(newLabel);
+    
+    // Update the dropdown UI
+    updateLabelClassesDropdown();
+    
+    // Clear form
+    nameInput.value = '';
+    colorSelect.selectedIndex = 0;
+    
+    // Auto-select the new label
+    selectLabelClass(newName, newColor);
+    
+    console.log('Added new label class:', newLabel);
+}
+
+// Update the label classes dropdown
+function updateLabelClassesDropdown() {
+    const listElement = document.getElementById('label-classes-list');
+    if (!listElement) return;
+    
+    listElement.innerHTML = '';
+    
+    labelClasses.forEach(label => {
+        const colorClass = getBootstrapColorClass(label.color);
+        const listItem = document.createElement('li');
+        const eyeIcon = label.visible ? 'fa-eye' : 'fa-eye-slash';
+        const eyeOpacity = label.visible ? '1' : '0.5';
+        
+        listItem.innerHTML = `
+            <div class="dropdown-item d-flex align-items-center justify-content-between py-2">
+                <div class="d-flex align-items-center gap-2 flex-grow-1" onclick="selectLabelClass('${label.name}', '${label.color}')" style="cursor: pointer;">
+                    <span class="d-inline-block ${colorClass} rounded-circle p-1"></span>
+                    <span style="opacity: ${label.visible ? '1' : '0.6'}">${label.name.charAt(0).toUpperCase() + label.name.slice(1)}</span>
+                </div>
+                <button class="btn btn-sm p-1" onclick="toggleLabelVisibility('${label.name}')" style="border: none; background: none; opacity: ${eyeOpacity};" title="${label.visible ? 'Hide' : 'Show'} ${label.name} bouts">
+                    <i class="fa-solid ${eyeIcon}"></i>
+                </button>
+            </div>
+        `;
+        listElement.appendChild(listItem);
+    });
+}
+
+// Get Bootstrap color class from hex color
+function getBootstrapColorClass(hexColor) {
+    const colorMap = {
+        '#28a745': 'bg-success',
+        '#007bff': 'bg-primary', 
+        '#dc3545': 'bg-danger',
+        '#ffc107': 'bg-warning',
+        '#6f42c1': 'bg-purple',
+        '#fd7e14': 'bg-orange',
+        '#20c997': 'bg-teal',
+        '#e83e8c': 'bg-pink',
+        '#17a2b8': 'bg-info'
+    };
+    return colorMap[hexColor] || 'bg-secondary';
+}
+
+// Show notification when label is selected
+function showLabelSelectionNotification(labelName, color) {
+    // Remove any existing notification
+    const existing = document.getElementById('label-notification');
+    if (existing) existing.remove();
+    
+    // Create notification
+    const notification = document.createElement('div');
+    notification.id = 'label-notification';
+    notification.className = 'alert alert-info alert-dismissible fade show position-fixed';
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
+    notification.innerHTML = `
+        <div class="d-flex align-items-center gap-2">
+            <span class="d-inline-block rounded-circle p-1" style="background-color: ${color};"></span>
+            <span>Selected: <strong>${labelName.charAt(0).toUpperCase() + labelName.slice(1)}</strong></span>
+            <button type="button" class="btn-close" onclick="clearLabelSelection()"></button>
+        </div>
+        <small class="d-block mt-1">Click and drag on the plot to create labeled bouts</small>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+// Clear label selection
+function clearLabelSelection() {
+    currentLabelClass = null;
+    document.body.style.cursor = 'default';
+    
+    // Remove active state from all label items
+    document.querySelectorAll('#label-classes-list .dropdown-item').forEach(item => {
+        item.classList.remove('active');
+    });
+    
+    // Remove notification
+    const notification = document.getElementById('label-notification');
+    if (notification) notification.remove();
+    
+    console.log('Cleared label selection');
+}
+
+// Filter label classes
+function filterLabelClasses() {
+    const filterInput = document.getElementById('label-filter');
+    const filterText = filterInput.value.toLowerCase();
+    const listItems = document.querySelectorAll('#label-classes-list li');
+    
+    listItems.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        if (text.includes(filterText)) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+// Toggle visibility of label class
+function toggleLabelVisibility(labelName) {
+    const label = labelClasses.find(l => l.name === labelName);
+    if (label) {
+        label.visible = !label.visible;
+        console.log(`Toggled ${labelName} visibility to: ${label.visible}`);
+        
+        // Update dropdown UI
+        updateLabelClassesDropdown();
+        
+        // Update all overlays on the current plot
+        updateAllBoutVisibility();
+    }
+}
+
+// Update visibility of all bout overlays
+function updateAllBoutVisibility() {
+    if (dragContext.currentSession && dragContext.currentSession.bouts) {
+        dragContext.currentSession.bouts.forEach((bout, index) => {
+            const boutLabel = bout.length > 2 ? bout[2] : null;
+            const labelClass = labelClasses.find(l => l.name === boutLabel);
+            const isVisible = labelClass ? labelClass.visible : true; // Default to visible for unlabeled bouts
+            
+            // Get overlay elements
+            const dragOverlay = document.getElementById(`drag-overlay-${index}`);
+            const leftOverlay = document.getElementById(`left-overlay-${index}`);
+            const rightOverlay = document.getElementById(`right-overlay-${index}`);
+            
+            // Update visibility
+            if (dragOverlay) dragOverlay.style.display = isVisible ? 'block' : 'none';
+            if (leftOverlay) leftOverlay.style.display = isVisible ? 'block' : 'none';
+            if (rightOverlay) rightOverlay.style.display = isVisible ? 'block' : 'none';
+        });
+    }
+}
+
+// Initial function calls
 initializeProjects();
 eventListeners.addEventListeners();
 checkUrlParameters();
 checkUrlParameters();
+
+// Add event listener for label filter
+const labelFilter = document.getElementById('label-filter');
+if (labelFilter) {
+    labelFilter.addEventListener('input', filterLabelClasses);
+}

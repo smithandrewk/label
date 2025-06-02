@@ -1200,9 +1200,11 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                         # Now pair up the remaining transitions
                         min_length = min(len(start_transitions), len(stop_transitions))
                         for i in range(min_length):
-                            bouts.append([start_transitions[i], stop_transitions[i]])
+                            bouts.append([start_transitions[i], stop_transitions[i],'smoking',1])
                         
                         bouts_json = json.dumps(bouts)
+
+                        print(bouts_json)
                         print(f"Extracted {len(bouts)} valid bouts from log.csv for {session['name']}")
                         
                     except Exception as e:
@@ -1213,14 +1215,16 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                 upload_progress[upload_id]['message'] = f'Checking for time gaps in {session["name"]}...'
                 time.sleep(0.5)
                 
-                # Auto-split session on time gaps larger than 30 minutes
-                created_sessions = auto_split_session_on_upload(
-                    session['name'], new_project_path, project_id, bouts_json, conn
-                )
-                
-                # Only add to all_created_sessions if sessions were actually created
-                if created_sessions:
-                    all_created_sessions.extend(created_sessions)
+                auto_split = True # manually turn off autosplit for now
+                if auto_split:
+                    # Auto-split session on time gaps larger than 30 minutes
+                    created_sessions = auto_split_session_on_upload(
+                        session['name'], new_project_path, project_id, bouts_json, conn
+                    )
+                    
+                    # Only add to all_created_sessions if sessions were actually created
+                    if created_sessions:
+                        all_created_sessions.extend(created_sessions)
                 
                 # Update progress with created sessions
                 upload_progress[upload_id]['sessions_created'] = all_created_sessions
