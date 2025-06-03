@@ -54,6 +54,18 @@ export function addEventListeners() {
             backButton.style.background = 'rgba(0, 0, 0, 0)';
         });
     }
+    // Download button functionality
+    const download_btn_overlay = document.getElementById('download-btn-overlay');
+    download_btn_overlay.addEventListener('mouseenter', () => {
+        download_btn_overlay.style.background = 'rgba(0, 0, 0, 0.1)';
+        download_btn_overlay.style.cursor = 'pointer'; // Add pointer cursor
+    });
+    download_btn_overlay.addEventListener('mouseleave', () => {
+        download_btn_overlay.style.background = 'rgba(224, 224, 224, 0)';
+    });
+    download_btn_overlay.addEventListener('click', function() {
+        exportLabelsJSON();
+    });
 
     const uploadButton = document.getElementById('upload-btn-overlay');
     if (uploadButton) {
