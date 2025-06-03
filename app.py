@@ -13,6 +13,8 @@ import time
 import uuid
 from dotenv import load_dotenv
 
+from services import project_service
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -40,23 +42,13 @@ def get_db_connection():
         print(f"Error connecting to MySQL: {e}")
         return None
 
+projectService = project_service.ProjectService(get_db_connection)
+
 # Get list of projects
 @app.route('/api/projects')
 def list_projects():
     try:
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({'error': 'Database connection failed'}), 500
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT p.project_id, p.project_name, p.path, pt.participant_code
-            FROM projects p
-            JOIN participants pt ON p.participant_id = pt.participant_id
-        """)
-        projects = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return jsonify(projects)
+        return projectService.list_projects()
     except Exception as e:
         print(f"Error listing projects: {e}")
         return jsonify({'error': str(e)}), 500
