@@ -16,6 +16,23 @@ function checkUrlParameters() {
     }
 }
 
+// Function to update the current project name display
+function updateCurrentProjectName(projectName = null) {
+    const currentProjectNameElement = document.getElementById('current-project-name');
+    if (currentProjectNameElement) {
+        const textSpan = currentProjectNameElement.querySelector('span');
+        if (textSpan) {
+            if (projectName) {
+                textSpan.textContent = projectName;
+                currentProjectNameElement.style.display = 'flex';
+            } else {
+                textSpan.textContent = 'All Projects';
+                currentProjectNameElement.style.display = 'flex';
+            }
+        }
+    }
+}
+
 // Add to your script.js
 async function initializeProjects() {
     try {
@@ -42,6 +59,9 @@ async function initializeProjects() {
                 e.preventDefault();
                 currentProjectId = project.project_id; // Store selected project ID
                 fetchProjectSessions(project.project_id);
+                
+                // Update the current project name display
+                updateCurrentProjectName(project.project_name);
                 
                 // Update active state
                 document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
@@ -86,6 +106,9 @@ async function initializeProjects() {
                 e.preventDefault();
                 currentProjectId = null; // Clear the project ID
                 
+                // Update the current project name display
+                updateCurrentProjectName(null);
+                
                 // Update active state
                 document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
                     item.classList.remove('active');
@@ -107,7 +130,14 @@ async function initializeProjects() {
             firstProject.classList.add('active');
             firstProject.setAttribute('aria-current', 'page');
             currentProjectId = projects[0].project_id; // ADD THIS LINE to set current project ID
+            
+            // Update the current project name display
+            updateCurrentProjectName(projects[0].project_name);
+            
             fetchProjectSessions(projects[0].project_id);
+        } else {
+            // No projects available, show "All Projects"
+            updateCurrentProjectName(null);
         }
     } catch (error) {
         console.error('Error initializing projects:', error);
@@ -385,6 +415,9 @@ function createNewProject(formData) {
                     item.setAttribute('aria-current', 'page');
                 }
             });
+            
+            // Update project name display (use the project name from form data)
+            updateCurrentProjectName(formData.name);
             
             // Start progress tracking BEFORE fetching sessions
             console.log('Checking if should start progress tracking...');
@@ -1574,6 +1607,7 @@ async function deleteProject(projectId, projectName) {
         // If the deleted project was currently selected, clear the session view
         if (currentProjectId === projectId) {
             currentProjectId = null;
+            updateCurrentProjectName(null); // Reset to "All Projects"
             document.getElementById('sessions-table-body').innerHTML = '';
             showTableView(); // Go back to table view if in visualization
         }
