@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from typing import Dict, List, Any, Optional, Union, cast
 
 from services import project_service
+from services import session_service
 from utils.database_helpers import (
     safe_str, safe_int, safe_float, safe_bool,
     get_row_value, get_row_str, get_row_int, get_row_float, get_row_bool,
@@ -49,6 +50,7 @@ def get_db_connection():
         return None
 
 projectService = project_service.ProjectService(get_db_connection)
+sessionService = session_service.SessionService(get_db_connection)
 
 # Get list of projects
 @app.route('/api/projects')
@@ -224,46 +226,7 @@ def upload_new_project():
 @app.route('/api/sessions')
 def list_sessions():
     try:
-        project_id = request.args.get('project_id')
-        show_split = request.args.get('show_split', '0') == '1'  # Optional parameter to show split sessions
-        
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({'error': 'Database connection failed'}), 500
-        
-        cursor = conn.cursor(dictionary=True)
-        
-        # Base query filtering out split sessions
-        visibility_condition = "" if show_split else "AND (s.status != 'Split' OR s.status IS NULL) "
-        
-        if project_id:
-            # Get sessions for a specific project
-            cursor.execute(f"""
-                SELECT s.session_id, s.session_name, s.status, s.keep, s.verified,
-                       p.project_name, p.project_id, part.participant_code
-                FROM sessions s
-                JOIN projects p ON s.project_id = p.project_id
-                JOIN participants part ON p.participant_id = part.participant_id
-                WHERE s.project_id = %s {visibility_condition}
-                ORDER BY s.session_name
-            """, (project_id,))
-        else:
-            # Get all sessions
-            cursor.execute(f"""
-                SELECT s.session_id, s.session_name, s.status, s.keep, s.verified,
-                       p.project_name, p.project_id, part.participant_code
-                FROM sessions s
-                JOIN projects p ON s.project_id = p.project_id
-                JOIN participants part ON p.participant_id = part.participant_id
-                WHERE 1=1 {visibility_condition}
-                ORDER BY s.session_name
-            """)
-        
-        sessions = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        
-        return jsonify(sessions)
+        return sessionService.list_sessions(request)
     except Exception as e:
         print(f"Error listing sessions: {e}")
         return jsonify({'error': str(e)}), 500
