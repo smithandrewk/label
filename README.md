@@ -4,70 +4,62 @@ A Flask-based web application for labeling smoking detection data from accelerom
 
 ## Prerequisites
 
-1. **MySQL Server** - Install MySQL server on your system
-2. **Python 3.8+** - Ensure Python 3.8 or later is installed
-3. **pip** - Python package installer
+1. **Python 3.8+** - Ensure Python 3.8 or later is installed
+2. **pip** - Python package installer
 
-## Quick Setup
+## Setup Process
 
 1. **Clone and navigate to the project**
    ```bash
    cd label-smoking-data
    ```
 
-2. **Configure environment variables**
+2. **Install SSHFS first**
+   This lets you mount the remote data directory over SSH:
    ```bash
-   cp .env.example .env
-   # Edit .env with your MySQL credentials
+   sudo apt install sshfs
    ```
 
-3. **Run complete setup**
+3. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with:
+   # - Your MySQL credentials
+   # - Your beast username (BEAST_USERNAME)
+   # - Keep DATA_DIR path as is for shared setup
+   ```
+
+4. **Run the setup script**
+   This will install dependencies and mount the data directory automatically:
    ```bash
    make setup
    ```
 
-4. **Start the application**
+5. **Additional data directory commands**
    ```bash
-   make run-app
+   # To manually mount or unmount the data directory:
+   make mount-data
+   make unmount-data
    ```
-
-## Manual Setup
-
-If you prefer to set up manually:
-
-1. **Install Python dependencies**
-   ```bash
-   make install-deps
-   ```
-
-2. **Create database user** (requires MySQL root access)
-   ```bash
-   make setup-user
-   ```
-
-3. **Create database and tables**
-   ```bash
-   make create-db
-   ```
-
-4. **Optional: Add sample data**
-   ```bash
-   make seed-db
-   ```
-
-## Available Make Targets
-
-- `make setup` - Complete setup process
-- `make create-db` - Create database and tables
-- `make reset-db` - Drop and recreate database
-- `make seed-db` - Add sample data
-- `make backup-db` - Create database backup
-- `make run-app` - Start the Flask application
-- `make test-db` - Test database connection
 
 ## Usage
 
-1. Open your browser to `http://localhost:5000`
-2. Upload project data containing accelerometer CSV files
-3. Label smoking sessions using the web interface
-4. Export labeled data in JSON or CSV format
+1. **Start the application**
+   ```bash
+   make run-app
+   ```
+   This will automatically mount the data directory (if not already mounted) and start the Flask server.
+
+2. Open your browser to `http://localhost:5000`
+
+3. Upload project data containing accelerometer CSV files
+
+4. Label smoking sessions using the web interface
+
+5. Export labeled data in JSON or CSV format
+
+6. **When finished**
+   ```bash
+   make unmount-data
+   ```
+   This will cleanly disconnect from the remote data directory.
