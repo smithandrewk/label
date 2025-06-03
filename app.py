@@ -15,81 +15,11 @@ from dotenv import load_dotenv
 from typing import Dict, List, Any, Optional, Union, cast
 
 from services import project_service
-
-# Type-safe helper functions for database row access
-def safe_str(value: Any) -> str:
-    """Safely convert a database value to string"""
-    if value is None:
-        return ""
-    return str(value)
-
-def safe_int(value: Any) -> int:
-    """Safely convert a database value to int"""
-    if value is None:
-        return 0
-    return int(value)
-
-def safe_float(value: Any) -> float:
-    """Safely convert a database value to float"""
-    if value is None:
-        return 0.0
-    return float(value)
-
-def safe_bool(value: Any) -> bool:
-    """Safely convert a database value to bool"""
-    if value is None:
-        return False
-    return bool(value)
-
-def get_row_value(row: Dict[str, Any], key: str, default: Any = None) -> Any:
-    """Safely get a value from a database row dictionary"""
-    return row.get(key, default)
-
-def get_row_str(row: Dict[str, Any], key: str, default: str = "") -> str:
-    """Safely get a string value from a database row dictionary"""
-    value = row.get(key, default)
-    return safe_str(value)
-
-def get_row_int(row: Dict[str, Any], key: str, default: int = 0) -> int:
-    """Safely get an int value from a database row dictionary"""
-    value = row.get(key, default)
-    return safe_int(value)
-
-def get_row_float(row: Dict[str, Any], key: str, default: float = 0.0) -> float:
-    """Safely get a float value from a database row dictionary"""
-    value = row.get(key, default)
-    return safe_float(value)
-
-def get_row_bool(row: Dict[str, Any], key: str, default: bool = False) -> bool:
-    """Safely get a bool value from a database row dictionary"""
-    value = row.get(key, default)
-    return safe_bool(value)
-
-def safe_fetchone_dict(cursor) -> Optional[Dict[str, Any]]:
-    """Safely fetch one row as dictionary with proper typing"""
-    row = cursor.fetchone()
-    if row is None:
-        return None
-    # Convert to dict if needed - cursor should be in dictionary mode
-    if isinstance(row, dict):
-        return cast(Dict[str, Any], row)
-    else:
-        # Fallback for non-dict mode cursors
-        columns = [desc[0] for desc in cursor.description]
-        return dict(zip(columns, row))
-
-def safe_fetchall_dict(cursor) -> List[Dict[str, Any]]:
-    """Safely fetch all rows as dictionaries with proper typing"""
-    rows = cursor.fetchall()
-    if not rows:
-        return []
-    # Convert to list of dicts if needed
-    if rows and isinstance(rows[0], dict):
-        return cast(List[Dict[str, Any]], rows)
-    else:
-        # Fallback for non-dict mode cursors
-        columns = [desc[0] for desc in cursor.description]
-        return [dict(zip(columns, row)) for row in rows]
+from utils.database_helpers import (
+    safe_str, safe_int, safe_float, safe_bool,
+    get_row_value, get_row_str, get_row_int, get_row_float, get_row_bool,
+    safe_fetchone_dict, safe_fetchall_dict
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -767,14 +697,17 @@ def detect_time_gaps(csv_path, gap_threshold_minutes=30):
         # Calculate time differences between consecutive readings
         time_diffs = df['ns_since_reboot'].diff()
         
-        # Find gaps larger than threshold
-        gap_indices = time_diffs[time_diffs > gap_threshold_ns].index
+        # Find gaps larger than threshold - convert to numeric to avoid type issues
+        time_diffs_numeric = pd.to_numeric(time_diffs, errors='coerce')
+        gap_indices = time_diffs_numeric[time_diffs_numeric > gap_threshold_ns].index
         
         # Get the timestamps where gaps end (start of new segment)
         split_points = []
         for idx in gap_indices:
             if idx > 0 and idx < len(df) - 1:  # Don't split at very beginning or end
-                split_points.append(float(df.loc[idx, 'ns_since_reboot']))
+                # Safely convert to float using the helper function
+                timestamp_value = df.loc[idx, 'ns_since_reboot']
+                split_points.append(safe_float(timestamp_value))
         
         return split_points
         
@@ -842,6 +775,8 @@ def auto_split_session_on_upload(session_name, project_path, project_id, bouts_j
         for point in split_points:
             df['time_diff'] = abs(df['ns_since_reboot'] - point)
             split_index = df['time_diff'].idxmin()
+            # Ensure split_index is an integer for proper comparison
+            split_index = safe_int(split_index)
             if split_index > 0 and split_index < len(df) - 1:
                 split_indices.append(split_index)
         split_indices = sorted(set(split_indices))
@@ -1475,13 +1410,18 @@ def export_labels_csv():
     try:
         # Get the hierarchical JSON data
         labels_response = export_labels()
-        if hasattr(labels_response, 'status_code') and labels_response.status_code != 200:
-            return labels_response
         
         # Handle both direct jsonify responses and tuples
         if isinstance(labels_response, tuple):
-            data = labels_response[0].get_json()
+            # If it's a tuple, first element is the response, second is status code
+            response_obj, status_code = labels_response
+            if status_code != 200:
+                return labels_response
+            data = response_obj.get_json()
         else:
+            # Check if it's a Response object with status_code
+            if hasattr(labels_response, 'status_code') and labels_response.status_code != 200:
+                return labels_response
             data = labels_response.get_json()
             
         if not data or not data.get('success'):
@@ -1799,7 +1739,9 @@ def delete_participant(participant_id):
 # Serve participants page
 @app.route('/participants')
 def serve_participants():
-    return send_from_directory(app.static_folder, 'participants.html')
+    # Ensure static_folder is not None
+    static_folder = app.static_folder or 'static'
+    return send_from_directory(static_folder, 'participants.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
