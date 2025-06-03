@@ -12,8 +12,84 @@ import threading
 import time
 import uuid
 from dotenv import load_dotenv
+from typing import Dict, List, Any, Optional, Union, cast
 
 from services import project_service
+
+# Type-safe helper functions for database row access
+def safe_str(value: Any) -> str:
+    """Safely convert a database value to string"""
+    if value is None:
+        return ""
+    return str(value)
+
+def safe_int(value: Any) -> int:
+    """Safely convert a database value to int"""
+    if value is None:
+        return 0
+    return int(value)
+
+def safe_float(value: Any) -> float:
+    """Safely convert a database value to float"""
+    if value is None:
+        return 0.0
+    return float(value)
+
+def safe_bool(value: Any) -> bool:
+    """Safely convert a database value to bool"""
+    if value is None:
+        return False
+    return bool(value)
+
+def get_row_value(row: Dict[str, Any], key: str, default: Any = None) -> Any:
+    """Safely get a value from a database row dictionary"""
+    return row.get(key, default)
+
+def get_row_str(row: Dict[str, Any], key: str, default: str = "") -> str:
+    """Safely get a string value from a database row dictionary"""
+    value = row.get(key, default)
+    return safe_str(value)
+
+def get_row_int(row: Dict[str, Any], key: str, default: int = 0) -> int:
+    """Safely get an int value from a database row dictionary"""
+    value = row.get(key, default)
+    return safe_int(value)
+
+def get_row_float(row: Dict[str, Any], key: str, default: float = 0.0) -> float:
+    """Safely get a float value from a database row dictionary"""
+    value = row.get(key, default)
+    return safe_float(value)
+
+def get_row_bool(row: Dict[str, Any], key: str, default: bool = False) -> bool:
+    """Safely get a bool value from a database row dictionary"""
+    value = row.get(key, default)
+    return safe_bool(value)
+
+def safe_fetchone_dict(cursor) -> Optional[Dict[str, Any]]:
+    """Safely fetch one row as dictionary with proper typing"""
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    # Convert to dict if needed - cursor should be in dictionary mode
+    if isinstance(row, dict):
+        return cast(Dict[str, Any], row)
+    else:
+        # Fallback for non-dict mode cursors
+        columns = [desc[0] for desc in cursor.description]
+        return dict(zip(columns, row))
+
+def safe_fetchall_dict(cursor) -> List[Dict[str, Any]]:
+    """Safely fetch all rows as dictionaries with proper typing"""
+    rows = cursor.fetchall()
+    if not rows:
+        return []
+    # Convert to list of dicts if needed
+    if rows and isinstance(rows[0], dict):
+        return cast(List[Dict[str, Any]], rows)
+    else:
+        # Fallback for non-dict mode cursors
+        columns = [desc[0] for desc in cursor.description]
+        return [dict(zip(columns, row)) for row in rows]
 
 # Load environment variables from .env file
 load_dotenv()
@@ -78,17 +154,17 @@ def upload_new_project():
         conn = get_db_connection()
         if conn is None:
             return jsonify({'error': 'Database connection failed'}), 500
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
         # First check if participant exists
         cursor.execute("""
             SELECT participant_id FROM participants WHERE participant_code = %s
         """, (participant_code,))
-        participant = cursor.fetchone()
+        participant = safe_fetchone_dict(cursor)
 
         if participant:
-            # Use existing participant
-            participant_id = participant[0]
+            # Use existing participant - participant is a dictionary
+            participant_id = get_row_int(participant, 'participant_id')
         else:
             # Create new participant - use INSERT IGNORE to handle race conditions
             try:
@@ -103,9 +179,9 @@ def upload_new_project():
                     cursor.execute("""
                         SELECT participant_id FROM participants WHERE participant_code = %s
                     """, (participant_code,))
-                    participant = cursor.fetchone()
+                    participant = safe_fetchone_dict(cursor)
                     if participant:
-                        participant_id = participant[0]
+                        participant_id = get_row_int(participant, 'participant_id')
                     else:
                         raise Exception("Failed to create or find participant")
                 else:
@@ -151,11 +227,11 @@ def upload_new_project():
                 shutil.rmtree(new_project_path)
             return jsonify({'error': f'Failed to save uploaded files: {str(e)}'}), 500
 
-        # Insert project with the participant_id
+        # Insert project with the participant_id - store only the project directory name, not full path
         cursor.execute("""
             INSERT INTO projects (project_name, participant_id, path)
             VALUES (%s, %s, %s)
-        """, (project_name, participant_id, new_project_path))
+        """, (project_name, safe_int(participant_id), project_dir_name))
 
         # Get the new project_id
         project_id = cursor.lastrowid
@@ -278,16 +354,18 @@ def get_session_data(session_id):
             WHERE s.session_id = %s
         """, (session_id,))
         
-        session_info = cursor.fetchone()
+        session_info = safe_fetchone_dict(cursor)
         cursor.close()
         conn.close()
         print(session_id,session_info)
         if not session_info:
             return jsonify({'error': 'Session not found'}), 404
         
-        # Use the project path stored in the description field
-        project_path = session_info['project_path']
-        session_name = session_info['session_name']
+        # Use the project path stored in the path field - construct full path dynamically
+        project_dir_name = get_row_str(session_info, 'project_path')  # This is now just the directory name
+        central_data_dir = os.path.expanduser(DATA_DIR)
+        project_path = os.path.join(central_data_dir, project_dir_name)
+        session_name = get_row_str(session_info, 'session_name')
         
         # Path to the session's data files
         csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
@@ -300,7 +378,7 @@ def get_session_data(session_id):
         df = df.iloc[::20]  # Downsampling
         
         # Extract bouts from log file if it exists
-        bouts = session_info['bouts']
+        bouts = get_row_value(session_info, 'bouts')
         
         expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
         if not all(col in df.columns for col in expected_columns):
@@ -399,17 +477,19 @@ def split_session(session_id):
             WHERE s.session_id = %s
         """, (session_id,))
         
-        session_info = cursor.fetchone()
+        session_info = safe_fetchone_dict(cursor)
         if not session_info:
             conn.close()
             return jsonify({'error': 'Session not found'}), 404
         
-        session_name = session_info['session_name']
-        project_path = session_info['project_path']
+        session_name = get_row_str(session_info, 'session_name')
+        project_dir_name = get_row_str(session_info, 'project_path')  # This is just the directory name
+        central_data_dir = os.path.expanduser(DATA_DIR)
+        project_path = os.path.join(central_data_dir, project_dir_name)
         
         # Parse the bouts from the session info
         try:
-            parent_bouts = json.loads(session_info['bouts'] or '[]')
+            parent_bouts = json.loads(get_row_str(session_info, 'bouts', '[]'))
             # Convert to list if it's not already
             if isinstance(parent_bouts, str):
                 parent_bouts = json.loads(parent_bouts)
@@ -507,7 +587,7 @@ def split_session(session_id):
         new_sessions = []
         for i, segment in enumerate(segments):
             # Generate unique name instead of using suffix
-            new_name = generate_unique_session_name(session_name, project_path, conn, session_info['project_id'])
+            new_name = generate_unique_session_name(session_name, project_path, conn, get_row_int(session_info, 'project_id'))
             new_dir = os.path.join(project_path, new_name)
             
             os.makedirs(new_dir)
@@ -535,10 +615,10 @@ def split_session(session_id):
                     INSERT INTO sessions (project_id, session_name, status, keep, bouts)
                     VALUES (%s, %s, %s, %s, %s)
                 """, (
-                    session_info['project_id'], 
+                    get_row_int(session_info, 'project_id'), 
                     session_data['name'], 
                     'Initial', 
-                    session_info['keep'], 
+                    get_row_value(session_info, 'keep'), 
                     json.dumps(session_data['bouts'])
                 ))
                 # Get the new session ID
@@ -929,14 +1009,17 @@ def delete_project(project_id):
             WHERE p.project_id = %s
         """, (project_id,))
         
-        project_info = cursor.fetchone()
+        project_info = safe_fetchone_dict(cursor)
         if not project_info:
             cursor.close()
             conn.close()
             return jsonify({'error': 'Project not found'}), 404
         
-        project_path = project_info['path']
-        participant_id = project_info['participant_id']
+        # Construct full path from DATA_DIR and project directory name
+        project_dir_name = get_row_str(project_info, 'path')  # This is now just the directory name
+        central_data_dir = os.path.expanduser(DATA_DIR)
+        project_path = os.path.join(central_data_dir, project_dir_name)
+        participant_id = get_row_int(project_info, 'participant_id')
         
         # Get list of sessions before deletion for cleanup
         cursor.execute("""
@@ -971,7 +1054,8 @@ def delete_project(project_id):
         cursor.execute("""
             SELECT COUNT(*) as project_count FROM projects WHERE participant_id = %s
         """, (participant_id,))
-        remaining_projects = cursor.fetchone()['project_count']
+        remaining_result = safe_fetchone_dict(cursor)
+        remaining_projects = get_row_int(remaining_result, 'project_count', 0) if remaining_result else 0
         
         participant_deleted = False
         if remaining_projects == 0:
@@ -1000,8 +1084,8 @@ def delete_project(project_id):
         return jsonify({
             'message': 'Project deleted successfully',
             'project_id': project_id,
-            'project_name': project_info['project_name'],
-            'participant_code': project_info['participant_code'],
+            'project_name': get_row_str(project_info, 'project_name'),
+            'participant_code': get_row_str(project_info, 'participant_code'),
             'sessions_deleted': sessions_deleted,
             'directory_deleted': directory_deleted,
             'participant_deleted': participant_deleted,
@@ -1298,7 +1382,7 @@ def export_labels():
             ORDER BY pt.participant_code, p.project_name, s.session_name
         """)
         
-        sessions = cursor.fetchall()
+        sessions = safe_fetchall_dict(cursor)
         cursor.close()
         conn.close()
         
@@ -1309,15 +1393,16 @@ def export_labels():
         for session in sessions:
             # Parse bouts data
             bouts = []
-            if session['bouts']:
+            bouts_str = get_row_str(session, 'bouts', '')
+            if bouts_str:
                 try:
-                    bouts_data = session['bouts']
+                    bouts_data = json.loads(bouts_str)
                     if isinstance(bouts_data, str):
-                        bouts = json.loads(bouts_data)
+                        bouts_data = json.loads(bouts_data)
                     elif isinstance(bouts_data, (list, dict)):
                         bouts = bouts_data
                 except (json.JSONDecodeError, TypeError) as e:
-                    print(f"Error parsing bouts for session {session['session_id']}: {e}")
+                    print(f"Error parsing bouts for session {get_row_int(session, 'session_id')}: {e}")
                     bouts = []
             
             # Process bouts into structured format
@@ -1339,24 +1424,24 @@ def export_labels():
             
             # Create session object
             session_obj = {
-                'session_id': session['session_id'],
-                'session_name': session['session_name'],
-                'status': session['status'],
-                'verified': bool(session['verified']),
+                'session_id': get_row_int(session, 'session_id'),
+                'session_name': get_row_str(session, 'session_name'),
+                'status': get_row_str(session, 'status'),
+                'verified': get_row_bool(session, 'verified'),
                 'bout_count': len(processed_bouts),
                 'bouts': processed_bouts
             }
             
             # Group by project
-            project_key = session['project_id']
+            project_key = get_row_int(session, 'project_id')
             if project_key not in projects_dict:
                 projects_dict[project_key] = {
-                    'project_id': session['project_id'],
-                    'project_name': session['project_name'],
-                    'project_path': session['project_path'],
+                    'project_id': get_row_int(session, 'project_id'),
+                    'project_name': get_row_str(session, 'project_name'),
+                    'project_path': get_row_str(session, 'project_path'),
                     'participant': {
-                        'participant_id': session['participant_id'],
-                        'participant_code': session['participant_code']
+                        'participant_id': get_row_int(session, 'participant_id'),
+                        'participant_code': get_row_str(session, 'participant_code')
                     },
                     'session_count': 0,
                     'total_bouts': 0,
@@ -1389,12 +1474,17 @@ def export_labels_csv():
     """Export all labels as a downloadable CSV file - flattened from hierarchical structure"""
     try:
         # Get the hierarchical JSON data
-        response = export_labels()
-        if response.status_code != 200:
-            return response
+        labels_response = export_labels()
+        if hasattr(labels_response, 'status_code') and labels_response.status_code != 200:
+            return labels_response
         
-        data = response.get_json()
-        if not data['success']:
+        # Handle both direct jsonify responses and tuples
+        if isinstance(labels_response, tuple):
+            data = labels_response[0].get_json()
+        else:
+            data = labels_response.get_json()
+            
+        if not data or not data.get('success'):
             return jsonify({'error': 'Failed to get export data'}), 500
         
         # Flatten the hierarchical structure for CSV
@@ -1494,21 +1584,28 @@ def list_participants():
             GROUP BY pt.participant_id, pt.participant_code, pt.first_name, pt.last_name, pt.email, pt.notes, pt.created_at
             ORDER BY pt.participant_code
         """)
-        participants = cursor.fetchall()
+        participants = safe_fetchall_dict(cursor)
         
         # Process the results to convert project_ids from string to array
+        processed_participants = []
         for participant in participants:
-            if participant['project_ids']:
-                participant['project_ids'] = [int(id.strip()) for id in participant['project_ids'].split(',')]
+            processed_participant = dict(participant)  # Create a mutable copy
+            
+            project_ids_str = get_row_str(processed_participant, 'project_ids', '')
+            if project_ids_str:
+                processed_participant['project_ids'] = [int(id.strip()) for id in project_ids_str.split(',')]
             else:
-                participant['project_ids'] = []
+                processed_participant['project_ids'] = []
                 
-            if not participant['project_names']:
-                participant['project_names'] = ''
+            project_names_str = get_row_str(processed_participant, 'project_names', '')
+            if not project_names_str:
+                processed_participant['project_names'] = ''
+                
+            processed_participants.append(processed_participant)
         
         cursor.close()
         conn.close()
-        return jsonify(participants)
+        return jsonify(processed_participants)
     except Exception as e:
         print(f"Error listing participants: {e}")
         return jsonify({'error': str(e)}), 500
@@ -1623,7 +1720,7 @@ def delete_participant(participant_id):
             SELECT participant_id, participant_code FROM participants WHERE participant_id = %s
         """, (participant_id,))
         
-        participant_info = cursor.fetchone()
+        participant_info = safe_fetchone_dict(cursor)
         if not participant_info:
             cursor.close()
             conn.close()
@@ -1633,7 +1730,7 @@ def delete_participant(participant_id):
         cursor.execute("""
             SELECT project_id, project_name, path FROM projects WHERE participant_id = %s
         """, (participant_id,))
-        projects_to_delete = cursor.fetchall()
+        projects_to_delete = safe_fetchall_dict(cursor)
         
         # Count sessions to be deleted
         cursor.execute("""
@@ -1641,7 +1738,8 @@ def delete_participant(participant_id):
             JOIN projects p ON s.project_id = p.project_id
             WHERE p.participant_id = %s
         """, (participant_id,))
-        session_count = cursor.fetchone()['session_count']
+        session_count_result = safe_fetchone_dict(cursor)
+        session_count = get_row_int(session_count_result, 'session_count', 0) if session_count_result else 0
         
         # Delete session lineage records first (due to foreign key constraints)
         cursor.execute("""
@@ -1677,19 +1775,19 @@ def delete_participant(participant_id):
         # Delete project directories from filesystem
         import shutil
         for project in projects_to_delete:
-            project_path = project['path']
-            if project_path and os.path.exists(project_path):
+            project_path_str = get_row_str(project, 'path')
+            if project_path_str and os.path.exists(project_path_str):
                 try:
-                    shutil.rmtree(project_path)
-                    print(f"Deleted project directory: {project_path}")
+                    shutil.rmtree(project_path_str)
+                    print(f"Deleted project directory: {project_path_str}")
                 except Exception as e:
-                    print(f"Warning: Could not delete project directory {project_path}: {e}")
+                    print(f"Warning: Could not delete project directory {project_path_str}: {e}")
                     # Don't fail the entire operation if directory deletion fails
         
         return jsonify({
             'message': 'Participant deleted successfully',
             'participant_id': participant_id,
-            'participant_code': participant_info['participant_code'],
+            'participant_code': get_row_str(participant_info, 'participant_code'),
             'projects_deleted': projects_deleted,
             'sessions_deleted': sessions_deleted
         })
