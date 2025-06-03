@@ -1278,9 +1278,9 @@ window.updateSidebarHighlighting = updateSidebarHighlighting;
 async function exportLabelsJSON() {
     try {
         const exportBtn = document.getElementById('export-json-btn');
-        const originalText = exportBtn.innerHTML;
-        exportBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Exporting...';
-        exportBtn.disabled = true;
+        // const originalText = exportBtn.innerHTML;
+        // exportBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Exporting...';
+        // exportBtn.disabled = true;
         
         const response = await fetch('/api/export/labels');
         if (!response.ok) {
@@ -1320,63 +1320,8 @@ async function exportLabelsJSON() {
     }
 }
 
-async function exportLabelsCSV() {
-    try {
-        const exportBtn = document.getElementById('export-csv-btn');
-        const originalText = exportBtn.innerHTML;
-        exportBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Exporting...';
-        exportBtn.disabled = true;
-        
-        // Direct download from the CSV endpoint
-        const response = await fetch('/api/export/labels/csv');
-        if (!response.ok) {
-            throw new Error('Failed to export CSV');
-        }
-        
-        // Get filename from response headers
-        const contentDisposition = response.headers.get('content-disposition');
-        let filename = 'smoking_labels_export.csv';
-        if (contentDisposition) {
-            const filenameMatch = contentDisposition.match(/filename="(.+)"/);
-            if (filenameMatch) {
-                filename = filenameMatch[1];
-            }
-        }
-        
-        // Download the file
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        // Get summary info for success message
-        const summaryResponse = await fetch('/api/export/labels');
-        if (summaryResponse.ok) {
-            const data = await summaryResponse.json();
-            alert(`Successfully exported ${data.total_sessions} sessions with ${data.total_labels} labels to ${filename}`);
-        } else {
-            alert(`CSV exported successfully as ${filename}`);
-        }
-        
-    } catch (error) {
-        console.error('Error exporting CSV:', error);
-        alert('Failed to export CSV: ' + error.message);
-    } finally {
-        const exportBtn = document.getElementById('export-csv-btn');
-        exportBtn.innerHTML = '<i class="fa-solid fa-file-csv me-2"></i>Export CSV';
-        exportBtn.disabled = false;
-    }
-}
-
 // Make export functions available globally
 window.exportLabelsJSON = exportLabelsJSON;
-window.exportLabelsCSV = exportLabelsCSV;
 
 // Delete project function
 async function deleteProject(projectId, projectName) {
