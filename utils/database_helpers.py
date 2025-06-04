@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 """
 Type-safe helper functions for database operations and row access.
 """
@@ -87,3 +89,26 @@ def safe_fetchall_dict(cursor) -> List[Dict[str, Any]]:
         # Fallback for non-dict mode cursors
         columns = [desc[0] for desc in cursor.description]
         return [dict(zip(columns, row)) for row in rows]
+
+@contextmanager
+def get_db_cursor(db_connection_func, dictionary=True, write=False):
+    """Context manager for database operations"""
+    conn = db_connection_func()
+    if conn is None:
+        raise Exception("Database connection failed")
+    try:
+        cursor = conn.cursor(dictionary=dictionary)
+        yield cursor
+
+        if write:
+            conn.commit()
+    except Exception as e:
+        # Rollback on any error if it was a write operation
+        if write:
+            conn.rollback()
+        raise
+    finally:            
+        if 'cursor' in locals():
+            cursor.close()
+        if conn:
+            conn.close()

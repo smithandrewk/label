@@ -1,3 +1,4 @@
+import logging
 from flask import Flask, jsonify, send_from_directory, request, Response
 from werkzeug.utils import secure_filename
 import os
@@ -21,14 +22,13 @@ from utils.database_helpers import (
     get_row_value, get_row_str, get_row_int, get_row_float, get_row_bool,
     safe_fetchone_dict, safe_fetchall_dict
 )
+from utils.logging import log
+from utils.utils import *
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__, static_folder='static')
-
-# Directory containing session data
-DATA_DIR = os.getenv('DATA_DIR', '~/.delta/data')
 
 # Global dictionary to track upload progress
 upload_progress = {}
@@ -52,7 +52,6 @@ def get_db_connection():
 projectService = project_service.ProjectService(get_db_connection)
 sessionService = session_service.SessionService(get_db_connection)
 
-# Get list of projects
 @app.route('/api/projects')
 def list_projects():
     try:
@@ -61,7 +60,6 @@ def list_projects():
         print(f"Error listing projects: {e}")
         return jsonify({'error': str(e)}), 500
 
-# Upload new project
 @app.route('/api/project/upload', methods=['POST'])
 def upload_new_project():
     try:
@@ -226,159 +224,103 @@ def upload_new_project():
 @app.route('/api/sessions')
 def list_sessions():
     try:
-        return sessionService.list_sessions(request)
+        project_id = request.args.get('project_id')
+        show_split = request.args.get('show_split', '0') == '1'
+        
+        sessions = sessionService.list_sessions(project_id, show_split)
+        return jsonify(sessions), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
     except Exception as e:
-        print(f"Error listing sessions: {e}")
-        return jsonify({'error': str(e)}), 500
+        log(f"Error listing sessions: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/session/<int:session_id>')
 def get_session_data(session_id):
     try:
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({'error': 'Database connection failed'}), 500
+        session_info = sessionService.get_session_metadata(session_id)
+        if isinstance(session_info, tuple):
+            return session_info
         
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT s.session_id, s.session_name, s.status, s.keep, s.verified, s.bouts,
-                p.project_id, p.project_name, p.path AS project_path
-            FROM sessions s
-            JOIN projects p ON s.project_id = p.project_id
-            WHERE s.session_id = %s
-        """, (session_id,))
-        
-        session_info = safe_fetchone_dict(cursor)
-        cursor.close()
-        conn.close()
-        print(session_id,session_info)
-        if not session_info:
-            return jsonify({'error': 'Session not found'}), 404
-        
-        # Use the project path stored in the path field - construct full path dynamically
-        project_dir_name = get_row_str(session_info, 'project_path')  # This is now just the directory name
-        central_data_dir = os.path.expanduser(DATA_DIR)
-        project_path = os.path.join(central_data_dir, project_dir_name)
-        session_name = get_row_str(session_info, 'session_name')
-        
-        # Path to the session's data files
-        csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
-        print(csv_path)
+        csv_path = get_csv_path_from_session_info(session_info)
         if not os.path.exists(csv_path):
             return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
         
-        # Continue with your existing code to process the CSV file...
-        df = pd.read_csv(csv_path)
-        df = df.iloc[::20]  # Downsampling
-        
-        # Extract bouts from log file if it exists
-        bouts = get_row_value(session_info, 'bouts')
-        
-        expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
-        if not all(col in df.columns for col in expected_columns):
-            return jsonify({'error': f'Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}'}), 400
-        
-        data = df[expected_columns].to_dict(orient='records')
         data = {
-            'bouts': bouts,
-            'data': data,
+            'bouts': session_info['bouts'],
+            'data': load_data_from_csv_path(csv_path),
             'session_info': session_info
         }
-        
         return jsonify(data)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
     except Exception as e:
         print(f"Error retrieving session data: {e}")
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
-# Get session metadata
 @app.route('/api/session/<session_name>/metadata')
 def get_session_metadata(session_name):
     try:
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({'error': 'Database connection failed'}), 500
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT session_name, status, keep, label, segments
-            FROM sessions
-            WHERE session_name = %s
-        """, (session_name,))
-        metadata = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        if not metadata:
-            return jsonify({'error': 'Session not found'}), 404
-        return jsonify(metadata)
+        metadata = sessionService.get_session_metadata(session_name)
+        return jsonify(metadata), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        log(f"Error getting session metadata for {session_name}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-# Update session metadata
 @app.route('/api/session/<int:session_id>/metadata', methods=['PUT'])
 def update_session_metadata(session_id):
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
         status = data.get('status')
         keep = data.get('keep')
         bouts = data.get('bouts')
         verified = data.get('verified')
-        
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({'error': 'Database connection failed'}), 500
-        
-        cursor = conn.cursor()
-        # Update the SQL query to use session_id and include verified
-        cursor.execute("""
-            UPDATE sessions
-            SET status = %s, keep = %s, bouts = %s, verified = %s
-            WHERE session_id = %s
-        """, (status, keep, bouts, verified, session_id))
-        
-        # Check if any rows were updated
-        rows_affected = cursor.rowcount
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        if rows_affected == 0:
-            return jsonify({'warning': 'No session found with that ID'}), 200
-            
-        return jsonify({'message': 'Metadata updated', 'rows_affected': rows_affected})
-    except Exception as e:
-        print(f"Error updating session metadata: {e}")
-        return jsonify({'error': str(e)}), 500
 
-# Split session
+        if all(v is None for v in [status, keep, bouts, verified]):
+            return jsonify({'error': 'At least one field must be provided'}), 400
+
+        log(f"Updating metadata for session {session_id}: status={status}, keep={keep}, verified={verified}")
+
+        rows_affected = sessionService.update_session_metadata(
+            status=status,
+            keep=keep,
+            bouts=bouts,
+            verified=verified,
+            session_id=session_id
+        )
+        
+        log(f"Successfully updated session {session_id}, {rows_affected} rows affected")
+        return jsonify({'message': 'Metadata updated', 'rows_affected': rows_affected}), 200
+    except ValueError as e:
+        error_msg = str(e)
+        if 'not found' in error_msg.lower():
+            return jsonify({'error': error_msg}), 404
+        else:
+            return jsonify({'error': error_msg}), 400
+    except Exception as e:
+        log(f"Server error updating session {session_id}: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
 @app.route('/api/session/<int:session_id>/split', methods=['POST'])
 def split_session(session_id):
     try:
         data = request.get_json()
-        split_points = data.get('split_points')  # Array of ns_since_reboot timestamps
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        split_points = data.get('split_points')
         if not split_points or not isinstance(split_points, list) or len(split_points) == 0:
             return jsonify({'error': 'At least one split point required'}), 400
-
-        # First get session info including project path
-        conn = get_db_connection()
-        if conn is None:
-            return jsonify({'error': 'Database connection failed'}), 500
         
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT s.session_id, s.session_name, s.status, s.keep, s.project_id, s.bouts, 
-                   p.path AS project_path
-            FROM sessions s
-            JOIN projects p ON s.project_id = p.project_id
-            WHERE s.session_id = %s
-        """, (session_id,))
+        session_info = sessionService.get_session_metadata(session_id)
         
-        session_info = safe_fetchone_dict(cursor)
         if not session_info:
-            conn.close()
             return jsonify({'error': 'Session not found'}), 404
-        
-        session_name = get_row_str(session_info, 'session_name')
-        project_dir_name = get_row_str(session_info, 'project_path')  # This is just the directory name
-        central_data_dir = os.path.expanduser(DATA_DIR)
-        project_path = os.path.join(central_data_dir, project_dir_name)
         
         # Parse the bouts from the session info
         try:
@@ -389,8 +331,12 @@ def split_session(session_id):
         except json.JSONDecodeError:
             parent_bouts = []
         
-        # Read original CSV from the project directory
-        csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
+        project_dir_name = session_info['project_path']
+        central_data_dir = os.path.expanduser(DATA_DIR)
+        project_path = os.path.join(central_data_dir, project_dir_name)
+        session_name = session_info['session_name']
+
+        csv_path = get_csv_path_from_session_info(session_info)
         if not os.path.exists(csv_path):
             return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
         
@@ -479,8 +425,7 @@ def split_session(session_id):
         # Create new session names and directories
         new_sessions = []
         for i, segment in enumerate(segments):
-            # Generate unique name instead of using suffix
-            new_name = generate_unique_session_name(session_name, project_path, conn, get_row_int(session_info, 'project_id'))
+            new_name = sessionService.generate_unique_session_name(session_name, project_path, get_row_int(session_info, 'project_id'))
             new_dir = os.path.join(project_path, new_name)
             
             os.makedirs(new_dir)
@@ -498,41 +443,10 @@ def split_session(session_id):
         else:
             print(f"Log file not found at {log_path}. Skipping copy.")
             
-        # Insert new sessions into database
-        with conn.cursor() as cursor:
-            # Store the original session ID before deleting it
-            parent_id = session_id
-            for session_data in new_sessions:
-                # Keep the same project_id
-                cursor.execute("""
-                    INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (
-                    get_row_int(session_info, 'project_id'), 
-                    session_data['name'], 
-                    'Initial', 
-                    get_row_value(session_info, 'keep'), 
-                    json.dumps(session_data['bouts'])
-                ))
-                # Get the new session ID
-                child_id = cursor.lastrowid
-
-                # Record lineage
-                cursor.execute("""
-                    INSERT INTO session_lineage (child_session_id, parent_session_id)
-                    VALUES (%s, %s)
-                """, (child_id, parent_id))
-                
-            # Delete original session
-            cursor.execute("""
-                UPDATE sessions
-                SET status = 'Split', 
-                    keep = 0,
-                    is_visible = 0  # Make sure to add this column to your sessions table
-                WHERE session_id = %s
-            """, (session_id,))        
-        conn.commit()
-        conn.close()
+        sessionService.insert_new_sessions_after_split(
+            session_info=session_info,
+            new_sessions=new_sessions
+        )
 
         # Delete original session directory
         shutil.rmtree(os.path.join(project_path, session_name))
@@ -544,30 +458,7 @@ def split_session(session_id):
     except Exception as e:
         print(f"Error splitting session: {e}")
         return jsonify({'error': str(e)}), 500
-def generate_unique_session_name(original_name, project_path, conn, project_id):
-    """Generate a unique session name by adding numeric suffixes"""
-    base_counter = 1
-    while True:
-        candidate_name = f"{original_name}.{base_counter}"
-        
-        # Check filesystem for collision
-        if os.path.exists(os.path.join(project_path, candidate_name)):
-            base_counter += 1
-            continue
-            
-        # Check database for collision
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT COUNT(*) FROM sessions 
-            WHERE session_name = %s AND project_id = %s
-        """, (candidate_name, project_id))
-        count = cursor.fetchone()[0]
-        cursor.close()
-        
-        if count == 0:
-            return candidate_name
-        
-        base_counter += 1
+
 
 @app.route('/')
 def serve_index():
