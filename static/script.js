@@ -1278,9 +1278,9 @@ window.updateSidebarHighlighting = updateSidebarHighlighting;
 async function exportLabelsJSON() {
     try {
         const exportBtn = document.getElementById('export-json-btn');
-        const originalText = exportBtn.innerHTML;
-        exportBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Exporting...';
-        exportBtn.disabled = true;
+        // const originalText = exportBtn.innerHTML;
+        // exportBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Exporting...';
+        // exportBtn.disabled = true;
         
         const response = await fetch('/api/export/labels');
         if (!response.ok) {
