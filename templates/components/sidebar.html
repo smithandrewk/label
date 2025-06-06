@@ -1,0 +1,55 @@
+<div class="sidebar">
+    <!-- Navigation Icons -->
+    <div class="nav-section">
+        <div class="nav-icons">
+            <span id="sessions-nav-btn" 
+                  class="nav-icon {{ 'active' if active_view == 'sessions' else '' }}" 
+                  title="Sessions View">
+                <i class="fa-solid fa-chart-gantt"></i>
+            </span>
+            <span id="participants-nav-btn" 
+                  class="nav-icon {{ 'active' if active_view == 'participants' else '' }}" 
+                  title="Participants View">
+                <i class="fa-solid fa-users"></i>
+            </span>
+        </div>
+    </div>
+    
+    <!-- Project Controls -->
+    <div class="project-controls">
+        <span id="upload-btn-overlay" class="control-btn">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i>
+        </span>
+        
+        <a href="#" class="dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fa-solid fa-list-ul"></i>
+        </a> 
+        <ul class="dropdown-menu text-small shadow" id="project-dropdown-menu">
+            <!-- Populated by JavaScript -->
+        </ul>
+    </div>
+    
+    <!-- Current Project Name -->
+    <div id="current-project-name" class="project-name">
+        <span>
+            <!-- Filled with Javascript -->
+        </span>
+    </div>
+    
+    <!-- Sessions Content -->
+    <div id="sessions-sidebar-content" 
+         style="display: {{ 'block' if active_view == 'sessions' else 'none' }};">
+        <ul class="nav flex-column" id="session-list">
+            <!-- Populated by JavaScript -->
+        </ul>
+    </div>
+    
+    <!-- Participants Content -->
+    <div id="participants-sidebar-content" 
+         style="display: {{ 'block' if active_view == 'participants' else 'none' }};">
+        <div class="text-muted small mb-2 px-2">Participants</div>
+        <ul class="nav flex-column" id="participants-sidebar-list">
+            <!-- Populated by JavaScript -->
+        </ul>
+    </div>
+</div>

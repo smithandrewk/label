@@ -1,0 +1,96 @@
+{% extends "components/base.html" %}
+
+{% block title %}Dashboard - Accelerometer Data Visualization{% endblock %}
+
+{% block content %}
+    <!-- Table View -->
+    <div id="table-view">
+        <!-- Export Controls -->
+        <div class="mb-3 d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <h3 class="me-3">Sessions</h3>
+            </div>
+            <div class="btn-group" role="group">
+                <span id="download-btn-overlay" class="control-btn">
+                    <i class="fa-solid fa-download"></i>
+                </span>
+                <button type="button" class="btn btn-outline-success" id="export-csv-btn" onclick="exportLabelsCSV()">
+                    <i class="fa-solid fa-file-csv me-2"></i>Export CSV
+                </button>
+            </div>
+        </div>
+        
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Session</th>
+                    <th>File</th>
+                    <th>Status</th>
+                    <th>Verified</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="sessions-table-body">
+                <!-- Populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Visualization View -->
+    <div id="visualization-view">
+        <div class="visualization-container">
+            <span id="back-btn-overlay" class="control-btn">
+                <i id="back-btn-icon" class="fa-solid fa-arrow-left"></i>
+            </span>
+            
+            <h2>Accelerometer Data Visualization</h2>
+            <div id="action-buttons" class="mb-3">
+                <!-- Dynamic buttons based on status -->
+            </div>
+        </div>
+        <!-- Plot Container -->
+        <div class="plot-container">
+            <div id="timeSeriesPlot"></div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block modals %}
+    <!-- Create Project Modal -->
+    <div class="modal fade" id="createProjectModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create New Project</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-project-form">
+                        <div class="mb-3">
+                            <label for="project-name" class="form-label">Project Name</label>
+                            <input type="text" class="form-control" id="project-name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="project-participant" class="form-label">Participant Code</label>
+                            <input type="text" class="form-control" id="project-participant" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="project-path" class="form-label">Project Folder</label>
+                            <input type="file" class="form-control" id="project-path" webkitdirectory directory multiple required>
+                            <div class="form-text">Select the folder containing your session directories</div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create and Upload</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <!-- Plotly for visualizations -->
+    <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+    
+    <!-- Page-specific JS -->
+    <script type="module" src="/static/script.js"></script>
+{% endblock %}

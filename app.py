@@ -1,5 +1,5 @@
 import logging
-from flask import Flask, jsonify, send_from_directory, request, Response
+from flask import Flask, jsonify, send_from_directory, request, Response, render_template
 from werkzeug.utils import secure_filename
 import os
 import pandas as pd
@@ -461,8 +461,8 @@ def split_session(session_id):
 
 
 @app.route('/')
-def serve_index():
-    return app.send_static_file('index.html')
+def index():
+    return render_template('index.html', active_view='sessions')
 
 # Detect time gaps larger than 30 minutes in accelerometer data and return split points
 def validate_session_data(csv_path, min_rows=10):
@@ -1593,9 +1593,11 @@ def delete_participant(participant_id):
 # Serve participants page
 @app.route('/participants')
 def serve_participants():
-    # Ensure static_folder is not None
-    static_folder = app.static_folder or 'static'
-    return send_from_directory(static_folder, 'participants.html')
+    return render_template('participants.html', active_view='participants')
+
+@app.route('/settings')
+def settings():
+    return render_template('settings.html', active_view='settings')
 
 if __name__ == '__main__':
     app.run(debug=True)
