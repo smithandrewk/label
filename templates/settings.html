@@ -1,0 +1,105 @@
+{% extends "components/base.html" %}
+
+{% block title %}Settings - Accelerometer Data Visualization{% endblock %}
+
+{% block content %}
+    <div class="container-fluid">
+        <h2 class="mb-4">Settings</h2>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fa-solid fa-database me-2"></i>Database Configuration
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="database-settings-form">
+                            <div class="mb-3">
+                                <label for="db-host" class="form-label">Host</label>
+                                <input type="text" class="form-control" id="db-host" value="localhost">
+                            </div>
+                            <div class="mb-3">
+                                <label for="db-port" class="form-label">Port</label>
+                                <input type="number" class="form-control" id="db-port" value="3306">
+                            </div>
+                            <div class="mb-3">
+                                <label for="db-name" class="form-label">Database Name</label>
+                                <input type="text" class="form-control" id="db-name" value="smoking_data">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-save me-2"></i>Save Database Settings
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fa-solid fa-chart-line me-2"></i>Data Processing
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="processing-settings-form">
+                            <div class="mb-3">
+                                <label for="sampling-rate" class="form-label">Sampling Rate (Hz)</label>
+                                <input type="number" class="form-control" id="sampling-rate" value="50">
+                            </div>
+                            <div class="mb-3">
+                                <label for="window-size" class="form-label">Window Size (seconds)</label>
+                                <input type="number" class="form-control" id="window-size" value="5">
+                            </div>
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="auto-labeling" checked>
+                                    <label class="form-check-label" for="auto-labeling">
+                                        Enable Auto-labeling
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-save me-2"></i>Save Processing Settings
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fa-solid fa-tools me-2"></i>System Tools
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex gap-3">
+                            <button type="button" class="btn btn-outline-warning" id="clear-cache-btn">
+                                <i class="fa-solid fa-trash me-2"></i>Clear Cache
+                            </button>
+                            <button type="button" class="btn btn-outline-info" id="export-settings-btn">
+                                <i class="fa-solid fa-download me-2"></i>Export Settings
+                            </button>
+                            <button type="button" class="btn btn-outline-success" id="import-settings-btn">
+                                <i class="fa-solid fa-upload me-2"></i>Import Settings
+                            </button>
+                            <button type="button" class="btn btn-outline-danger" id="reset-settings-btn">
+                                <i class="fa-solid fa-undo me-2"></i>Reset to Defaults
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script src="/static/settings.js"></script>
+{% endblock %}
