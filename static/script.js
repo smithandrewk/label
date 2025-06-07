@@ -658,25 +658,7 @@ async function visualizeSession(sessionId) {
         
         // Click handling to toggle verified status
         verified_btn_overlay_viz.addEventListener('click', async () => {
-            // Toggle verified status
-            session.verified = session.verified ? 0 : 1;
-            
-            // Update the visual state immediately
-            verified_btn_viz.style.color = session.verified ? '#28a745' : '#dee2e6';
-            
-            // Save to backend
-            try {
-                await updateSessionMetadata(session);
-                console.log(`Session ${sessionId} verified status updated to: ${session.verified}`);
-                
-                // Also update the sessions list if we're in table view or sidebar
-                updateSessionsList();
-            } catch (error) {
-                console.error('Error updating verified status:', error);
-                // Revert the visual change on error
-                session.verified = session.verified ? 0 : 1;
-                verified_btn_viz.style.color = session.verified ? '#28a745' : '#dee2e6';
-            }
+            await toggleVerifiedStatus();
         });
     }
 
@@ -1050,6 +1032,50 @@ function toggleSplitMode() {
     const split_btn_overlay = document.getElementById('split-btn-overlay');
     split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(0, 0, 0, 0)';
 }
+async function toggleVerifiedStatus() {
+    // Get current session
+    const session = getCurrentSession();
+    if (!session) {
+        console.error('No current session to toggle verified status');
+        return;
+    }
+    
+    // Get the verified button (try visualization view first, then table view)
+    let verified_btn_viz = document.getElementById('verified-btn-viz');
+    if (!verified_btn_viz) {
+        verified_btn_viz = document.getElementById(`verified-btn-${session.session_id}`);
+    }
+    
+    if (!verified_btn_viz) {
+        console.error('Verified button not found');
+        return;
+    }
+    
+    // Toggle verified status
+    session.verified = session.verified ? 0 : 1;
+    
+    // Update the visual state immediately
+    verified_btn_viz.style.color = session.verified ? '#28a745' : '#dee2e6';
+    
+    // Save to backend
+    try {
+        await updateSessionMetadata(session);
+        console.log(`Session ${session.session_id} verified status updated to: ${session.verified}`);
+        
+        // Also update the sessions list if we're in table view or sidebar
+        updateSessionsList();
+
+    } catch (error) {
+        console.error('Error updating verified status:', error);
+        // Revert the visual change on error
+        session.verified = session.verified ? 0 : 1;
+        verified_btn_viz.style.color = session.verified ? '#28a745' : '#dee2e6';
+    }
+}
+
+function getCurrentSession() {
+    return sessions.find(s => s.session_id == currentSessionId);
+}
 
 async function decideSession(sessionId, keep) {
     const session = sessions.find(s => s.session_id == sessionId);
@@ -1266,6 +1292,7 @@ window.visualizeSession = visualizeSession;
 window.showTableView = showTableView;
 window.decideSession = decideSession;
 window.toggleSplitMode = toggleSplitMode;
+window.toggleVerifiedStatus = toggleVerifiedStatus;
 window.splitSession = splitSession;
 window.createNewBout = createNewBout;
 window.showCreateProjectForm = showCreateProjectForm;

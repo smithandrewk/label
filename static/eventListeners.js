@@ -25,6 +25,9 @@ export function addEventListeners() {
         } else if (event.key.toLowerCase() === 's') {
             event.preventDefault(); // Prevent browser save dialog
             toggleSplitMode();
+        } else if (event.key.toLowerCase() === 'v') {
+            event.preventDefault(); // Prevent browser save dialog
+            toggleVerifiedStatus();
         } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd') {
             event.preventDefault(); // Prevent browser save dialog
             showTableView();
