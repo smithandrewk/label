@@ -13,7 +13,7 @@ import time
 import uuid
 from dotenv import load_dotenv
 from services import project_service
-from utils.utils import timeit, detect_time_gaps, validate_session_data
+from utils.utils import timeit, validate_session_data
 
 load_dotenv()
 
@@ -596,7 +596,34 @@ def generate_unique_session_name(original_name, project_path, conn, project_id):
         
         base_counter += 1
 
-def auto_split_session_on_upload(session_name, project_path, project_id, bouts_json, conn):
+def resample(df,target_hz=50):
+    df = df.copy()
+    df['timestamp'] = pd.to_datetime(df['ns_since_reboot'], unit='ns')
+    df = df.set_index('timestamp')
+    freq = f'{1000//target_hz}ms'  # 20ms for 50Hz
+    df_resampled = df.resample(freq).mean().ffill()
+    df_resampled = df_resampled.reset_index()
+    df_resampled['ns_since_reboot'] = df_resampled['timestamp'].astype('int64')
+    df = df_resampled.drop('timestamp', axis=1)
+    return df
+
+def _insert_single_session(session_name, project_id, bouts_json, conn):
+    """
+    Insert a single session into the database.
+    """
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO sessions (project_id, session_name, status, keep, bouts)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (project_id, session_name, 'Initial', None, bouts_json))
+        cursor.close()
+        return [session_name]
+    except Exception as e:
+        print(f"Error inserting session {session_name}: {e}")
+        return []
+    
+def preprocess_and_split_session_on_upload(session_name, project_path, project_id, bouts_json, conn):
     """
     Automatically split a session based on time gaps during upload.
     
@@ -612,34 +639,28 @@ def auto_split_session_on_upload(session_name, project_path, project_id, bouts_j
     """
     try:
         csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
-        
-        split_points = detect_time_gaps(csv_path)
-        
-        if not split_points:
-            # No splits needed, just insert the original session
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (project_id, session_name, 'Initial', None, bouts_json))
-            return [session_name]
-        
-        print(f"Auto-splitting session {session_name} at {len(split_points)} time gaps")
-        
-        # Read the CSV data
-        df = pd.read_csv(csv_path)
-        expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
+        df = pd.read_csv(csv_path).iloc[:-1]
+        df['ns_since_reboot'] = df['ns_since_reboot'].astype(float)
+        df['x'] = df['x'].astype(float)
+        df['y'] = df['y'].astype(float)
+        df['z'] = df['z'].astype(float)
         df = df.sort_values('ns_since_reboot').reset_index(drop=True)
-        
-        # Parse bouts data
-        try:
-            parent_bouts = json.loads(bouts_json or '[]')
-            if isinstance(parent_bouts, str):
-                parent_bouts = json.loads(parent_bouts)
-        except json.JSONDecodeError:
-            parent_bouts = []
-        
-        # Find split indices
+
+        gap_threshold_minutes = 30
+        gap_threshold_ns = gap_threshold_minutes * 60 * 1_000_000_000
+        df = df.sort_values('ns_since_reboot').reset_index(drop=True)
+        time_diffs = df['ns_since_reboot'].diff()
+        gap_indices = time_diffs[time_diffs > gap_threshold_ns].index
+
+        if len(gap_indices) == 0:
+            df = resample(df)
+            df.to_csv(csv_path, index=False)
+            return _insert_single_session(session_name, project_id, bouts_json, conn)
+
+        split_points = []
+        for idx in gap_indices:
+            if idx > 0 and idx < len(df) - 1:
+                split_points.append(float(df.loc[idx, 'ns_since_reboot']))
         split_points = sorted(set(float(p) for p in split_points))
         split_indices = []
         for point in split_points:
@@ -648,37 +669,22 @@ def auto_split_session_on_upload(session_name, project_path, project_id, bouts_j
             if split_index > 0 and split_index < len(df) - 1:
                 split_indices.append(split_index)
         split_indices = sorted(set(split_indices))
+        split_indices = [0] + split_indices + [len(df)]
         
-        if not split_indices:
-            # No valid split points, insert original session
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (project_id, session_name, 'Initial', None, bouts_json))
-            return [session_name]
-        
-        # Split data into segments
         segments = []
-        start_idx = 0
-        for idx in split_indices:
-            segment = df.iloc[start_idx:idx + 1][expected_columns]
-            if not segment.empty:
-                segments.append(segment)
-            start_idx = idx + 1
-        # Add final segment
-        final_segment = df.iloc[start_idx:][expected_columns]
-        if not final_segment.empty:
-            segments.append(final_segment)
-        
-        if len(segments) < 2:
-            # Split didn't create multiple segments, insert original
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (project_id, session_name, 'Initial', None, bouts_json))
-            return [session_name]
+        for i in range(len(split_indices) - 1):
+            start_index = split_indices[i]
+            end_index = split_indices[i + 1]
+            if start_index < end_index:
+                segment_df = df.iloc[start_index:end_index]
+                if not segment_df.empty:
+                    print(f"Made segment {i + 1} with {len(segment_df)} rows.")
+                    segment_df = resample(segment_df)
+                    segments.append(segment_df)
+                else:
+                    print(f"Segment {i + 1} is empty, skipping.")
+            else:
+                print(f"Invalid segment indices: {start_index}, {end_index}.")
         
         # Define time ranges for each segment
         segment_ranges = []
@@ -687,6 +693,13 @@ def auto_split_session_on_upload(session_name, project_path, project_id, bouts_j
             end_time = segment['ns_since_reboot'].max()
             segment_ranges.append((start_time, end_time))
         
+        # Parse bouts data
+        try:
+            parent_bouts = json.loads(bouts_json or '[]')
+            if isinstance(parent_bouts, str):
+                parent_bouts = json.loads(parent_bouts)
+        except json.JSONDecodeError:
+            parent_bouts = []
         # Assign bouts to segments based on time ranges
         segment_bouts = [[] for _ in segments]
         for bout in parent_bouts:
@@ -1098,7 +1111,7 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                 session_name = session['name']
 
                 # Auto-split session on time gaps larger than 30 minutes
-                created_sessions = auto_split_session_on_upload(
+                created_sessions = preprocess_and_split_session_on_upload(
                     session_name=session_name,
                     project_path=project_path,
                     project_id=project_id,
