@@ -309,6 +309,17 @@ def score_session():
         print(f"Error starting session scoring: {e}")
         return jsonify({'error': f'Failed to start scoring: {str(e)}'}), 500
     
+@app.route('/api/scoring_status/<scoring_id>')
+def get_scoring_status(scoring_id):
+    """Get the status of a scoring operation"""
+    try:
+        # You'll need to modify ModelService to track scoring status
+        status = modelService.get_scoring_status(scoring_id)
+        return jsonify(status)
+    except Exception as e:
+        print(f"Error getting scoring status: {e}")
+        return jsonify({'error': str(e)}), 500
+    
 @app.route('/api/session/<int:session_id>')
 def get_session_data(session_id):
     try:
