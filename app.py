@@ -653,6 +653,8 @@ def preprocess_and_split_session_on_upload(session_name, project_path, project_i
         gap_indices = time_diffs[time_diffs > gap_threshold_ns].index
 
         if len(gap_indices) == 0:
+            df = resample(df)
+            df.to_csv(csv_path, index=False)
             return _insert_single_session(session_name, project_id, bouts_json, conn)
 
         split_points = []
