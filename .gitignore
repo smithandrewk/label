@@ -5,6 +5,7 @@ data
 *.csv
 *.gz
 *.zip
+*.ipynb
 
 .DS_Store
 __pycache__
