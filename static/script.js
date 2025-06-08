@@ -214,6 +214,17 @@ function updateSessionsList() {
             <td>${session.project_name || ''}</td>
             <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === 0 ? ' (Discarded)' : ''}</td>
             <td>${verifiedCheckbox}</td>
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-sm btn-primary" onclick="visualizeSession('${session.session_id}')">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
+                    <button class="btn btn-sm btn-success" onclick="scoreSession('${session.session_id}')"
+                            id="score-btn-${session.id}" title="Score with Neural Network">
+                        <i class="fa-solid fa-brain"></i>
+                    </button>
+                </div>
+            </td>
             <td>${trashButton}</td>
         `;
         tbody.appendChild(row);
@@ -289,30 +300,139 @@ function updateSessionsList() {
             
             // Click handling to toggle verified status
             verified_btn_overlay.addEventListener('click', async () => {
-                const currentSession = sessions.find(s => s.session_id == sessionId);
-                if (currentSession) {
-                    // Toggle verified status
-                    currentSession.verified = currentSession.verified ? 0 : 1;
-                    
-                    // Update the visual state immediately
-                    verified_btn.style.color = currentSession.verified ? '#28a745' : '#dee2e6';
-                    
-                    // Save to backend
-                    try {
-                        await updateSessionMetadata(currentSession);
-                        console.log(`Session ${sessionId} verified status updated to: ${currentSession.verified}`);
-                    } catch (error) {
-                        console.error('Error updating verified status:', error);
-                        // Revert the visual change on error
-                        currentSession.verified = currentSession.verified ? 0 : 1;
-                        verified_btn.style.color = currentSession.verified ? '#28a745' : '#dee2e6';
-                    }
-                }
+                await toggleVerifiedStatus();
             });
         }
     });
 }
+async function scoreSession(sessionId, projectName, sessionName) {
+    try {
+        console.log(`Scoring session: ${sessionId} (${sessionName} from project ${projectName})`);
+        
+        // Update button to show loading state
+        const scoreBtn = document.getElementById(`score-btn-overlay`);
+        if (scoreBtn) {
+            scoreBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        }
+        
+        const response = await fetch('/score_session', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                session_id: sessionId,
+                project_name: projectName,
+                session_name: sessionName
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(`Scoring started for ${sessionName}`, 'success');
+            
+            // Start polling for completion
+            pollScoringStatus(result.scoring_id, sessionId, sessionName);
+        } else {
+            showNotification(`Scoring failed: ${result.error}`, 'error');
+            resetScoreButton(sessionId);
+        }
+    } catch (error) {
+        console.error('Error scoring session:', error);
+        showNotification('Failed to start scoring', 'error');
+        resetScoreButton(sessionId);
+    }
+}
 
+async function pollScoringStatus(scoringId, sessionId, sessionName) {
+    const maxPolls = 120; // 2 minutes max
+    let pollCount = 0;
+    
+    const poll = setInterval(async () => {
+        try {
+            const response = await fetch(`/api/scoring_status/${scoringId}`);
+            const status = await response.json();
+            
+            pollCount++;
+            
+            if (status.status === 'completed') {
+                clearInterval(poll);
+                showNotification(`Scoring complete for ${sessionName}! Found ${status.bouts_count} bouts.`, 'success');
+                resetScoreButton(sessionId);
+                
+                // Force refresh the session data from the server
+                const sessionResponse = await fetch(`/api/session/${sessionId}`);
+                if (sessionResponse.ok) {
+                    const sessionData = await sessionResponse.json();
+                    
+                    // Update the session in our local sessions array
+                    const sessionIndex = sessions.findIndex(s => s.session_id == sessionId);
+                    if (sessionIndex !== -1) {
+                        // Parse bouts if they're a string
+                        let bouts = sessionData.bouts;
+                        if (typeof bouts === 'string') {
+                            try {
+                                bouts = JSON.parse(bouts);
+                            } catch (e) {
+                                console.error('Error parsing bouts:', e);
+                                bouts = [];
+                            }
+                        }
+                        sessions[sessionIndex].bouts = bouts || [];
+                        sessions[sessionIndex].data = sessionData.data;
+                    }
+                }
+                
+                // If this session is currently being visualized, refresh it
+                if (currentSessionId == sessionId) {
+                    console.log('Refreshing currently visualized session with new bouts');
+                    visualizeSession(sessionId);
+                }
+                
+            } else if (status.status === 'error') {
+                clearInterval(poll);
+                showNotification(`Scoring failed: ${status.error}`, 'error');
+                resetScoreButton(sessionId);
+                
+            } else if (pollCount >= maxPolls) {
+                clearInterval(poll);
+                showNotification('Scoring is taking longer than expected', 'warning');
+                resetScoreButton(sessionId);
+            }
+            
+        } catch (error) {
+            console.error('Error polling scoring status:', error);
+            clearInterval(poll);
+            resetScoreButton(sessionId);
+        }
+    }, 1000); // Poll every second
+}
+function resetScoreButton(sessionId) {
+    const scoreBtn = document.getElementById(`score-btn-overlay`);
+    if (scoreBtn) {
+        scoreBtn.innerHTML = '<i class="fa-solid fa-rocket"></i>';
+    }
+}
+
+function showNotification(message, type = 'info') {
+    // Simple notification - you can replace with a proper notification library
+    console.log(`${type.toUpperCase()}: ${message}`);
+    
+    // Or create a simple toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'error' ? 'danger' : type} position-fixed`;
+    toast.style.top = '20px';
+    toast.style.right = '300px';
+    toast.style.zIndex = '9999';
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        document.body.removeChild(toast);
+    }, 5000);
+}
 // Fetch session for each project
 async function fetchSession(projectId) {
     try {
@@ -553,6 +673,11 @@ async function visualizeSession(sessionId) {
     const actionButtons = document.getElementById("action-buttons");
     actionButtons.innerHTML = "";
 
+    actionButtons.innerHTML += `
+        <span id="score-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
+            <i class="fa-solid fa-rocket"></i>
+        </span>
+    `;
     if (isSplitting) {
         actionButtons.innerHTML += `
             <span id="split-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224);">
@@ -640,6 +765,17 @@ async function visualizeSession(sessionId) {
     });
     split_btn_overlay.addEventListener('click', function() {
         toggleSplitMode();
+    });
+
+    const score_btn_overlay = document.getElementById('score-btn-overlay');
+    score_btn_overlay.addEventListener('mouseenter', () => {
+        score_btn_overlay.style.background = 'rgba(0, 0, 0, 0.1)';
+    });
+    score_btn_overlay.addEventListener('mouseleave', () => {
+        score_btn_overlay.style.background ='rgba(224, 224, 224, 0)';
+    });
+    score_btn_overlay.addEventListener('click', function() {
+        scoreSession(sessionId);
     });
 
     // Add event listeners for verified button in visualization view
@@ -1289,6 +1425,7 @@ let maxTimestamp = null;
 
 // Make functions available globally for inline event handlers
 window.visualizeSession = visualizeSession;
+window.scoreSession = scoreSession;
 window.showTableView = showTableView;
 window.decideSession = decideSession;
 window.toggleSplitMode = toggleSplitMode;

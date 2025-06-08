@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 from services import project_service
 from utils.utils import timeit, validate_session_data
 
+from services import project_service, model_service
+
 load_dotenv()
 
 app = Flask(__name__, static_folder='static')
@@ -42,6 +44,7 @@ def get_db_connection():
         return None
 
 projectService = project_service.ProjectService(get_db_connection)
+modelService = model_service.ModelService(get_db_connection)
 
 @app.route('/')
 def serve_index():
@@ -264,6 +267,59 @@ def list_sessions():
         print(f"Error listing sessions: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/score_session', methods=['POST'])
+def score_session():
+    print("Scoring session")
+    try:
+        data = request.get_json()
+        print(f"Received data: {data}")
+        session_id = data.get('session_id')
+
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("""
+            SELECT s.session_id, s.session_name, s.status, s.keep, s.verified, s.bouts,
+                p.project_id, p.project_name, p.path AS project_path
+            FROM sessions s
+            JOIN projects p ON s.project_id = p.project_id
+            WHERE s.session_id = %s
+        """, (session_id,))
+        
+        session_info = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not session_info:
+            return jsonify({'error': 'Session not found'}), 404
+        
+        project_path = session_info['project_path']
+        session_name = session_info['session_name']
+
+        scoring_id = modelService.score_session_async(project_path, session_name, session_id)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Scoring session {session_name}',
+            'scoring_id': scoring_id,
+        }), 200
+    except Exception as e:
+        print(f"Error starting session scoring: {e}")
+        return jsonify({'error': f'Failed to start scoring: {str(e)}'}), 500
+    
+@app.route('/api/scoring_status/<scoring_id>')
+def get_scoring_status(scoring_id):
+    """Get the status of a scoring operation"""
+    try:
+        # You'll need to modify ModelService to track scoring status
+        status = modelService.get_scoring_status(scoring_id)
+        return jsonify(status)
+    except Exception as e:
+        print(f"Error getting scoring status: {e}")
+        return jsonify({'error': str(e)}), 500
+    
 @app.route('/api/session/<int:session_id>')
 def get_session_data(session_id):
     try:
