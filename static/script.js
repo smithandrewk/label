@@ -214,6 +214,17 @@ function updateSessionsList() {
             <td>${session.project_name || ''}</td>
             <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === 0 ? ' (Discarded)' : ''}</td>
             <td>${verifiedCheckbox}</td>
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-sm btn-primary" onclick="visualizeSession('${session.session_id}')">
+                        <i class="fa-solid fa-eye"></i>
+                    </button>
+                    <button class="btn btn-sm btn-success" onclick="scoreSession('${session.session_id}')"
+                            id="score-btn-${session.id}" title="Score with Neural Network">
+                        <i class="fa-solid fa-brain"></i>
+                    </button>
+                </div>
+            </td>
             <td>${trashButton}</td>
         `;
         tbody.appendChild(row);
