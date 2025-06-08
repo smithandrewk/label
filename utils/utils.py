@@ -17,52 +17,6 @@ def timeit(func):
         
         return result
     return wrapper
-
-def detect_time_gaps(csv_path, gap_threshold_minutes=30):
-    """
-    Detect time gaps larger than the threshold in accelerometer data.
-    Returns list of timestamps where splits should occur.
-    
-    Args:
-        csv_path: Path to the accelerometer_data.csv file
-        gap_threshold_minutes: Minimum gap size in minutes to trigger a split
-    
-    Returns:
-        List of ns_since_reboot timestamps where splits should occur
-    """
-    try:
-        df = pd.read_csv(csv_path)
-        expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
-        if not all(col in df.columns for col in expected_columns):
-            print(f"Invalid CSV format in {csv_path}. Expected columns: {expected_columns}, Found: {list(df.columns)}")
-            return []
-        
-        if len(df) < 2:
-            return []
-        
-        # Convert gap threshold from minutes to nanoseconds
-        gap_threshold_ns = gap_threshold_minutes * 60 * 1_000_000_000  # 30 minutes in nanoseconds
-        
-        # Sort by timestamp to ensure proper order
-        df = df.sort_values('ns_since_reboot').reset_index(drop=True)
-        
-        # Calculate time differences between consecutive readings
-        time_diffs = df['ns_since_reboot'].diff()
-        
-        # Find gaps larger than threshold
-        gap_indices = time_diffs[time_diffs > gap_threshold_ns].index
-        
-        # Get the timestamps where gaps end (start of new segment)
-        split_points = []
-        for idx in gap_indices:
-            if idx > 0 and idx < len(df) - 1:  # Don't split at very beginning or end
-                split_points.append(float(df.loc[idx, 'ns_since_reboot']))
-        
-        return split_points
-        
-    except Exception as e:
-        print(f"Error detecting time gaps in {csv_path}: {e}")
-        return []
     
 @timeit
 def validate_session_data(csv_path, min_rows=10):
