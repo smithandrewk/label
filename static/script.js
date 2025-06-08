@@ -300,30 +300,26 @@ function updateSessionsList() {
             
             // Click handling to toggle verified status
             verified_btn_overlay.addEventListener('click', async () => {
-                const currentSession = sessions.find(s => s.session_id == sessionId);
-                if (currentSession) {
-                    // Toggle verified status
-                    currentSession.verified = currentSession.verified ? 0 : 1;
-                    
-                    // Update the visual state immediately
-                    verified_btn.style.color = currentSession.verified ? '#28a745' : '#dee2e6';
-                    
-                    // Save to backend
-                    try {
-                        await updateSessionMetadata(currentSession);
-                        console.log(`Session ${sessionId} verified status updated to: ${currentSession.verified}`);
-                    } catch (error) {
-                        console.error('Error updating verified status:', error);
-                        // Revert the visual change on error
-                        currentSession.verified = currentSession.verified ? 0 : 1;
-                        verified_btn.style.color = currentSession.verified ? '#28a745' : '#dee2e6';
-                    }
-                }
+                await toggleVerifiedStatus();
             });
         }
     });
 }
-
+async function scoreSession(sessionId) {
+    // Placeholder for scoring session with neural network
+    console.log(`Scoring session: ${sessionId})`);
+    // Implement your scoring logic here
+    const response = await fetch('/score_session', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+            session_id: sessionId,
+        })
+    });
+    console.log(`Scoring response for session ${sessionId}:`, response);
+}
 // Fetch session for each project
 async function fetchSession(projectId) {
     try {
@@ -1300,6 +1296,7 @@ let maxTimestamp = null;
 
 // Make functions available globally for inline event handlers
 window.visualizeSession = visualizeSession;
+window.scoreSession = scoreSession;
 window.showTableView = showTableView;
 window.decideSession = decideSession;
 window.toggleSplitMode = toggleSplitMode;
