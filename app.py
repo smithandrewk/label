@@ -297,7 +297,7 @@ def get_session_data(session_id):
         
         # Continue with your existing code to process the CSV file...
         df = pd.read_csv(csv_path)
-        df = df.iloc[::20]  # Downsampling
+        df = df.iloc[::50]  # Downsampling
         
         # Extract bouts from log file if it exists
         bouts = session_info['bouts']
@@ -1172,6 +1172,9 @@ def process_sessions_async(upload_id, sessions, new_project_path, project_id):
                         upload_progress[upload_id]['message'] = f'Analyzing log file for {session["name"]}...'
                         log = pd.read_csv(log_csv_path, skiprows=5)
                         
+                        if 'message' in log.columns:
+                            log = log.rename(columns={'message': 'Message'})
+                            
                         # Extract start and stop transitions
                         start_transitions = log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True)['ns_since_reboot'].tolist()
                         stop_transitions = log.loc[log['Message'] == 'Updating walking status from true to false'].reset_index(drop=True)['ns_since_reboot'].tolist()
