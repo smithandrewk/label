@@ -14,7 +14,8 @@
 export function addEventListeners() {
     document.addEventListener('keydown', function(event) {
         // Check if visualization view is active
-        const visualizationViewActive = document.getElementById("visualization-view").style.display === "flex";
+        const visualizationView = document.getElementById("visualization-view");
+        const visualizationViewActive = visualizationView && visualizationView.style.display === "flex";
         
         // Only process keyboard shortcuts if in visualization view
         if (visualizationViewActive) {

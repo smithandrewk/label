@@ -43,6 +43,9 @@ async function initializeProjects() {
                 currentProjectId = project.project_id; // Store selected project ID
                 fetchProjectSessions(project.project_id);
                 
+                // Update current project pill
+                updateCurrentProjectPill(project.project_name);
+                
                 // Update active state
                 document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
                     item.classList.remove('active');
@@ -86,6 +89,9 @@ async function initializeProjects() {
                 e.preventDefault();
                 currentProjectId = null; // Clear the project ID
                 
+                // Hide current project pill
+                updateCurrentProjectPill(null);
+                
                 // Update active state
                 document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
                     item.classList.remove('active');
@@ -107,6 +113,10 @@ async function initializeProjects() {
             firstProject.classList.add('active');
             firstProject.setAttribute('aria-current', 'page');
             currentProjectId = projects[0].project_id; // ADD THIS LINE to set current project ID
+            
+            // Update current project pill
+            updateCurrentProjectPill(projects[0].project_name);
+            
             fetchProjectSessions(projects[0].project_id);
         }
     } catch (error) {
@@ -135,9 +145,22 @@ async function fetchProjectSessions(projectId) {
         console.log('Filtered sessions count:', filteredSessions.length, 'out of', sessions.length);
         
         // Update the session table/list
-        updateSessionsList(sessions);
+        updateSessionsList();
     } catch (error) {
         console.error('Error fetching project sessions:', error);
+    }
+}
+
+// Update current project pill in sidebar
+function updateCurrentProjectPill(projectName) {
+    const pill = document.getElementById('current-project-pill');
+    const pillName = document.getElementById('current-project-pill-name');
+    
+    if (projectName && pill && pillName) {
+        pillName.textContent = projectName;
+        pill.style.display = 'block';
+    } else if (pill) {
+        pill.style.display = 'none';
     }
 }
 
@@ -146,11 +169,19 @@ function updateSessionsList() {
     const sessionList = document.getElementById("session-list");
     const tbody = document.getElementById("sessions-table-body");
     
+    // Check if required elements exist
+    if (!sessionList && !tbody) {
+        console.warn('Neither session-list nor sessions-table-body elements found on this page');
+        return;
+    }
+    
     // Check if there's an active upload - don't clear the table body
     if (activeUploadId) {
         console.log('[DEBUG] Active upload in progress, not clearing table body. Upload ID:', activeUploadId);
-        // Clear sidebar only
-        sessionList.innerHTML = "";
+        // Clear sidebar only if it exists
+        if (sessionList) {
+            sessionList.innerHTML = "";
+        }
         return;
     }
     
@@ -158,22 +189,30 @@ function updateSessionsList() {
     const progressRow = document.getElementById('progress-row');
     if (progressRow) {
         console.log('[DEBUG] Found active progress row, not clearing table body');
-        // Clear sidebar only
-        sessionList.innerHTML = "";
+        // Clear sidebar only if it exists
+        if (sessionList) {
+            sessionList.innerHTML = "";
+        }
         return;
     }
     
     // Clear existing content
-    sessionList.innerHTML = "";
-    tbody.innerHTML = "";
+    if (sessionList) {
+        sessionList.innerHTML = "";
+    }
+    if (tbody) {
+        tbody.innerHTML = "";
+    }
     
     if (sessions.length === 0) {
         // Display a message for empty sessions
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="4" class="text-center">No sessions available for this project</td>
-            </tr>
-        `;
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-center">No sessions available for this project</td>
+                </tr>
+            `;
+        }
         return;
     }
     
@@ -181,127 +220,131 @@ function updateSessionsList() {
     sessions.forEach(session => {
         if (session.keep == 0) return; // Skip discarded sessions
         
-        // Sidebar entry
-        const li = document.createElement("li");
-        li.className = "nav-item";
-        const linkClass = session.session_name === currentActiveSession ? "nav-link active-session" : "nav-link";
-        li.innerHTML = `<a class="${linkClass}" href="#" onclick="visualizeSession('${session.session_id}')">${session.session_name}</a>`;
-        sessionList.appendChild(li);
+        // Sidebar entry (only if sessionList exists)
+        if (sessionList) {
+            const li = document.createElement("li");
+            li.className = "nav-item";
+            const linkClass = session.session_name === currentActiveSession ? "nav-link active-session" : "nav-link";
+            li.innerHTML = `<a class="${linkClass}" href="#" onclick="visualizeSession('${session.session_id}')">${session.session_name}</a>`;
+            sessionList.appendChild(li);
+        }
 
-        // Table row
-        const row = document.createElement("tr");
-        const sessionId = session.session_id;
-        let trashButton = `
-            <div style="position: relative; display: inline-block; width: 32px; height: 32px;">
-                <span id="cancel-btn-overlay-${sessionId}" style="position: absolute; right: 100%; display: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; cursor: pointer;">
-                    <i id="cancel-btn-${sessionId}" class="fa-solid fa-xmark" style="font-size: 20px;"></i>
-                </span>
-                <span id="trash-btn-overlay-${sessionId}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer;">
-                    <i id="trash-btn-${sessionId}" class="fa-solid fa-trash"></i>
-                </span>
-            </div>
-        `;
-        
-        // Create verified checkbox
-        const verifiedCheckbox = `
-            <span id="verified-btn-overlay-${sessionId}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer;">
-                <i id="verified-btn-${sessionId}" class="fa-solid fa-check" style="color: ${session.verified ? '#28a745' : '#dee2e6'}; font-size: 18px;"></i>
-            </span>
-        `;
-        
-        row.innerHTML = `
-            <td>${session.session_name}</td>
-            <td>${session.project_name || ''}</td>
-            <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === 0 ? ' (Discarded)' : ''}</td>
-            <td>${verifiedCheckbox}</td>
-            <td>
-                <div class="btn-group" role="group">
-                    <button class="btn btn-sm btn-primary" onclick="visualizeSession('${session.session_id}')">
-                        <i class="fa-solid fa-eye"></i>
-                    </button>
-                    <button class="btn btn-sm btn-success" onclick="scoreSession('${session.session_id}')"
-                            id="score-btn-${session.id}" title="Score with Neural Network">
-                        <i class="fa-solid fa-brain"></i>
-                    </button>
+        // Table row (only if tbody exists)
+        if (tbody) {
+            const row = document.createElement("tr");
+            const sessionId = session.session_id;
+            let trashButton = `
+                <div style="position: relative; display: inline-block; width: 32px; height: 32px;">
+                    <span id="cancel-btn-overlay-${sessionId}" style="position: absolute; right: 100%; display: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; cursor: pointer;">
+                        <i id="cancel-btn-${sessionId}" class="fa-solid fa-xmark" style="font-size: 20px;"></i>
+                    </span>
+                    <span id="trash-btn-overlay-${sessionId}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer;">
+                        <i id="trash-btn-${sessionId}" class="fa-solid fa-trash"></i>
+                    </span>
                 </div>
-            </td>
-            <td>${trashButton}</td>
-        `;
-        tbody.appendChild(row);
+            `;
+            
+            // Create verified checkbox
+            const verifiedCheckbox = `
+                <span id="verified-btn-overlay-${sessionId}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer;">
+                    <i id="verified-btn-${sessionId}" class="fa-solid fa-check" style="color: ${session.verified ? '#28a745' : '#dee2e6'}; font-size: 18px;"></i>
+                </span>
+            `;
+            
+            row.innerHTML = `
+                <td>${session.session_name}</td>
+                <td>${session.project_name || ''}</td>
+                <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === 0 ? ' (Discarded)' : ''}</td>
+                <td>${verifiedCheckbox}</td>
+                <td>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-sm btn-primary" onclick="visualizeSession('${session.session_id}')">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-success" onclick="scoreSession('${session.session_id}')"
+                                id="score-btn-${session.id}" title="Score with Neural Network">
+                            <i class="fa-solid fa-brain"></i>
+                        </button>
+                    </div>
+                </td>
+                <td>${trashButton}</td>
+            `;
+            tbody.appendChild(row);
 
-        // Add event listeners for this row's trash button
-        const trash_btn_overlay = document.getElementById(`trash-btn-overlay-${sessionId}`);
-        const trash_btn = document.getElementById(`trash-btn-${sessionId}`);
-        const cancel_btn_overlay = document.getElementById(`cancel-btn-overlay-${sessionId}`);
+            // Add event listeners for this row's trash button
+            const trash_btn_overlay = document.getElementById(`trash-btn-overlay-${sessionId}`);
+            const trash_btn = document.getElementById(`trash-btn-${sessionId}`);
+            const cancel_btn_overlay = document.getElementById(`cancel-btn-overlay-${sessionId}`);
 
-        if (trash_btn_overlay && trash_btn && cancel_btn_overlay) {
-            // Track armed state for each button
-            trash_btn_overlay.dataset.armed = "false";
-            
-            // Hover effects
-            trash_btn_overlay.addEventListener('mouseenter', () => {
-                trash_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-            });
-            
-            trash_btn_overlay.addEventListener('mouseleave', () => {
-                trash_btn_overlay.style.background = 'rgba(224,224,224,0)';
-            });
-            
-            // Click handling with confirmation
-            trash_btn_overlay.addEventListener('click', () => {
-                const isArmed = trash_btn_overlay.dataset.armed === "true";
-                if (!isArmed) {
-                    // Arm the trash button
-                    trash_btn_overlay.dataset.armed = "true";
-                    trash_btn.style.color = '#dc3545'; // Bootstrap red
-                    cancel_btn_overlay.style.display = 'inline-flex';
-                } else {
-                    console.log('here')
-                    // Perform delete
-                    decideSession(sessionId, false);
-                    // Reset state
+            if (trash_btn_overlay && trash_btn && cancel_btn_overlay) {
+                // Track armed state for each button
+                trash_btn_overlay.dataset.armed = "false";
+                
+                // Hover effects
+                trash_btn_overlay.addEventListener('mouseenter', () => {
+                    trash_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+                });
+                
+                trash_btn_overlay.addEventListener('mouseleave', () => {
+                    trash_btn_overlay.style.background = 'rgba(224,224,224,0)';
+                });
+                
+                // Click handling with confirmation
+                trash_btn_overlay.addEventListener('click', () => {
+                    const isArmed = trash_btn_overlay.dataset.armed === "true";
+                    if (!isArmed) {
+                        // Arm the trash button
+                        trash_btn_overlay.dataset.armed = "true";
+                        trash_btn.style.color = '#dc3545'; // Bootstrap red
+                        cancel_btn_overlay.style.display = 'inline-flex';
+                    } else {
+                        console.log('here')
+                        // Perform delete
+                        decideSession(sessionId, false);
+                        // Reset state
+                        trash_btn_overlay.dataset.armed = "false";
+                        trash_btn.style.color = '';
+                        cancel_btn_overlay.style.display = 'none';
+                    }
+                });
+                
+                // Cancel button handling
+                cancel_btn_overlay.addEventListener('mouseenter', () => {
+                    cancel_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+                });
+                
+                cancel_btn_overlay.addEventListener('mouseleave', () => {
+                    cancel_btn_overlay.style.background = 'rgba(224,224,224,0)';
+                });
+                
+                cancel_btn_overlay.addEventListener('click', (e) => {
+                    // Cancel delete and prevent event from bubbling to parent elements
+                    e.stopPropagation();
                     trash_btn_overlay.dataset.armed = "false";
                     trash_btn.style.color = '';
                     cancel_btn_overlay.style.display = 'none';
-                }
-            });
+                });
+            }
             
-            // Cancel button handling
-            cancel_btn_overlay.addEventListener('mouseenter', () => {
-                cancel_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-            });
+            // Add event listeners for verified checkbox
+            const verified_btn_overlay = document.getElementById(`verified-btn-overlay-${sessionId}`);
+            const verified_btn = document.getElementById(`verified-btn-${sessionId}`);
             
-            cancel_btn_overlay.addEventListener('mouseleave', () => {
-                cancel_btn_overlay.style.background = 'rgba(224,224,224,0)';
-            });
-            
-            cancel_btn_overlay.addEventListener('click', (e) => {
-                // Cancel delete and prevent event from bubbling to parent elements
-                e.stopPropagation();
-                trash_btn_overlay.dataset.armed = "false";
-                trash_btn.style.color = '';
-                cancel_btn_overlay.style.display = 'none';
-            });
-        }
-        
-        // Add event listeners for verified checkbox
-        const verified_btn_overlay = document.getElementById(`verified-btn-overlay-${sessionId}`);
-        const verified_btn = document.getElementById(`verified-btn-${sessionId}`);
-        
-        if (verified_btn_overlay && verified_btn) {
-            // Hover effects
-            verified_btn_overlay.addEventListener('mouseenter', () => {
-                verified_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-            });
-            
-            verified_btn_overlay.addEventListener('mouseleave', () => {
-                verified_btn_overlay.style.background = 'rgba(224,224,224,0)';
-            });
-            
-            // Click handling to toggle verified status
-            verified_btn_overlay.addEventListener('click', async () => {
-                await toggleVerifiedStatus();
-            });
+            if (verified_btn_overlay && verified_btn) {
+                // Hover effects
+                verified_btn_overlay.addEventListener('mouseenter', () => {
+                    verified_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+                });
+                
+                verified_btn_overlay.addEventListener('mouseleave', () => {
+                    verified_btn_overlay.style.background = 'rgba(224,224,224,0)';
+                });
+                
+                // Click handling to toggle verified status
+                verified_btn_overlay.addEventListener('click', async () => {
+                    await toggleVerifiedStatus();
+                });
+            }
         }
     });
 }
@@ -446,7 +489,7 @@ async function fetchSession(projectId) {
         console.log('Fetched sessions:', sessions);
         
         // Add this line to update the UI
-        updateSessionsList(sessions);
+        updateSessionsList();
         
         // Update unified sidebar if function is available
         if (window.updateSessionsSidebarList) {
@@ -484,17 +527,28 @@ function createNewProject(formData) {
         console.log('Sessions found:', data.sessions_found);
         
         // Close the modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('createProjectModal'));
-        modal.hide();
+        const modalElement = document.getElementById('createProjectModal');
+        if (modalElement) {
+            const modal = bootstrap.Modal.getInstance(modalElement);
+            if (modal) {
+                modal.hide();
+            }
+        }
         
         // Reset the form
-        document.getElementById('create-project-form').reset();
+        const form = document.getElementById('create-project-form');
+        if (form) {
+            form.reset();
+        }
         
         // Refresh the project list
         initializeProjects().then(() => {
             // Navigate to the new project
             currentProjectId = data.project_id;
             console.log('Navigating to project:', data.project_id);
+            
+            // Update current project pill with the created project name
+            updateCurrentProjectPill(formData.name);
             
             // Update active state in dropdown
             document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
@@ -528,8 +582,13 @@ function createNewProject(formData) {
 
 // Show create project form
 function showCreateProjectForm() {
-    const modal = new bootstrap.Modal(document.getElementById('createProjectModal'));
-    modal.show();
+    const modalElement = document.getElementById('createProjectModal');
+    if (modalElement) {
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+    } else {
+        console.error('Create Project Modal not found');
+    }
 }
 
 async function updateSessionMetadata(session) {
@@ -667,7 +726,7 @@ async function visualizeSession(sessionId) {
     if (session.status === "Initial") {
         session.status = "Visualized";
         await updateSessionMetadata(session);
-        updateSessionsList(sessions);
+        updateSessionsList();
     }
 
     const actionButtons = document.getElementById("action-buttons");
@@ -1281,7 +1340,7 @@ async function decideSession(sessionId, keep) {
     await updateSessionMetadata(session);
     
     // Update the UI with the new session list
-    updateSessionsList(sessions);
+    updateSessionsList();
     
     // Handle navigation after deletion
     if (!keep && wasCurrentlyVisualized) {
@@ -1478,11 +1537,6 @@ window.updateSidebarHighlighting = updateSidebarHighlighting;
 // Export functions
 async function exportLabelsJSON() {
     try {
-        const exportBtn = document.getElementById('export-json-btn');
-        // const originalText = exportBtn.innerHTML;
-        // exportBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Exporting...';
-        // exportBtn.disabled = true;
-        
         const response = await fetch('/api/export/labels');
         if (!response.ok) {
             throw new Error('Failed to export data');
@@ -1508,16 +1562,13 @@ async function exportLabelsJSON() {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        // Show success message
-        alert(`Successfully exported ${data.total_sessions} sessions with ${data.total_labels} labels to ${filename}`);
+        // Success - file downloaded automatically, no need for alert/toast
+        console.log(`Successfully exported ${data.total_sessions} sessions with ${data.total_labels} labels to ${filename}`);
         
     } catch (error) {
         console.error('Error exporting JSON:', error);
-        alert('Failed to export data: ' + error.message);
-    } finally {
-        const exportBtn = document.getElementById('export-json-btn');
-        exportBtn.innerHTML = '<i class="fa-solid fa-download me-2"></i>Export JSON';
-        exportBtn.disabled = false;
+        // Show error notification only
+        showNotification('Failed to export data: ' + error.message, 'error');
     }
 }
 

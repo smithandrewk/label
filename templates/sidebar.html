@@ -1,0 +1,71 @@
+<div class="d-flex flex-column flex-shrink-0 p-4 bg-body-tertiary sidebar">
+    <!-- Header -->
+    <a href="/" class="d-flex align-items-center mb-4 mb-md-0 me-md-auto link-body-emphasis text-decoration-none">
+        <i class="fa-solid fa-smoking me-3" style="font-size: 28px; color: #0d6efd;"></i>
+        <span class="fs-4 fw-bold">Smoking Detection</span>
+    </a>
+    <hr class="my-3">
+    <!-- Navigation -->
+    <ul class="nav nav-pills flex-column mb-auto">
+        <li class="nav-item mb-1">
+            <a href="/" class="nav-link d-flex align-items-center {{ 'active' if active_view == 'sessions' else 'link-body-emphasis' }}">
+                <i class="fa-solid fa-chart-gantt me-3" style="width: 18px;"></i>
+                <span>Sessions</span>
+            </a>
+        </li>
+        <li class="nav-item mb-1">
+            <a href="/participants" class="nav-link d-flex align-items-center {{ 'active' if active_view == 'participants' else 'link-body-emphasis' }}">
+                <i class="fa-solid fa-users me-3" style="width: 18px;"></i>
+                <span>Participants</span>
+            </a>
+        </li>
+        
+        <hr class="my-3">
+        
+        <!-- Current Project Pill -->
+        <li class="nav-item mb-1" id="current-project-pill" style="display: none;">
+            <div class="nav-link d-flex align-items-center bg-primary text-white">
+                <i class="fa-solid fa-folder me-3" style="width: 18px;"></i>
+                <span id="current-project-pill-name">No Project</span>
+            </div>
+        </li>
+        
+        <hr class="my-3">
+        
+        <!-- Project Controls as Nav Pills -->
+        <li class="nav-item mb-1">
+            <button id="upload-btn-overlay" class="nav-link d-flex align-items-center link-body-emphasis border-0 bg-transparent w-100 text-start" title="Upload Project">
+                <i class="fa-solid fa-cloud-arrow-up me-3" style="width: 18px;"></i>
+                <span>Upload Project</span>
+            </button>
+        </li>
+        <li class="nav-item mb-1 dropdown">
+            <button class="nav-link d-flex align-items-center link-body-emphasis border-0 bg-transparent w-100 text-start dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Select Project">
+                <i class="fa-solid fa-folder-open me-3" style="width: 18px;"></i>
+                <span>Select Project</span>
+            </button>
+            <ul class="dropdown-menu text-small shadow" id="project-dropdown-menu">
+                <!-- Populated by JavaScript -->
+            </ul>
+        </li>
+        <li class="nav-item mb-1">
+            <button id="download-btn-overlay" class="nav-link d-flex align-items-center link-body-emphasis border-0 bg-transparent w-100 text-start" title="Download Data">
+                <i class="fa-solid fa-cloud-arrow-down me-3" style="width: 18px;"></i>
+                <span>Download Data</span>
+            </button>
+        </li>
+        <li class="nav-item mb-1">
+            <button id="create-participant-btn" class="nav-link d-flex align-items-center link-body-emphasis border-0 bg-transparent w-100 text-start" data-bs-toggle="modal" data-bs-target="#createParticipantModal" title="Add Participant">
+                <i class="fa-solid fa-user-plus me-3" style="width: 18px;"></i>
+                <span>Add Participant</span>
+            </button>
+        </li>
+    </ul>
+    
+    <hr class="my-3">
+    <!-- Current Project Display -->
+    <div id="current-project-name" class="alert alert-info py-2 px-3 mb-0 border-0" style="display: none; background-color: #e3f2fd; border-radius: 8px;">
+        <small class="text-muted d-block mb-1">Current Project:</small>
+        <span class="fw-semibold text-dark"></span>
+    </div>
+</div>

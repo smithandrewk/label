@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, send_from_directory, request, Response
+from flask import Flask, jsonify, send_from_directory, request, Response,render_template
 from werkzeug.utils import secure_filename
 import os
 import pandas as pd
@@ -48,7 +48,17 @@ modelService = model_service.ModelService(get_db_connection)
 
 @app.route('/')
 def serve_index():
-    return app.send_static_file('index.html')
+    return render_template('index.html', active_view='sessions')
+
+# Serve dashboard page
+@app.route('/dashboard')
+def serve_dashboard():
+    return render_template('dashboard.html', active_view='dashboard')
+
+# Serve participants page
+@app.route('/participants')
+def serve_participants():
+    return render_template('participants.html', active_view='participants')
 
 # Get list of projects
 @app.route('/api/projects')
@@ -57,6 +67,174 @@ def list_projects():
         return projectService.list_projects()
     except Exception as e:
         print(f"Error listing projects: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# Analytics API endpoints for dashboard
+@app.route('/api/analytics/overview')
+def get_analytics_overview():
+    """Get high-level analytics for dashboard"""
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Total counts
+        cursor.execute("SELECT COUNT(*) as count FROM participants")
+        participant_count = cursor.fetchone()['count']
+        
+        cursor.execute("SELECT COUNT(*) as count FROM projects")
+        project_count = cursor.fetchone()['count']
+        
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM sessions 
+            WHERE (status != 'Split' OR status IS NULL) AND (keep != 0 OR keep IS NULL)
+        """)
+        session_count = cursor.fetchone()['count']
+        
+        cursor.execute("""
+            SELECT COUNT(*) as count FROM sessions 
+            WHERE verified = 1 AND (status != 'Split' OR status IS NULL)
+        """)
+        verified_sessions = cursor.fetchone()['count']
+        
+        # Bout statistics
+        cursor.execute("""
+            SELECT 
+                SUM(JSON_LENGTH(COALESCE(bouts, '[]'))) as total_bouts,
+                AVG(JSON_LENGTH(COALESCE(bouts, '[]'))) as avg_bouts_per_session
+            FROM sessions 
+            WHERE (status != 'Split' OR status IS NULL) AND (keep != 0 OR keep IS NULL)
+        """)
+        bout_stats = cursor.fetchone()
+        
+        # Recent activity (last 30 days)
+        cursor.execute("""
+            SELECT DATE(created_at) as date, COUNT(*) as count
+            FROM projects 
+            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            GROUP BY DATE(created_at)
+            ORDER BY date DESC
+        """)
+        recent_projects = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'totals': {
+                'participants': participant_count,
+                'projects': project_count,
+                'sessions': session_count,
+                'verified_sessions': verified_sessions,
+                'verification_rate': round((verified_sessions / session_count * 100) if session_count > 0 else 0, 1)
+            },
+            'bouts': {
+                'total': bout_stats['total_bouts'] or 0,
+                'average_per_session': round(bout_stats['avg_bouts_per_session'] or 0, 2)
+            },
+            'recent_activity': recent_projects
+        })
+        
+    except Exception as e:
+        print(f"Error getting analytics overview: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analytics/sessions')
+def get_session_analytics():
+    """Get detailed session analytics"""
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Session status distribution
+        cursor.execute("""
+            SELECT 
+                COALESCE(status, 'Unlabeled') as status,
+                COUNT(*) as count
+            FROM sessions 
+            WHERE (status != 'Split' OR status IS NULL)
+            GROUP BY status
+        """)
+        status_distribution = cursor.fetchall()
+        
+        # Sessions by participant
+        cursor.execute("""
+            SELECT 
+                pt.participant_code,
+                COUNT(s.session_id) as session_count,
+                SUM(CASE WHEN s.verified = 1 THEN 1 ELSE 0 END) as verified_count
+            FROM participants pt
+            LEFT JOIN projects p ON pt.participant_id = p.participant_id
+            LEFT JOIN sessions s ON p.project_id = s.project_id 
+                AND (s.status != 'Split' OR s.status IS NULL)
+                AND (s.keep != 0 OR s.keep IS NULL)
+            GROUP BY pt.participant_id, pt.participant_code
+            ORDER BY session_count DESC
+        """)
+        sessions_by_participant = cursor.fetchall()
+        
+        # Bout distribution
+        cursor.execute("""
+            SELECT 
+                JSON_LENGTH(COALESCE(bouts, '[]')) as bout_count,
+                COUNT(*) as session_count
+            FROM sessions 
+            WHERE (status != 'Split' OR status IS NULL) AND (keep != 0 OR keep IS NULL)
+            GROUP BY JSON_LENGTH(COALESCE(bouts, '[]'))
+            ORDER BY bout_count
+        """)
+        bout_distribution = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'status_distribution': status_distribution,
+            'sessions_by_participant': sessions_by_participant,
+            'bout_distribution': bout_distribution
+        })
+        
+    except Exception as e:
+        print(f"Error getting session analytics: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analytics/recent-activity')
+def get_recent_activity():
+    """Get recent activity feed"""
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            return jsonify({'error': 'Database connection failed'}), 500
+        
+        cursor = conn.cursor(dictionary=True)
+        
+        # Recent projects
+        cursor.execute("""
+            SELECT 
+                'project' as type,
+                p.project_name as title,
+                pt.participant_code as subtitle,
+                p.created_at as timestamp,
+                'Created new project' as action
+            FROM projects p
+            JOIN participants pt ON p.participant_id = pt.participant_id
+            ORDER BY p.created_at DESC
+            LIMIT 10
+        """)
+        recent_activity = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify(recent_activity)
+        
+    except Exception as e:
+        print(f"Error getting recent activity: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/project/upload', methods=['POST'])
@@ -1656,11 +1834,6 @@ def delete_participant(participant_id):
     except Exception as e:
         print(f"Error deleting participant: {e}")
         return jsonify({'error': f'Failed to delete participant: {str(e)}'}), 500
-
-# Serve participants page
-@app.route('/participants')
-def serve_participants():
-    return send_from_directory(app.static_folder, 'participants.html')
 
 if __name__ == '__main__':
     app.run(debug=True)

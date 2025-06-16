@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Accelerometer Data Visualization{% endblock %}
+
+{% block content %}
+    <!-- Table View -->
+    <div id="table-view">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Session</th>
+                    <th>File</th>
+                    <th>Status</th>
+                    <th>Verified</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="sessions-table-body">
+                <!-- Populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Visualization View -->
+    <div id="visualization-view">
+        <div class="visualization-container">
+            <span id="back-btn-overlay" class="control-btn">
+                <i id="back-btn-icon" class="fa-solid fa-arrow-left"></i>
+            </span>
+            
+            <h2>Accelerometer Data Visualization</h2>
+            <div id="action-buttons" class="mb-3">
+                <!-- Dynamic buttons based on status -->
+            </div>
+        </div>
+        <!-- Plot Container -->
+        <div class="plot-container">
+            <div id="timeSeriesPlot"></div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block modals %}
+    <!-- Additional modals specific to this page can go here -->
+{% endblock %}
+
+{% block scripts %}
+    <!-- Plotly for visualizations -->
+    <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+    
+    <!-- Page-specific JS -->
+    <script type="module" src="/static/script.js"></script>
+{% endblock %}
