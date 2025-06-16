@@ -872,8 +872,26 @@ async function visualizeSession(sessionId) {
             if (isSplitting) {
                 const splitPoint = data.points[0].x;
                 if (!splitPoints.includes(splitPoint)) {
+                    // Get current zoom level before adding split point
+                    let viewState = null;
+                    if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
+                        viewState = {
+                            xrange: plotDiv._fullLayout.xaxis.range.slice(),
+                            yrange: plotDiv._fullLayout.yaxis.range.slice()
+                        };
+                    }
+                    
                     splitPoints.push(splitPoint);
-                    visualizeSession(sessionId); // Refresh plot to show new split point marker
+                    
+                    // Refresh plot to show new split point marker and restore zoom level
+                    visualizeSession(sessionId).then(() => {
+                        if (viewState && plotDiv) {
+                            Plotly.relayout(plotDiv, {
+                                'xaxis.range': viewState.xrange,
+                                'yaxis.range': viewState.yrange
+                            });
+                        }
+                    });
                 }
             }
         });
@@ -928,10 +946,29 @@ function createBoutOverlays(index, container) {
     dragOverlay.addEventListener('dblclick', function() {
         const boutIndex = parseInt(dragOverlay.dataset.boutIndex);
         if (dragContext.currentSession && dragContext.currentSession.bouts) {
+            // Get current zoom level before removing bout
+            const plotDiv = document.getElementById('timeSeriesPlot');
+            let viewState = null;
+            if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
+                viewState = {
+                    xrange: plotDiv._fullLayout.xaxis.range.slice(),
+                    yrange: plotDiv._fullLayout.yaxis.range.slice()
+                };
+            }
+            
             dragContext.currentSession.bouts.splice(boutIndex, 1);
             console.log(`Removed bout ${boutIndex}`);
             updateSessionMetadata(dragContext.currentSession);
-            visualizeSession(currentSessionId); // Refresh the plot
+            
+            // Refresh the plot and restore zoom level
+            visualizeSession(currentSessionId).then(() => {
+                if (viewState && plotDiv) {
+                    Plotly.relayout(plotDiv, {
+                        'xaxis.range': viewState.xrange,
+                        'yaxis.range': viewState.yrange
+                    });
+                }
+            });
         }
     });
     // Element-specific mouse events for dragging
