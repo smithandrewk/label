@@ -9,9 +9,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Refresh button
-    document.getElementById('refresh-btn').addEventListener('click', loadParticipants);
-    
     // Create participant form
     document.getElementById('create-participant-form').addEventListener('submit', handleCreateParticipant);
     
