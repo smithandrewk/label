@@ -4,3 +4,13 @@ mysql-connector-python>=8.2.0
 pandas>=2.2.0
 numpy>=1.26.0
 python-dotenv>=1.0.0
+torch
+
+# File utilities (built-in, no need to install)
+# - os
+# - shutil
+# - datetime
+# - threading
+# - time
+# - uuid
+# - json
