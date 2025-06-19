@@ -42,15 +42,12 @@ class MainController:
                 processed_bouts = []
                 if isinstance(bouts, list) and len(bouts) > 0:
                     for i, bout in enumerate(bouts):
-                        if isinstance(bout, list) and len(bout) >= 2:
+                        if isinstance(bout, dict):
                             processed_bout = {
                                 'bout_index': i,
-                                'start_time': bout[0] if len(bout) > 0 else None,
-                                'end_time': bout[1] if len(bout) > 1 else None,
-                                'duration_ns': bout[1] - bout[0] if len(bout) >= 2 else None,
-                                'duration_seconds': (bout[1] - bout[0]) / 1e9 if len(bout) >= 2 else None,
-                                'label': bout[2] if len(bout) > 2 else 'smoking',  # Default label
-                                'confidence': bout[3] if len(bout) > 3 else None
+                                'start_time': bout['start'] if 'start' in bout else None,
+                                'end_time': bout['end'] if 'end' in bout else None,
+                                'label': bout['label'] if 'label' in bout else None,
                             }
                             processed_bouts.append(processed_bout)
                             total_labels_count += 1

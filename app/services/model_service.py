@@ -28,7 +28,7 @@ class ModelService:
         # TODO: Implement logic to list models from the database or filesystem
         return self.models
     
-    def score_session_async(self, project_path, session_name, session_id):
+    def score_session_async(self, project_path, session_name, session_id, root_session_name=None, start_idx=None, stop_idx=None):
         """Start async scoring of a session"""
         # Generate unique scoring ID
         scoring_id = str(uuid.uuid4())
@@ -41,24 +41,68 @@ class ModelService:
             'start_time': time.time(),
             'error': None
         }
+        
+        # If no root session provided, default to the session itself
+        if root_session_name is None:
+            root_session_name = session_name
+            
         # Start async processing in a separate thread
         scoring_thread = threading.Thread(
             target=self._score_session_worker,  
-            args=(scoring_id, project_path, session_name, session_id)
+            args=(scoring_id, project_path, session_name, session_id, root_session_name, start_idx, stop_idx)
         )
         scoring_thread.daemon = True
         scoring_thread.start()
         
         return scoring_id
 
-    def _score_session_worker(self, scoring_id, project_path, session_name, session_id):
+    def _score_session_worker(self, scoring_id, project_path, session_name, session_id, root_session_name, start_idx, stop_idx):
         try:
             print(f"Starting scoring for session {scoring_id}")
-
-            df = pd.read_csv(f"{project_path}/{session_name}/accelerometer_data.csv")
-            sample_interval = df['ns_since_reboot'].diff().median() * 1e-9
-            sample_rate = 1 / sample_interval
-            print(f"Sample rate: {sample_rate} Hz")
+            print(f"Root session: {root_session_name}, Start idx: {start_idx}, Stop idx: {stop_idx}")
+            
+            csv_path = f"{project_path}/{root_session_name}/accelerometer_data.csv"
+            
+            # First read just the header to get column names
+            headers = pd.read_csv(csv_path, nrows=0).columns.tolist()
+            
+            # Read the data based on start/stop indices
+            # Ensure start_idx and stop_idx are valid integers if provided
+            start_idx = int(start_idx) if start_idx is not None else None
+            stop_idx = int(stop_idx) if stop_idx is not None else None
+            
+            if start_idx is not None and start_idx >= 0 and stop_idx is not None and stop_idx > start_idx:
+                print(f"Reading CSV from index {start_idx} to {stop_idx}")
+                # Skip header row (index 0) plus start_idx rows, then read specific number of rows
+                df = pd.read_csv(csv_path, skiprows=start_idx+1, nrows=stop_idx-start_idx, header=None)
+                df.columns = headers
+            elif start_idx is not None and start_idx >= 0:
+                print(f"Reading CSV from index {start_idx} to end")
+                df = pd.read_csv(csv_path, skiprows=start_idx+1, header=None)
+                df.columns = headers
+            else:
+                print(f"Reading entire CSV file")
+                df = pd.read_csv(csv_path)
+                
+            # Check if dataframe has expected columns
+            expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
+            if not all(col in df.columns for col in expected_columns):
+                # Try to fix column names if they're missing
+                if len(df.columns) >= len(expected_columns):
+                    rename_map = {i: col for i, col in enumerate(headers) if i < len(df.columns)}
+                    df = df.rename(columns=rename_map)
+                else:
+                    raise ValueError(f"CSV file missing required columns. Found: {list(df.columns)}, Expected: {expected_columns}")
+            
+            print(f"Loaded DataFrame with {len(df)} rows for scoring")
+            # Calculate sample rate, ensuring we don't divide by zero
+            sample_interval = df['ns_since_reboot'].diff().median()
+            if sample_interval and sample_interval > 0:
+                sample_rate = 1 / (sample_interval * 1e-9)
+                print(f"Sample rate: {sample_rate} Hz")
+            else:
+                sample_rate = 50  # Default to 50Hz if calculation fails
+                print(f"Could not determine sample rate from data, using default: {sample_rate} Hz")
 
             fs = 50
             window_size_seconds = 60
