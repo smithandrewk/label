@@ -1,21 +1,6 @@
-# Flask web framework
 Flask>=3.0.0
-
-# Database connectivity
+flask_cors
 mysql-connector-python>=8.2.0
-
-# Data processing
 pandas>=2.2.0
 numpy>=1.26.0
-
-# Environment variables
 python-dotenv>=1.0.0
-
-# File utilities (built-in, no need to install)
-# - os
-# - shutil
-# - datetime
-# - threading
-# - time
-# - uuid
-# - json

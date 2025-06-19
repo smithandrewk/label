@@ -8,45 +8,26 @@ import torch
 import numpy as np
 import pandas as pd
 import os
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.nn.functional import relu
 from torch.utils.data import DataLoader, TensorDataset
 
-class SmokingCNN(nn.Module):
-    def __init__(self, window_size=100, num_features=6):
-        super(SmokingCNN, self).__init__()
-        kernel_size = 3
-
-        self.c1 = nn.Conv1d(in_channels=num_features, out_channels=4, kernel_size=kernel_size)
-        self.c2 = nn.Conv1d(in_channels=4, out_channels=8, kernel_size=kernel_size)
-        self.c3 = nn.Conv1d(in_channels=8, out_channels=16, kernel_size=kernel_size)
-
-        self.classifier = nn.Linear(16, 1)
-    
-    
-    def forward(self, x):
-        x = self.c1(x)
-        x = relu(x)
-        x = self.c2(x)
-        x = relu(x)
-        x = self.c3(x)
-        x = relu(x)
-        x = x.mean(dim=2)
-
-        x = self.classifier(x)
-        return x
-    
 class ModelService:
-    def __init__(self, get_db_connection):
+    def __init__(self, get_db_connection=None):
         self.get_db_connection = get_db_connection
         self.model = SmokingCNN(window_size=3000, num_features=3)
         self.model.load_state_dict(torch.load('model.pth', map_location='cpu'))
         self.model.eval()
         self.scoring_status = {}  # Track scoring operations
+        self.models = []
 
+    def list_models(self):
+        """List all available models"""
+        # TODO: Implement logic to list models from the database or filesystem
+        return self.models
+    
     def score_session_async(self, project_path, session_name, session_id):
         """Start async scoring of a session"""
         # Generate unique scoring ID
@@ -119,17 +100,18 @@ class ModelService:
             smoking_bouts = [bout for bout in smoking_bouts if (bout[1] - bout[0]) >= 30 * 1e9]
             print(smoking_bouts)
 
-            db = self.get_db_connection()
-            cursor = db.cursor()
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
             cursor.execute("""
                 UPDATE sessions
                 SET bouts = %s
                 WHERE session_id = %s
             """, (json.dumps(smoking_bouts), session_id))
             
-            db.commit()
+            conn.commit()
             cursor.close()
-            db.close()
+            conn.close()
+
             # Update status on completion
             self.scoring_status[scoring_id].update({
                 'status': 'completed',
@@ -150,3 +132,28 @@ class ModelService:
     def get_scoring_status(self, scoring_id):
         """Get the status of a scoring operation"""
         return self.scoring_status.get(scoring_id, {'status': 'not_found'})
+    
+class SmokingCNN(nn.Module):
+    def __init__(self, window_size=100, num_features=6):
+        super(SmokingCNN, self).__init__()
+        kernel_size = 3
+
+        self.c1 = nn.Conv1d(in_channels=num_features, out_channels=4, kernel_size=kernel_size)
+        self.c2 = nn.Conv1d(in_channels=4, out_channels=8, kernel_size=kernel_size)
+        self.c3 = nn.Conv1d(in_channels=8, out_channels=16, kernel_size=kernel_size)
+
+        self.classifier = nn.Linear(16, 1)
+    
+    
+    def forward(self, x):
+        x = self.c1(x)
+        x = relu(x)
+        x = self.c2(x)
+        x = relu(x)
+        x = self.c3(x)
+        x = relu(x)
+        x = x.mean(dim=2)
+
+        x = self.classifier(x)
+        return x
+    
