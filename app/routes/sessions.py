@@ -383,8 +383,10 @@ class SessionController:
                     show_split=True  # Need to include split sessions since they might be parents
                 )
                 
+                # Look for parent in the same project to avoid confusion with sessions in other projects
                 parent_session = next(
-                    (s for s in parent_sessions if s['session_name'] == current_session['parent_name']),
+                    (s for s in parent_sessions if s['session_name'] == current_session['parent_name'] and 
+                     s['project_id'] == current_session['project_id']),
                     None
                 )
                 
