@@ -9,7 +9,7 @@ DB_PASSWORD ?= $(MYSQL_PASSWORD)
 DB_HOST ?= localhost
 DB_PORT ?= 3306
 MYSQL = mysql -u$(DB_USER) -p$(DB_PASSWORD) -h$(DB_HOST) -P $(DB_PORT)
-SCRIPTS_DIR = ./static
+SCRIPTS_DIR = ./app/static
 
 # Default target
 .DEFAULT_GOAL := help
