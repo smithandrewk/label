@@ -17,7 +17,7 @@
 - [x] Write tests for Labeling class creation and validation
 
 ### Commit 5: Define database table structure for labelings
-- [ ] Create SQL schema for labelings table
+- [x] Create SQL schema for labelings table
 
 ### Commit 6: Create SQL migration script
 - [ ] Write migration script for adding labelings table
