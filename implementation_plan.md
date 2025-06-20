@@ -26,7 +26,7 @@
 - [x] Define indexes for labelings table
 
 ### Commit 8: Document schema changes
-- [ ] Document database schema changes for labelings
+- [x] Document database schema changes for labelings
 
 ### Commit 9: Create initial API route structure
 - [ ] Add Flask routes for labelings API
