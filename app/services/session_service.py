@@ -294,6 +294,12 @@ class SessionService:
         """
         Automatically split a session based on time gaps during upload.
         
+        This function handles the initial upload of data, including:
+        1. Detecting time gaps in the data
+        2. Splitting data into multiple sessions when gaps are found
+        3. Setting up proper parent-child relationships
+        4. Setting start_idx and stop_idx for virtual data access
+        
         Args:
             session_name: Name of the session to potentially split
             project_path: Path to the project directory
@@ -329,7 +335,14 @@ class SessionService:
             # If len(split_indices) < 2, it means no valid splits were found
             if len(split_indices) <= 2:
                 print(f"No valid time gaps found in session {session_name}, skipping auto-split.")
-                return self._insert_single_session(session_name, project_id, bouts_json, conn)
+                # Insert as a single session with no parent (it is the original data source)
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO sessions (project_id, session_name, parent_name, status, keep, bouts, start_idx, stop_idx)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (project_id, session_name, None, 'Initial', None, bouts_json, 0, None))
+                cursor.close()
+                return [session_name]
             
             # Print gap indices
             print(f"Found {len(gap_indices)} time gaps, split indices: {split_indices}")
@@ -419,11 +432,14 @@ class SessionService:
                 if os.path.exists(labels_path):
                     shutil.copy(labels_path, os.path.join(new_dir, 'labels.json'))
                 
-                # Insert session into database
+                # Use original session as parent for all split children
+                parent_session_name = session_name
+                
+                # Insert session into database with proper parent reference
                 cursor.execute("""
                     INSERT INTO sessions (project_id, session_name, parent_name, status, keep, bouts, start_idx, stop_idx)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (project_id, new_name, session_name, 'Initial', None, json.dumps(segment_bouts[i]), start_idx, stop_idx))
+                """, (project_id, new_name, parent_session_name, 'Initial', None, json.dumps(segment_bouts[i]), start_idx, stop_idx))
                 new_sessions.append(new_name)
             
             # Remove the original session directory
@@ -439,23 +455,27 @@ class SessionService:
             try:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT INTO sessions (project_id, session_name, parent_name, status, keep, bouts)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (project_id, session_name, None, 'Initial', None, bouts_json))
+                    INSERT INTO sessions (project_id, session_name, parent_name, status, keep, bouts, start_idx, stop_idx)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (project_id, session_name, None, 'Initial', None, bouts_json, 0, None))
                 return [session_name]
-            except:
+            except Exception as inner_e:
+                print(f"Error in fallback session insert: {inner_e}")
                 return []
     
     def _insert_single_session(self, session_name, project_id, bouts_json, conn):
         """
         Insert a single session into the database.
+        
+        This method is used for sessions that don't need splitting.
+        The session will be its own parent (or have no parent), as it contains the original data.
         """
         try:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (project_id, session_name, 'Initial', None, bouts_json))
+                INSERT INTO sessions (project_id, session_name, parent_name, status, keep, bouts, start_idx, stop_idx)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (project_id, session_name, None, 'Initial', None, bouts_json, 0, None))
             cursor.close()
             return [session_name]
         except Exception as e:
@@ -535,8 +555,8 @@ class SessionService:
             if project_id:
                 # Get sessions for a specific project
                 cursor.execute(f"""
-                    SELECT s.session_id, s.session_name, s.status, s.keep, s.verified,
-                        p.project_name, p.project_id, part.participant_code
+                    SELECT s.session_id, s.session_name, s.parent_name, s.status, s.keep, s.verified,
+                        s.start_idx, s.stop_idx, p.project_name, p.project_id, part.participant_code
                     FROM sessions s
                     JOIN projects p ON s.project_id = p.project_id
                     JOIN participants part ON p.participant_id = part.participant_id
@@ -546,8 +566,8 @@ class SessionService:
             else:
                 # Get all sessions
                 cursor.execute(f"""
-                    SELECT s.session_id, s.session_name, s.status, s.keep, s.verified,
-                        p.project_name, p.project_id, part.participant_code
+                    SELECT s.session_id, s.session_name, s.parent_name, s.status, s.keep, s.verified,
+                        s.start_idx, s.stop_idx, p.project_name, p.project_id, part.participant_code
                     FROM sessions s
                     JOIN projects p ON s.project_id = p.project_id
                     JOIN participants part ON p.participant_id = part.participant_id
@@ -629,7 +649,7 @@ class SessionService:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute("""
-                SELECT session_name, status, keep, label, segments
+                SELECT session_name, parent_name, status, keep, label, segments, start_idx, stop_idx
                 FROM sessions
                 WHERE session_name = %s
             """, (session_name,))

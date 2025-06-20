@@ -67,16 +67,21 @@ class ModelService:
             headers = pd.read_csv(csv_path, nrows=0).columns.tolist()
             
             # Read the data based on start/stop indices
-            if start_idx is not None and stop_idx is not None:
+            # Ensure start_idx and stop_idx are valid integers if provided
+            start_idx = int(start_idx) if start_idx is not None else None
+            stop_idx = int(stop_idx) if stop_idx is not None else None
+            
+            if start_idx is not None and start_idx >= 0 and stop_idx is not None and stop_idx > start_idx:
                 print(f"Reading CSV from index {start_idx} to {stop_idx}")
                 # Skip header row (index 0) plus start_idx rows, then read specific number of rows
                 df = pd.read_csv(csv_path, skiprows=start_idx+1, nrows=stop_idx-start_idx, header=None)
                 df.columns = headers
-            elif start_idx is not None:
+            elif start_idx is not None and start_idx >= 0:
                 print(f"Reading CSV from index {start_idx} to end")
                 df = pd.read_csv(csv_path, skiprows=start_idx+1, header=None)
                 df.columns = headers
             else:
+                print(f"Reading entire CSV file")
                 df = pd.read_csv(csv_path)
                 
             # Check if dataframe has expected columns
@@ -90,9 +95,14 @@ class ModelService:
                     raise ValueError(f"CSV file missing required columns. Found: {list(df.columns)}, Expected: {expected_columns}")
             
             print(f"Loaded DataFrame with {len(df)} rows for scoring")
-            sample_interval = df['ns_since_reboot'].diff().median() * 1e-9
-            sample_rate = 1 / sample_interval
-            print(f"Sample rate: {sample_rate} Hz")
+            # Calculate sample rate, ensuring we don't divide by zero
+            sample_interval = df['ns_since_reboot'].diff().median()
+            if sample_interval and sample_interval > 0:
+                sample_rate = 1 / (sample_interval * 1e-9)
+                print(f"Sample rate: {sample_rate} Hz")
+            else:
+                sample_rate = 50  # Default to 50Hz if calculation fails
+                print(f"Could not determine sample rate from data, using default: {sample_rate} Hz")
 
             fs = 50
             window_size_seconds = 60
