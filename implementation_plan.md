@@ -23,7 +23,7 @@
 - [x] Write migration script for adding labelings table
 
 ### Commit 7: Add indexes for efficient querying
-- [ ] Define indexes for labelings table
+- [x] Define indexes for labelings table
 
 ### Commit 8: Document schema changes
 - [ ] Document database schema changes for labelings
