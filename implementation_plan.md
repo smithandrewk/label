@@ -29,7 +29,7 @@
 - [x] Document database schema changes for labelings
 
 ### Commit 9: Create initial API route structure
-- [ ] Add Flask routes for labelings API
+- [x] Add Flask routes for labelings API
 
 ### Commit 10: Define API response format
 - [ ] Create standard response format for labeling operations
