@@ -2,8 +2,8 @@ import time
 import os
 import shutil
 import json
-from app.services.utils import timeit, resample
 from app.repositories.session_repository import SessionRepository
+from app.services.utils import *
 import pandas as pd
 from app.exceptions import DatabaseError
 
@@ -316,23 +316,11 @@ class SessionService:
         """
         try:
             csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
-            df = pd.read_csv(csv_path).iloc[:-1]
-            df['ns_since_reboot'] = df['ns_since_reboot'].astype(float)
-            df['x'] = df['x'].astype(float)
-            df['y'] = df['y'].astype(float)
-            df['z'] = df['z'].astype(float)
-            df = df.sort_values('ns_since_reboot').reset_index(drop=True)
-
-            gap_threshold_minutes = 30
-            gap_threshold_ns = gap_threshold_minutes * 60 * 1_000_000_000
-            df = df.sort_values('ns_since_reboot').reset_index(drop=True)
-            time_diffs = df['ns_since_reboot'].diff()
-            gap_indices = time_diffs[time_diffs > gap_threshold_ns].index
-
-            if len(gap_indices) == 0:
-                df = resample(df)
-                df.to_csv(csv_path, index=False)
-                return self._insert_single_session(session_name, project_id, bouts_json, conn)
+            print(csv_path)
+            df = load_accelerometer_data_csv(csv_path)
+            gap_indices = find_time_gaps(df)
+            gap_indices = [0] + gap_indices + [len(df)]
+            child_session_start_end_indices = [[start,end] for start,end in zip(gap_indices[:-1], gap_indices[1:])]
 
             split_points = []
             for idx in gap_indices:
@@ -348,6 +336,13 @@ class SessionService:
             split_indices = sorted(set(split_indices))
             split_indices = [0] + split_indices + [len(df)]
             
+            # If len(split_indices) < 2, it means no valid splits were found
+            if len(split_indices) <= 2:
+                print(f"No valid time gaps found in session {session_name}, skipping auto-split.")
+                return self._insert_single_session(session_name, project_id, bouts_json, conn)
+            
+            # Print gap indices
+            print(f"Found {len(gap_indices)} time gaps, split indices: {split_indices}")
             segments = []
             for i in range(len(split_indices) - 1):
                 start_index = split_indices[i]
@@ -369,7 +364,9 @@ class SessionService:
                 start_time = segment['ns_since_reboot'].min()
                 end_time = segment['ns_since_reboot'].max()
                 segment_ranges.append((start_time, end_time))
-            
+            print(f"Created {len(segments)} segments with time ranges: {segment_ranges}")
+            # Print child session start-end indices
+            print(f"Child session start-end indices: {child_session_start_end_indices}")
             # Parse bouts data
             try:
                 parent_bouts = json.loads(bouts_json or '[]')
@@ -412,6 +409,8 @@ class SessionService:
             cursor = conn.cursor()
             
             for i, segment in enumerate(segments):
+                start_idx, stop_idx = child_session_start_end_indices[i]
+
                 # Generate unique name
                 new_name = self.generate_unique_session_name_upload(session_name, project_path, conn, project_id)
                 new_dir = os.path.join(project_path, new_name)
@@ -432,10 +431,9 @@ class SessionService:
                 
                 # Insert session into database
                 cursor.execute("""
-                    INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (project_id, new_name, 'Initial', None, json.dumps(segment_bouts[i])))
-                
+                    INSERT INTO sessions (project_id, session_name, parent_name, status, keep, bouts, start_idx, stop_idx)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (project_id, new_name, session_name, 'Initial', None, json.dumps(segment_bouts[i]), start_idx, stop_idx))
                 new_sessions.append(new_name)
             
             # Remove the original session directory
@@ -451,9 +449,9 @@ class SessionService:
             try:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (project_id, session_name, 'Initial', None, bouts_json))
+                    INSERT INTO sessions (project_id, session_name, parent_name, status, keep, bouts)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (project_id, session_name, None, 'Initial', None, bouts_json))
                 return [session_name]
             except:
                 return []
@@ -582,7 +580,7 @@ class SessionService:
         cursor = conn.cursor(dictionary=True)
         try:
             cursor.execute("""
-                SELECT s.session_id, s.session_name, s.status, s.keep, s.verified, s.bouts,
+                SELECT s.session_id, s.session_name, s.parent_name, s.status, s.keep, s.verified, s.bouts, s.start_idx, s.stop_idx,
                     p.project_id, p.project_name, p.path AS project_path
                 FROM sessions s
                 JOIN projects p ON s.project_id = p.project_id
@@ -734,16 +732,30 @@ class SessionService:
                 created_sessions = []
                 
                 for session_data in new_sessions:
+                    # Generate a unique session name to avoid duplicate entries
+                    unique_session_name = self.generate_unique_session_name_upload(
+                        session_data['name'],
+                        session_info['project_path'],
+                        conn,
+                        session_info['project_id']
+                    )
+                    
+                    # Use the root session name if it's provided, otherwise use the parent's name
+                    root_name = session_data.get('root_session_name', session_info.get('parent_name', session_info['session_name']))
+                    
                     # Keep the same project_id
                     cursor.execute("""
-                        INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO sessions (project_id, session_name, parent_name, status, keep, bouts, start_idx, stop_idx)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         session_info['project_id'], 
-                        session_data['name'], 
+                        unique_session_name,
+                        root_name,
                         'Initial', 
                         session_info['keep'], 
-                        json.dumps(session_data['bouts'])
+                        json.dumps(session_data['bouts']),
+                        session_data['start_idx'],
+                        session_data['stop_idx']
                     ))
                     # Get the new session ID
                     child_id = cursor.lastrowid

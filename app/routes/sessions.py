@@ -46,8 +46,21 @@ class SessionController:
 
             project_path = session_info['project_path']
             session_name = session_info['session_name']
-
-            scoring_id = self.model_service.score_session_async(project_path, session_name, session_id)
+            
+            # Get the root session that contains the data
+            root_session_name = self._find_root_session_name(session_info)
+            start_idx = session_info['start_idx']
+            stop_idx = session_info['stop_idx']
+            
+            # Pass all the necessary information for properly loading data
+            scoring_id = self.model_service.score_session_async(
+                project_path=project_path, 
+                session_name=session_name, 
+                session_id=session_id,
+                root_session_name=root_session_name,
+                start_idx=start_idx,
+                stop_idx=stop_idx
+            )
             
             return jsonify({
                 'success': True,
@@ -67,20 +80,53 @@ class SessionController:
 
             project_path = session_info['project_path']
             session_name = session_info['session_name']
+            parent_name = session_info['parent_name']
+            start_idx = session_info['start_idx']
+            stop_idx = session_info['stop_idx']
             
-            csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
-
+            # Follow parent chain to find the root session (original data file)
+            root_session_name = self._find_root_session_name(session_info)
+            print(f"Root session name: {root_session_name}")
+            
+            csv_path = os.path.join(project_path, root_session_name, 'accelerometer_data.csv')
+            print(f"Looking for CSV at: {csv_path}")
+            print(f"Start index: {start_idx}, Stop index: {stop_idx}")
             if not os.path.exists(csv_path):
+                print(f"CSV file not found at {csv_path}")
                 return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
-            
-            df = pd.read_csv(csv_path)
+                
+            # First read just the header to get column names
+            headers = pd.read_csv(csv_path, nrows=0).columns.tolist()
+            expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
+                
+            if start_idx is not None and stop_idx is not None:
+                print(f"Reading CSV from {start_idx} to {stop_idx}")
+                # Use header=None to indicate no header in the data portion, then set column names manually
+                df = pd.read_csv(csv_path, skiprows=start_idx+1, nrows=stop_idx - start_idx, header=None)
+                df.columns = headers
+            elif start_idx is not None:
+                print(f"Reading CSV from {start_idx} to end")
+                df = pd.read_csv(csv_path, skiprows=start_idx+1, header=None)
+                df.columns = headers
+            else:
+                df = pd.read_csv(csv_path)
+
             df = df.iloc[::50]
             
             bouts = session_info['bouts']
             
-            expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
+            # Verify columns after loading
             if not all(col in df.columns for col in expected_columns):
-                return jsonify({'error': f'Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}'}), 400
+                logging.error(f"Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}")
+                
+                # Check if we have data but with wrong column names (could be numeric indices)
+                if len(df.columns) >= len(expected_columns) and all(col.isdigit() for col in df.columns.astype(str)):
+                    logging.warning("Column names are numeric indices, attempting to fix by applying expected column names")
+                    # Rename columns to expected names
+                    rename_map = {i: col for i, col in enumerate(headers) if i < len(df.columns)}
+                    df = df.rename(columns=rename_map)
+                else:
+                    return jsonify({'error': f'Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}'}), 400
             
             data = df[expected_columns].to_dict(orient='records')
             data = {
@@ -134,16 +180,15 @@ class SessionController:
     def split_session(self, session_id):
         try:
             data = request.get_json()
-            split_points = data.get('split_points')  # Array of ns_since_reboot timestamps
+            split_points = data.get('split_points')  # list of ns_since_reboot timestamps
+            print(split_points)
+
             if not split_points or not isinstance(split_points, list) or len(split_points) == 0:
                 return jsonify({'error': 'At least one split point required'}), 400
 
-            try:
-                session_info = self.session_service.get_session_details(session_id)
-                if not session_info:
-                    return jsonify({'error': 'Session not found'}), 404
-            except DatabaseError as e:
-                return jsonify({'error': str(e)}), 500
+            session_info = self.session_service.get_session_details(session_id)
+            if not session_info:
+                return jsonify({'error': 'Session not found'}), 404
             
             session_name = session_info['session_name']
             project_path = session_info['project_path']
@@ -156,14 +201,22 @@ class SessionController:
             except json.JSONDecodeError:
                 parent_bouts = []
             
-            # Read original CSV from the project directory
-            csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
+            print(f"Parent bouts: {parent_bouts}")
+            
+            # Find the root session that contains the original data file
+            root_session_name = self._find_root_session_name(session_info)
+            print(f"Root session name for data: {root_session_name}")
+
+            csv_path = os.path.join(project_path, root_session_name, 'accelerometer_data.csv')
             if not os.path.exists(csv_path):
                 return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
             
+            # Read the CSV file with proper header handling
             df = pd.read_csv(csv_path)
             expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
+            
             if not all(col in df.columns for col in expected_columns):
+                logging.error(f"Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}")
                 return jsonify({'error': f'Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}'}), 400
 
             # Find split indices
@@ -183,18 +236,32 @@ class SessionController:
             if not split_indices:
                 return jsonify({'error': 'No valid split points provided'}), 400
 
+            print(f"Split indices: {split_indices}")
+            print(f"Split timestamps: {split_timestamps}")
+
             # Split data into segments
             segments = []
+            segment_ranges_indices = []  # Store [start_idx, stop_idx] for each segment
             start_idx = 0
+            
+            # Create segments from the split points
             for idx in split_indices:
+                # Each segment goes from start_idx up to and including idx
                 segment = df.iloc[start_idx:idx + 1][expected_columns]
                 if not segment.empty:
                     segments.append(segment)
+                    segment_ranges_indices.append([start_idx, idx])
+                    print(f"Created segment from index {start_idx} to {idx}")
                 start_idx = idx + 1
-            # Add final segment
+                
+            # Add final segment from last split point to end
             final_segment = df.iloc[start_idx:][expected_columns]
             if not final_segment.empty:
                 segments.append(final_segment)
+                segment_ranges_indices.append([start_idx, len(df) - 1])
+                print(f"Created final segment from index {start_idx} to {len(df) - 1}")
+                
+            print(f"Created {len(segments)} segments with index ranges: {segment_ranges_indices}")
 
             if len(segments) < 2:
                 return jsonify({'error': 'Split would not create multiple valid recordings'}), 400
@@ -246,30 +313,40 @@ class SessionController:
             for i, segment in enumerate(segments):
                 # Generate unique name instead of using suffix
                 new_name = self.session_service.generate_unique_session_name(session_name, project_path, session_info['project_id'])
-                new_dir = os.path.join(project_path, new_name)
+                print(new_name)
                 
-                os.makedirs(new_dir)
-                segment.to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
+                # Get the root session name for proper lineage tracking
+                root_session_name = self._find_root_session_name(session_info)
+                
+                # Use the precomputed segment indices
+                segment_start_idx = segment_ranges_indices[i][0]
+                segment_stop_idx = segment_ranges_indices[i][1]
+                
+                print(f"Segment {i+1} indices: start={segment_start_idx}, stop={segment_stop_idx}")
+                
                 new_sessions.append({
                     'name': new_name,
-                    'bouts': segment_bouts[i]
+                    'bouts': segment_bouts[i],
+                    'start_idx': segment_start_idx,
+                    'stop_idx': segment_stop_idx,
+                    'root_session_name': root_session_name
                 })
 
             # Copy original log file to new directories
-            log_path = os.path.join(project_path, session_name, 'log.csv')
-            if os.path.exists(log_path):
-                for session_data in new_sessions:
-                    shutil.copy(log_path, os.path.join(project_path, session_data['name'], 'log.csv'))
-            else:
-                print(f"Log file not found at {log_path}. Skipping copy.")
-                
+            # log_path = os.path.join(project_path, session_name, 'log.csv')
+            # if os.path.exists(log_path):
+            #     for session_data in new_sessions:
+            #         shutil.copy(log_path, os.path.join(project_path, session_data['name'], 'log.csv'))
+            # else:
+            #     print(f"Log file not found at {log_path}. Skipping copy.")
+            
             try:
                 created_sessions = self.session_service.split_session(session_id, session_info, new_sessions)
             except DatabaseError as e:
                 return jsonify({'error': str(e)}), 500
 
             # Delete original session directory
-            shutil.rmtree(os.path.join(project_path, session_name))
+            # shutil.rmtree(os.path.join(project_path, session_name))
 
             return jsonify({
                 'message': 'Session split successfully', 
@@ -278,7 +355,61 @@ class SessionController:
         except Exception as e:
             print(f"Error splitting session: {e}")
             return jsonify({'error': str(e)}), 500
+        except DatabaseError as e:
+            return jsonify({'error': str(e)}), 500
 
+    def _find_root_session_name(self, session_info):
+        """
+        Traverse the parent chain to find the root session name (original data source).
+        
+        Args:
+            session_info: Dictionary containing session metadata including 'parent_name'
+            
+        Returns:
+            str: The session name of the root session that contains the original data file
+        """
+        current_session = session_info
+        visited = set()  # To prevent infinite loops in case of circular references
+        
+        while current_session and current_session['parent_name'] and current_session['session_name'] != current_session['parent_name']:
+            # Add current session to visited set
+            visited.add(current_session['session_name'])
+            
+            # Get parent session info
+            try:
+                # Find parent session by name in the same project
+                parent_sessions = self.session_service.get_sessions(
+                    project_id=current_session['project_id'], 
+                    show_split=True  # Need to include split sessions since they might be parents
+                )
+                
+                parent_session = next(
+                    (s for s in parent_sessions if s['session_name'] == current_session['parent_name']),
+                    None
+                )
+                
+                if not parent_session:
+                    # Parent not found, return the current session name
+                    return current_session['parent_name']
+                
+                # Check for circular reference
+                if parent_session['session_name'] in visited:
+                    print(f"Warning: Circular reference detected in session lineage: {parent_session['session_name']}")
+                    return current_session['parent_name']
+                
+                # Get full parent session details
+                parent_session_details = self.session_service.get_session_details(parent_session['session_id'])
+                if not parent_session_details:
+                    return current_session['parent_name']
+                
+                current_session = parent_session_details
+            except Exception as e:
+                print(f"Error traversing session lineage: {e}")
+                return current_session['parent_name']
+        
+        # Return the name of the root session
+        return current_session['session_name']
+        
 controller = None
 
 def init_controller(project_service, session_service, model_service):
