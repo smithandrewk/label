@@ -20,7 +20,7 @@
 - [x] Create SQL schema for labelings table
 
 ### Commit 6: Create SQL migration script
-- [ ] Write migration script for adding labelings table
+- [x] Write migration script for adding labelings table
 
 ### Commit 7: Add indexes for efficient querying
 - [ ] Define indexes for labelings table
