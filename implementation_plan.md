@@ -14,7 +14,7 @@
 - [x] Create usage examples
 
 ### Commit 4: Add unit tests for the data model
-- [ ] Write tests for Labeling class creation and validation
+- [x] Write tests for Labeling class creation and validation
 
 ### Commit 5: Define database table structure for labelings
 - [ ] Create SQL schema for labelings table
