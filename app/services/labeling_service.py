@@ -62,6 +62,182 @@ class LabelingValidationError(Exception):
     pass
 
 
+class Labeling:
+    """
+    Represents a set of labels with visual properties for accelerometer data visualization.
+    
+    A labeling contains a collection of timestamp ranges with associated labels,
+    along with visual properties like color and visibility status.
+    
+    Attributes:
+        id (str): Unique identifier for the labeling (UUID)
+        name (str): Display name of the labeling
+        color (str): Hex color code for visualization (#RRGGBB)
+        visible (bool): Whether the labeling is currently visible
+        data (dict): Dictionary containing timestamp ranges and labels
+        created_at (str): ISO timestamp of creation
+        updated_at (str): ISO timestamp of last update
+    """
+    
+    def __init__(self, name: str, color: str = "#1f77b4", visible: bool = True, 
+                 data: Optional[Dict[str, Any]] = None, id: Optional[str] = None):
+        """
+        Initialize a new Labeling instance.
+        
+        Args:
+            name: Display name of the labeling
+            color: Hex color code (default: "#1f77b4")
+            visible: Whether the labeling is visible (default: True)
+            data: Dictionary containing labeling data (default: empty dict)
+            id: Unique identifier (default: auto-generated UUID)
+            
+        Raises:
+            LabelingValidationError: If validation fails
+        """
+        # Validate inputs
+        if not self._validate_name(name):
+            raise LabelingValidationError("Name must be a non-empty string")
+        if not self._validate_color(color):
+            raise LabelingValidationError("Color must be a valid hex color code")
+        if data is not None and not self._validate_data_structure(data):
+            raise LabelingValidationError("Invalid data structure")
+        
+        # Set attributes
+        self.id = id if id else str(uuid.uuid4())
+        self.name = name
+        self.color = color
+        self.visible = visible
+        self.data = data if data is not None else {}
+        
+        # Set timestamps
+        current_time = datetime.now().isoformat()
+        self.created_at = current_time
+        self.updated_at = current_time
+    
+    @staticmethod
+    def _validate_name(name: Any) -> bool:
+        """Validate that name is a non-empty string."""
+        return isinstance(name, str) and name.strip() != ""
+    
+    @staticmethod
+    def _validate_color(color: Any) -> bool:
+        """Validate that color is a valid hex color code."""
+        if not isinstance(color, str):
+            return False
+        # Match #RGB or #RRGGBB format
+        pattern = r'^#[0-9A-Fa-f]{3}$|^#[0-9A-Fa-f]{6}$'
+        return bool(re.match(pattern, color))
+    
+    @staticmethod
+    def _validate_data_structure(data: Any) -> bool:
+        """Validate the data structure format."""
+        if not isinstance(data, dict):
+            return False
+        
+        # If timestamps exist, validate their structure
+        if 'timestamps' in data:
+            timestamps = data['timestamps']
+            if not isinstance(timestamps, list):
+                return False
+            
+            for entry in timestamps:
+                if not isinstance(entry, dict):
+                    return False
+                
+                # Check required keys
+                required_keys = ['start', 'end', 'label']
+                if not all(key in entry for key in required_keys):
+                    return False
+                
+                # Validate types
+                if not isinstance(entry['start'], (int, float)):
+                    return False
+                if not isinstance(entry['end'], (int, float)):
+                    return False
+                if not isinstance(entry['label'], str):
+                    return False
+                
+                # Validate time order
+                if entry['end'] <= entry['start']:
+                    return False
+        
+        return True
+    
+    def update(self, **kwargs) -> None:
+        """
+        Update labeling properties.
+        
+        Args:
+            **kwargs: Keyword arguments for properties to update
+            
+        Raises:
+            LabelingValidationError: If validation fails
+        """
+        # Validate updates before applying
+        if 'name' in kwargs and not self._validate_name(kwargs['name']):
+            raise LabelingValidationError("Name must be a non-empty string")
+        if 'color' in kwargs and not self._validate_color(kwargs['color']):
+            raise LabelingValidationError("Color must be a valid hex color code")
+        if 'data' in kwargs and not self._validate_data_structure(kwargs['data']):
+            raise LabelingValidationError("Invalid data structure")
+        
+        # Apply updates
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        
+        # Update timestamp
+        self.updated_at = datetime.now().isoformat()
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert labeling to dictionary format.
+        
+        Returns:
+            Dictionary representation of the labeling
+        """
+        return {
+            "id": self.id,
+            "name": self.name,
+            "color": self.color,
+            "visible": self.visible,
+            "data": self.data,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Labeling':
+        """
+        Create a Labeling instance from a dictionary.
+        
+        Args:
+            data: Dictionary containing labeling data
+            
+        Returns:
+            New Labeling instance
+            
+        Raises:
+            LabelingValidationError: If validation fails
+        """
+        # Create instance
+        labeling = cls(
+            name=data.get("name", "Untitled Labeling"),
+            color=data.get("color", "#1f77b4"),
+            visible=data.get("visible", True),
+            data=data.get("data", {}),
+            id=data.get("id")
+        )
+        
+        # Set timestamps if provided
+        if "created_at" in data:
+            labeling.created_at = data["created_at"]
+        if "updated_at" in data:
+            labeling.updated_at = data["updated_at"]
+        
+        return labeling
+
+
 class LabelingService:
     """
     Service class for managing labeling database operations.
@@ -301,237 +477,384 @@ class LabelingService:
         finally:
             cursor.close()
             conn.close()
-
-
-class Labeling:
-    """
-    Represents a set of labels that can be applied to accelerometer data.
     
-    This class serves as the data structure for multiple labeling systems that can
-    be overlaid on accelerometer data visualizations. It contains properties to
-    manage the visual representation and data of the labels.
-    
-    A labeling object consists of:
-    1. Metadata (id, name, color, visibility status)
-    2. Label data containing timestamp ranges and associated labels
-    3. Creation and update timestamps for tracking changes
-    
-    Key functionalities:
-    - Create and manage labeling sets with visual properties
-    - Validate labeling data structure
-    - Convert to/from dictionary format for storage and transmission
-    - Update properties with validation
-    
-    Attributes:
-        id (str): Unique identifier for the labeling set
-        name (str): Display name of the labeling set
-        color (str): Hex color code for visual representation of this labeling set
-        visible (bool): Whether this labeling set is currently visible in the UI
-        data (dict): The actual label data containing timestamp ranges and labels
-        created_at (str): ISO-formatted timestamp of creation
-        updated_at (str): ISO-formatted timestamp of last update
-    
-    Example:
-        # Create a basic labeling
-        labeling = Labeling(name="Activity Labels")
-        
-        # Convert to dictionary for storage
-        data = labeling.to_dict()
-        
-        # Later, reconstruct the labeling
-        reconstructed = Labeling.from_dict(data)
-    """
-    
-    def __init__(
-        self,
-        name: str,
-        color: str = "#1f77b4",  # Default to a standard blue color
-        visible: bool = True,
-        data: Optional[Dict] = None,
-        id: Optional[str] = None
-    ):
+    def create_labeling(self, labeling: Labeling, project_id: int = None, session_id: int = None) -> str:
         """
-        Initialize a new Labeling instance.
+        Create a new labeling in the database.
         
         Args:
-            name: Display name for the labeling set
-            color: Hex color code for visual representation (default: "#1f77b4")
-            visible: Whether this labeling is visible by default (default: True)
-            data: Optional dictionary containing labeling data
-            id: Optional unique identifier (will be generated if not provided)
+            labeling: The Labeling object to create
+            project_id: Optional project ID for project-scoped labeling
+            session_id: Optional session ID for session-scoped labeling
+            
+        Returns:
+            The labeling_id of the created labeling
             
         Raises:
-            LabelingValidationError: If any of the input parameters fail validation
+            DatabaseError: If database operation fails
         """
-        # Validate inputs before setting attributes
-        if not self._validate_name(name):
-            raise LabelingValidationError(f"Invalid name: {name}. Name must be a non-empty string.")
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor()
+        try:
+            # Serialize the labeling data
+            serialized_data = self.serialize_labeling_data(labeling.data)
             
-        if not self._validate_color(color):
-            raise LabelingValidationError(f"Invalid color code: {color}. Must be a valid hex color code.")
+            cursor.execute("""
+                INSERT INTO labelings (labeling_id, name, color, visible, data, project_id, session_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (
+                labeling.id, 
+                labeling.name, 
+                labeling.color, 
+                labeling.visible,
+                serialized_data,
+                project_id,
+                session_id
+            ))
+            
+            conn.commit()
+            return labeling.id
+            
+        except Exception as e:
+            conn.rollback()
+            raise DatabaseError(f'Failed to create labeling: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
+    
+    def update_labeling(self, labeling_id: str, updates: Dict[str, Any]) -> bool:
+        """
+        Update an existing labeling in the database.
         
-        if data and not self._validate_data_structure(data):
-            raise LabelingValidationError("Invalid data structure for labeling data.")
+        Args:
+            labeling_id: The ID of the labeling to update
+            updates: Dictionary of fields to update
+            
+        Returns:
+            True if labeling was updated, False if not found
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
         
-        self.id = id if id else str(uuid.uuid4())
-        self.name = name
-        self.color = color
-        self.visible = visible
-        self.data = data if data else {}
-        self.created_at = datetime.now().isoformat()
-        self.updated_at = self.created_at
+        cursor = conn.cursor()
+        try:
+            # Build dynamic update query
+            set_clauses = []
+            values = []
+            
+            for key, value in updates.items():
+                if key == 'data':
+                    # Serialize data if updating data field
+                    value = self.serialize_labeling_data(value)
+                set_clauses.append(f"{key} = %s")
+                values.append(value)
+            
+            if not set_clauses:
+                return False
+            
+            # Add updated_at timestamp
+            set_clauses.append("updated_at = CURRENT_TIMESTAMP")
+            values.append(labeling_id)
+            
+            query = f"""
+                UPDATE labelings 
+                SET {', '.join(set_clauses)}
+                WHERE labeling_id = %s
+            """
+            
+            cursor.execute(query, values)
+            rows_affected = cursor.rowcount
+            conn.commit()
+            
+            return rows_affected > 0
+            
+        except Exception as e:
+            conn.rollback()
+            raise DatabaseError(f'Failed to update labeling: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
+    
+    def delete_labeling(self, labeling_id: str) -> bool:
+        """
+        Delete a labeling from the database.
+        
+        Args:
+            labeling_id: The ID of the labeling to delete
+            
+        Returns:
+            True if labeling was deleted, False if not found
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM labelings WHERE labeling_id = %s", (labeling_id,))
+            rows_affected = cursor.rowcount
+            conn.commit()
+            
+            return rows_affected > 0
+            
+        except Exception as e:
+            conn.rollback()
+            raise DatabaseError(f'Failed to delete labeling: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
+    
+    def toggle_labeling_visibility(self, labeling_id: str) -> Optional[bool]:
+        """
+        Toggle the visibility of a labeling.
+        
+        Args:
+            labeling_id: The ID of the labeling to toggle
+            
+        Returns:
+            New visibility state, or None if labeling not found
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor(dictionary=True)
+        try:
+            # Get current visibility state
+            cursor.execute("SELECT visible FROM labelings WHERE labeling_id = %s", (labeling_id,))
+            result = cursor.fetchone()
+            
+            if not result:
+                return None
+            
+            new_visibility = not result['visible']
+            
+            # Update visibility
+            cursor.execute("""
+                UPDATE labelings 
+                SET visible = %s, updated_at = CURRENT_TIMESTAMP 
+                WHERE labeling_id = %s
+            """, (new_visibility, labeling_id))
+            
+            conn.commit()
+            return new_visibility
+            
+        except Exception as e:
+            conn.rollback()
+            raise DatabaseError(f'Failed to toggle labeling visibility: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
     
     @staticmethod
-    def _validate_name(name: str) -> bool:
+    def serialize_labeling_data(data: Dict[str, Any]) -> str:
         """
-        Validate the labeling name.
+        Serialize labeling data to JSON string for database storage.
         
         Args:
-            name: The name to validate
+            data: The labeling data dictionary
             
         Returns:
-            bool: True if valid, False otherwise
+            JSON string representation of the data
         """
-        return isinstance(name, str) and len(name.strip()) > 0
-    
-    @staticmethod
-    def _validate_color(color: str) -> bool:
-        """
-        Validate the color code.
+        if not data:
+            return json.dumps({})
         
-        Args:
-            color: The hex color code to validate
-            
-        Returns:
-            bool: True if valid, False otherwise
-        """
-        # Check if it's a valid hex color code
-        pattern = r'^#(?:[0-9a-fA-F]{3}){1,2}$'
-        return isinstance(color, str) and bool(re.match(pattern, color))
-        
-    @staticmethod
-    def _validate_data_structure(data: Dict) -> bool:
-        """
-        Validate the data structure for labelings.
-        
-        Expected format:
-        {
-            "timestamps": [
-                {
-                    "start": float,  # start timestamp
-                    "end": float,    # end timestamp
-                    "label": str      # label value
-                },
-                ...
-            ]
-        }
-        
-        Args:
-            data: The labeling data to validate
-            
-        Returns:
-            bool: True if valid, False otherwise
-        """
+        # Ensure data is in the expected format
         if not isinstance(data, dict):
-            return False
+            raise ValueError("Labeling data must be a dictionary")
+        
+        # Validate the structure if timestamps exist
+        if 'timestamps' in data:
+            timestamps = data['timestamps']
+            if not isinstance(timestamps, list):
+                raise ValueError("Timestamps must be a list")
             
-        # Check for timestamps key
-        if "timestamps" not in data:
-            return True  # Empty data is valid
-            
-        # Validate each timestamp entry
-        timestamps = data.get("timestamps", [])
-        if not isinstance(timestamps, list):
-            return False
-            
-        for entry in timestamps:
-            if not isinstance(entry, dict):
-                return False
+            for i, entry in enumerate(timestamps):
+                if not isinstance(entry, dict):
+                    raise ValueError(f"Timestamp entry {i} must be a dictionary")
                 
-            # Check required keys
-            if not all(key in entry for key in ["start", "end", "label"]):
-                return False
+                required_keys = ['start', 'end', 'label']
+                for key in required_keys:
+                    if key not in entry:
+                        raise ValueError(f"Timestamp entry {i} missing required key: {key}")
                 
-            # Check types
-            if not (isinstance(entry.get("start"), (int, float)) and 
-                    isinstance(entry.get("end"), (int, float)) and
-                    isinstance(entry.get("label"), str)):
-                return False
+                # Validate data types
+                if not isinstance(entry['start'], (int, float)):
+                    raise ValueError(f"Timestamp entry {i} 'start' must be a number")
+                if not isinstance(entry['end'], (int, float)):
+                    raise ValueError(f"Timestamp entry {i} 'end' must be a number")
+                if not isinstance(entry['label'], str):
+                    raise ValueError(f"Timestamp entry {i} 'label' must be a string")
                 
-            # Ensure end is after start
-            if entry.get("end") <= entry.get("start"):
-                return False
-                
-        return True
+                # Validate time order
+                if entry['end'] <= entry['start']:
+                    raise ValueError(f"Timestamp entry {i} 'end' must be after 'start'")
+        
+        return json.dumps(data)
     
-    def update(self, **kwargs) -> None:
+    @staticmethod
+    def deserialize_labeling_data(json_str: str) -> Dict[str, Any]:
         """
-        Update the labeling attributes.
+        Deserialize labeling data from JSON string.
         
         Args:
-            **kwargs: Keyword arguments with attributes to update
+            json_str: JSON string representation of the data
             
-        Raises:
-            LabelingValidationError: If any of the updated attributes fail validation
-        """
-        # Validate inputs before updating
-        if "name" in kwargs and not self._validate_name(kwargs["name"]):
-            raise LabelingValidationError(f"Invalid name: {kwargs['name']}. Name must be a non-empty string.")
-            
-        if "color" in kwargs and not self._validate_color(kwargs["color"]):
-            raise LabelingValidationError(f"Invalid color code: {kwargs['color']}. Must be a valid hex color code.")
-            
-        if "data" in kwargs and not self._validate_data_structure(kwargs["data"]):
-            raise LabelingValidationError("Invalid data structure for labeling data.")
-        
-        # Update attributes
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-        
-        # Update timestamp
-        self.updated_at = datetime.now().isoformat()
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert the Labeling instance to a dictionary.
-        
         Returns:
-            Dict[str, Any]: Dictionary representation of the Labeling
+            Dictionary representation of the labeling data
+        """
+        if not json_str:
+            return {}
+        
+        try:
+            data = json.loads(json_str)
+            if not isinstance(data, dict):
+                return {}
+            return data
+        except json.JSONDecodeError:
+            return {}
+    
+    def labeling_to_dict(self, labeling: Labeling) -> Dict[str, Any]:
+        """
+        Convert a Labeling object to a dictionary suitable for API responses.
+        
+        Args:
+            labeling: The Labeling object to convert
+            
+        Returns:
+            Dictionary representation
         """
         return {
-            "id": self.id,
-            "name": self.name,
-            "color": self.color,
-            "visible": self.visible,
-            "data": self.data,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at
+            "labeling_id": labeling.id,
+            "name": labeling.name,
+            "color": labeling.color,
+            "visible": labeling.visible,
+            "data": labeling.data,
+            "created_at": labeling.created_at,
+            "updated_at": labeling.updated_at
         }
     
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Labeling':
+    def dict_to_labeling(self, data: Dict[str, Any]) -> Labeling:
         """
-        Create a Labeling instance from a dictionary.
+        Convert a dictionary to a Labeling object.
         
         Args:
             data: Dictionary containing labeling data
             
         Returns:
-            Labeling: A new Labeling instance
+            Labeling object
         """
-        labeling = cls(
-            name=data.get("name", "Untitled Labeling"),
-            color=data.get("color", "#1f77b4"),
-            visible=data.get("visible", True),
-            data=data.get("data", {}),
-            id=data.get("id")
-        )
+        return Labeling.from_dict({
+            "id": data.get("labeling_id"),
+            "name": data.get("name", "Untitled Labeling"),
+            "color": data.get("color", "#1f77b4"),
+            "visible": data.get("visible", True),
+            "data": data.get("data", {}),
+            "created_at": data.get("created_at"),
+            "updated_at": data.get("updated_at")
+        })
+    
+    def export_labelings_json(self, labeling_ids: List[str] = None) -> Dict[str, Any]:
+        """
+        Export labelings to a JSON-serializable format.
         
-        # Handle timestamps if they exist
-        if "created_at" in data:
-            labeling.created_at = data["created_at"]
-        if "updated_at" in data:
-            labeling.updated_at = data["updated_at"]
+        Args:
+            labeling_ids: Optional list of specific labeling IDs to export.
+                         If None, exports all labelings.
             
-        return labeling
+        Returns:
+            Dictionary containing exported labelings data
+        """
+        try:
+            if labeling_ids:
+                # Get specific labelings
+                labelings = []
+                for labeling_id in labeling_ids:
+                    labeling = self.get_labeling_by_id(labeling_id)
+                    if labeling:
+                        labelings.append(labeling)
+            else:
+                # Get all labelings
+                labelings = self.get_all_labelings(visible_only=False)
+            
+            return {
+                "export_timestamp": datetime.now().isoformat(),
+                "export_version": "1.0",
+                "total_labelings": len(labelings),
+                "labelings": labelings
+            }
+            
+        except Exception as e:
+            raise DatabaseError(f'Failed to export labelings: {str(e)}')
+    
+    def import_labelings_json(self, import_data: Dict[str, Any], overwrite_existing: bool = False) -> Dict[str, Any]:
+        """
+        Import labelings from a JSON format.
+        
+        Args:
+            import_data: Dictionary containing labelings data to import
+            overwrite_existing: Whether to overwrite existing labelings with same ID
+            
+        Returns:
+            Dictionary with import results
+        """
+        if not isinstance(import_data, dict) or 'labelings' not in import_data:
+            raise ValueError("Invalid import data format")
+        
+        results = {
+            "imported": 0,
+            "skipped": 0,
+            "errors": []
+        }
+        
+        for labeling_data in import_data['labelings']:
+            try:
+                labeling_id = labeling_data.get('labeling_id')
+                
+                # Check if labeling already exists
+                existing = self.get_labeling_by_id(labeling_id) if labeling_id else None
+                
+                if existing and not overwrite_existing:
+                    results["skipped"] += 1
+                    continue
+                
+                # Create Labeling object
+                labeling = self.dict_to_labeling(labeling_data)
+                
+                if existing and overwrite_existing:
+                    # Update existing labeling
+                    success = self.update_labeling(labeling_id, {
+                        'name': labeling.name,
+                        'color': labeling.color,
+                        'visible': labeling.visible,
+                        'data': labeling.data
+                    })
+                    if success:
+                        results["imported"] += 1
+                    else:
+                        results["errors"].append(f"Failed to update labeling {labeling_id}")
+                else:
+                    # Create new labeling
+                    project_id = labeling_data.get('project_id')
+                    session_id = labeling_data.get('session_id')
+                    self.create_labeling(labeling, project_id, session_id)
+                    results["imported"] += 1
+                    
+            except Exception as e:
+                results["errors"].append(f"Error processing labeling: {str(e)}")
+        
+        return results

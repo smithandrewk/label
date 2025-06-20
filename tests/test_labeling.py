@@ -11,7 +11,7 @@ import os
 
 # Add parent directory to path to import the labeling_service module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from services.labeling_service import Labeling, LabelingValidationError
+from app.services.labeling_service import Labeling, LabelingValidationError
 
 
 class TestLabeling(unittest.TestCase):
