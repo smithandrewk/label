@@ -6,8 +6,8 @@
 - [x] Create Python class for Labeling with fields: id, name, color, visible, data
 
 ### Commit 2: Add type hints and validation methods
-- [ ] Add type hints to Labeling class
-- [ ] Create validation methods for labeling data
+- [x] Add type hints to Labeling class
+- [x] Create validation methods for labeling data
 
 ### Commit 3: Document the class structure
 - [ ] Add docstrings and comments to Labeling class
