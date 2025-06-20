@@ -32,7 +32,7 @@
 - [x] Add Flask routes for labelings API
 
 ### Commit 10: Define API response format
-- [ ] Create standard response format for labeling operations
+- [x] Create standard response format for labeling operations
 
 ### Commit 11: Add basic endpoint implementations
 - [ ] Implement initial GET endpoints for labelings

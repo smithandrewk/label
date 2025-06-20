@@ -8,6 +8,7 @@ labeling systems that can be overlaid on accelerometer data visualizations.
 Key components:
 - Labeling: Class representing a set of labels with visual properties
 - LabelingValidationError: Exception for validation errors
+- LabelingService: Service class for database operations
 
 Example usage:
     # Create a new labeling
@@ -30,6 +31,11 @@ Example usage:
             }
         ]
     })
+    
+    # Database operations
+    service = LabelingService(get_db_connection)
+    all_labelings = service.get_all_labelings()
+    project_labelings = service.get_labelings_for_project(project_id)
 """
 
 from typing import Dict, List, Optional, Any, Union
@@ -37,6 +43,7 @@ import uuid
 import json
 import re
 from datetime import datetime
+from app.exceptions import DatabaseError
 
 
 class LabelingValidationError(Exception):
@@ -53,6 +60,247 @@ class LabelingValidationError(Exception):
             print(f"Validation failed: {e}")
     """
     pass
+
+
+class LabelingService:
+    """
+    Service class for managing labeling database operations.
+    
+    This class provides methods for creating, reading, updating, and deleting
+    labelings in the database. It handles the conversion between database
+    records and Labeling objects.
+    """
+    
+    def __init__(self, get_db_connection=None):
+        """
+        Initialize the LabelingService.
+        
+        Args:
+            get_db_connection: Function to get database connection
+        """
+        self.get_db_connection = get_db_connection
+    
+    def get_all_labelings(self, visible_only=True) -> List[Dict[str, Any]]:
+        """
+        Get all labelings from the database.
+        
+        Args:
+            visible_only: If True, only return visible labelings
+            
+        Returns:
+            List of labeling dictionaries
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor(dictionary=True)
+        try:
+            # Build query based on visibility filter
+            if visible_only:
+                cursor.execute("""
+                    SELECT labeling_id, name, color, visible, data, project_id, session_id,
+                           created_at, updated_at
+                    FROM labelings
+                    WHERE visible = TRUE
+                    ORDER BY updated_at DESC
+                """)
+            else:
+                cursor.execute("""
+                    SELECT labeling_id, name, color, visible, data, project_id, session_id,
+                           created_at, updated_at
+                    FROM labelings
+                    ORDER BY updated_at DESC
+                """)
+            
+            labelings = cursor.fetchall()
+            
+            # Convert to proper format
+            for labeling in labelings:
+                if labeling['data'] is not None:
+                    labeling['data'] = json.loads(labeling['data']) if isinstance(labeling['data'], str) else labeling['data']
+                else:
+                    labeling['data'] = {}
+                    
+                # Convert timestamps to ISO format
+                labeling['created_at'] = labeling['created_at'].isoformat() if labeling['created_at'] else None
+                labeling['updated_at'] = labeling['updated_at'].isoformat() if labeling['updated_at'] else None
+            
+            return labelings
+            
+        except Exception as e:
+            raise DatabaseError(f'Failed to get labelings: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
+    
+    def get_labeling_by_id(self, labeling_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific labeling by ID.
+        
+        Args:
+            labeling_id: The unique identifier for the labeling
+            
+        Returns:
+            Labeling dictionary or None if not found
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT labeling_id, name, color, visible, data, project_id, session_id,
+                       created_at, updated_at
+                FROM labelings
+                WHERE labeling_id = %s
+            """, (labeling_id,))
+            
+            labeling = cursor.fetchone()
+            
+            if labeling:
+                # Convert JSON data
+                if labeling['data'] is not None:
+                    labeling['data'] = json.loads(labeling['data']) if isinstance(labeling['data'], str) else labeling['data']
+                else:
+                    labeling['data'] = {}
+                    
+                # Convert timestamps to ISO format
+                labeling['created_at'] = labeling['created_at'].isoformat() if labeling['created_at'] else None
+                labeling['updated_at'] = labeling['updated_at'].isoformat() if labeling['updated_at'] else None
+            
+            return labeling
+            
+        except Exception as e:
+            raise DatabaseError(f'Failed to get labeling: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
+    
+    def get_labelings_for_project(self, project_id: int, visible_only=True) -> List[Dict[str, Any]]:
+        """
+        Get all labelings for a specific project, including global labelings.
+        
+        Args:
+            project_id: The project ID
+            visible_only: If True, only return visible labelings
+            
+        Returns:
+            List of labeling dictionaries
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor(dictionary=True)
+        try:
+            # Get labelings for this project and global labelings
+            visibility_clause = "AND visible = TRUE" if visible_only else ""
+            
+            cursor.execute(f"""
+                SELECT labeling_id, name, color, visible, data, project_id, session_id,
+                       created_at, updated_at
+                FROM labelings
+                WHERE (project_id = %s OR project_id IS NULL) 
+                      AND session_id IS NULL
+                      {visibility_clause}
+                ORDER BY project_id IS NULL ASC, updated_at DESC
+            """, (project_id,))
+            
+            labelings = cursor.fetchall()
+            
+            # Convert to proper format
+            for labeling in labelings:
+                if labeling['data'] is not None:
+                    labeling['data'] = json.loads(labeling['data']) if isinstance(labeling['data'], str) else labeling['data']
+                else:
+                    labeling['data'] = {}
+                    
+                # Convert timestamps to ISO format
+                labeling['created_at'] = labeling['created_at'].isoformat() if labeling['created_at'] else None
+                labeling['updated_at'] = labeling['updated_at'].isoformat() if labeling['updated_at'] else None
+            
+            return labelings
+            
+        except Exception as e:
+            raise DatabaseError(f'Failed to get project labelings: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
+    
+    def get_labelings_for_session(self, session_id: int, project_id: int = None, visible_only=True) -> List[Dict[str, Any]]:
+        """
+        Get all labelings for a specific session, including project and global labelings.
+        
+        Args:
+            session_id: The session ID
+            project_id: The project ID (optional, will be fetched if not provided)
+            visible_only: If True, only return visible labelings
+            
+        Returns:
+            List of labeling dictionaries
+            
+        Raises:
+            DatabaseError: If database operation fails
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor(dictionary=True)
+        try:
+            # If project_id not provided, get it from session
+            if project_id is None:
+                cursor.execute("SELECT project_id FROM sessions WHERE session_id = %s", (session_id,))
+                session_info = cursor.fetchone()
+                if not session_info:
+                    raise DatabaseError(f'Session {session_id} not found')
+                project_id = session_info['project_id']
+            
+            # Get labelings for this session, project, and global labelings
+            visibility_clause = "AND visible = TRUE" if visible_only else ""
+            
+            cursor.execute(f"""
+                SELECT labeling_id, name, color, visible, data, project_id, session_id,
+                       created_at, updated_at
+                FROM labelings
+                WHERE (session_id = %s OR 
+                       (project_id = %s AND session_id IS NULL) OR 
+                       (project_id IS NULL AND session_id IS NULL))
+                      {visibility_clause}
+                ORDER BY session_id IS NULL ASC, project_id IS NULL ASC, updated_at DESC
+            """, (session_id, project_id))
+            
+            labelings = cursor.fetchall()
+            
+            # Convert to proper format
+            for labeling in labelings:
+                if labeling['data'] is not None:
+                    labeling['data'] = json.loads(labeling['data']) if isinstance(labeling['data'], str) else labeling['data']
+                else:
+                    labeling['data'] = {}
+                    
+                # Convert timestamps to ISO format
+                labeling['created_at'] = labeling['created_at'].isoformat() if labeling['created_at'] else None
+                labeling['updated_at'] = labeling['updated_at'].isoformat() if labeling['updated_at'] else None
+            
+            return labelings
+            
+        except Exception as e:
+            raise DatabaseError(f'Failed to get session labelings: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
 
 
 class Labeling:

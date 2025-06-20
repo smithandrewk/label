@@ -5,12 +5,104 @@ This module defines the API endpoints for managing labeling sets.
 """
 
 from flask import Blueprint, jsonify, request, current_app
-from app.services.labeling_service import Labeling, LabelingValidationError
+from app.services.labeling_service import Labeling, LabelingValidationError, LabelingService
 from app.exceptions import DatabaseError
 import json
 
 # Create a Blueprint for the labelings API
 labelings_bp = Blueprint('labelings', __name__)
+
+
+class LabelingController:
+    """Controller class for labeling operations."""
+    
+    def __init__(self, labeling_service: LabelingService):
+        self.labeling_service = labeling_service
+    
+    def get_all_labelings(self):
+        """Get all labelings available to the user."""
+        try:
+            visible_only = request.args.get('visible_only', 'true').lower() == 'true'
+            
+            try:
+                labelings = self.labeling_service.get_all_labelings(visible_only=visible_only)
+                return success_response(
+                    data=labelings,
+                    message=f"Retrieved {len(labelings)} labelings"
+                )
+            except DatabaseError as e:
+                return error_response(str(e), 500, "DATABASE_ERROR")
+                
+        except Exception as e:
+            return error_response(f"Failed to get labelings: {str(e)}", 500)
+    
+    def get_labeling(self, labeling_id):
+        """Get a specific labeling by ID."""
+        try:
+            try:
+                labeling = self.labeling_service.get_labeling_by_id(labeling_id)
+                if not labeling:
+                    return error_response("Labeling not found", 404, "NOT_FOUND")
+                
+                return success_response(
+                    data=labeling,
+                    message=f"Retrieved labeling: {labeling['name']}"
+                )
+            except DatabaseError as e:
+                return error_response(str(e), 500, "DATABASE_ERROR")
+                
+        except Exception as e:
+            return error_response(f"Failed to get labeling: {str(e)}", 500)
+    
+    def get_project_labelings(self, project_id):
+        """Get all labelings for a specific project."""
+        try:
+            visible_only = request.args.get('visible_only', 'true').lower() == 'true'
+            
+            try:
+                labelings = self.labeling_service.get_labelings_for_project(
+                    project_id=project_id, 
+                    visible_only=visible_only
+                )
+                return success_response(
+                    data=labelings,
+                    message=f"Retrieved {len(labelings)} labelings for project {project_id}"
+                )
+            except DatabaseError as e:
+                return error_response(str(e), 500, "DATABASE_ERROR")
+                
+        except Exception as e:
+            return error_response(f"Failed to get project labelings: {str(e)}", 500)
+    
+    def get_session_labelings(self, session_id):
+        """Get all labelings for a specific session."""
+        try:
+            visible_only = request.args.get('visible_only', 'true').lower() == 'true'
+            
+            try:
+                labelings = self.labeling_service.get_labelings_for_session(
+                    session_id=session_id, 
+                    visible_only=visible_only
+                )
+                return success_response(
+                    data=labelings,
+                    message=f"Retrieved {len(labelings)} labelings for session {session_id}"
+                )
+            except DatabaseError as e:
+                return error_response(str(e), 500, "DATABASE_ERROR")
+                
+        except Exception as e:
+            return error_response(f"Failed to get session labelings: {str(e)}", 500)
+
+
+# Global controller instance
+controller = None
+
+
+def init_controller(labeling_service):
+    """Initialize the controller with dependencies."""
+    global controller
+    controller = LabelingController(labeling_service)
 
 # Standard API response format utilities
 def success_response(data=None, message="Success", status_code=200):
@@ -46,14 +138,12 @@ def validation_error_response(message, field=None):
 
 # ----- Endpoints for global labelings -----
 
+# ----- Endpoints for global labelings -----
+
 @labelings_bp.route('/api/labelings', methods=['GET'])
 def get_all_labelings():
     """Get all labelings available to the user."""
-    # TODO: Implement in a future commit
-    return success_response(
-        data=[],
-        message="Get all labelings endpoint (to be implemented)"
-    )
+    return controller.get_all_labelings()
 
 @labelings_bp.route('/api/labelings', methods=['POST'])
 def create_labeling():
@@ -68,11 +158,7 @@ def create_labeling():
 @labelings_bp.route('/api/labelings/<labeling_id>', methods=['GET'])
 def get_labeling(labeling_id):
     """Get a specific labeling by ID."""
-    # TODO: Implement in a future commit
-    return success_response(
-        data={"id": labeling_id, "name": "Temporary Labeling"},
-        message=f"Get labeling endpoint for ID: {labeling_id} (to be implemented)"
-    )
+    return controller.get_labeling(labeling_id)
 
 @labelings_bp.route('/api/labelings/<labeling_id>', methods=['PUT'])
 def update_labeling(labeling_id):
@@ -97,11 +183,7 @@ def delete_labeling(labeling_id):
 @labelings_bp.route('/api/projects/<int:project_id>/labelings', methods=['GET'])
 def get_project_labelings(project_id):
     """Get all labelings for a specific project."""
-    # TODO: Implement in a future commit
-    return success_response(
-        data=[],
-        message=f"Get labelings for project ID: {project_id} (to be implemented)"
-    )
+    return controller.get_project_labelings(project_id)
 
 @labelings_bp.route('/api/projects/<int:project_id>/labelings', methods=['POST'])
 def create_project_labeling(project_id):
@@ -118,11 +200,7 @@ def create_project_labeling(project_id):
 @labelings_bp.route('/api/sessions/<int:session_id>/labelings', methods=['GET'])
 def get_session_labelings(session_id):
     """Get all labelings for a specific session."""
-    # TODO: Implement in a future commit
-    return success_response(
-        data=[],
-        message=f"Get labelings for session ID: {session_id} (to be implemented)"
-    )
+    return controller.get_session_labelings(session_id)
 
 @labelings_bp.route('/api/sessions/<int:session_id>/labelings', methods=['POST'])
 def create_session_labeling(session_id):
