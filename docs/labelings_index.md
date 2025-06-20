@@ -22,7 +22,7 @@ The following SQL migration scripts have been created to implement the schema ch
 
 ## API Documentation
 
-*Note: API documentation will be added in future commits.*
+1. [**Labeling API Documentation**](labeling_api.md) - Comprehensive API documentation for all labeling endpoints, including request/response formats, examples, and error codes.
 
 ## Frontend Documentation
 

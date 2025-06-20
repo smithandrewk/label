@@ -35,7 +35,7 @@
 - [x] Create standard response format for labeling operations
 
 ### Commit 11: Add basic endpoint implementations
-- [ ] Implement initial GET endpoints for labelings
+- [x] Implement initial GET endpoints for labelings
 
 ### Commit 12: Document API endpoints
 - [ ] Create API documentation for labeling endpoints
