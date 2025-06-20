@@ -328,22 +328,7 @@ class SessionService:
             gap_indices = [0] + gap_indices + [len(df)]
             child_session_start_end_indices = [[start,end] for start,end in zip(gap_indices[:-1], gap_indices[1:])]
 
-            split_points = []
-            for idx in gap_indices:
-                if idx > 0 and idx < len(df) - 1:
-                    split_points.append(float(df.loc[idx, 'ns_since_reboot']))
-            split_points = sorted(set(float(p) for p in split_points))
-            split_indices = []
-            for point in split_points:
-                df['time_diff'] = abs(df['ns_since_reboot'] - point)
-                split_index = df['time_diff'].idxmin()
-                if split_index > 0 and split_index < len(df) - 1:
-                    split_indices.append(split_index)
-            split_indices = sorted(set(split_indices))
-            split_indices = [0] + split_indices + [len(df)]
-            
-            # If len(split_indices) < 2, it means no valid splits were found
-            if len(split_indices) <= 2:
+            if len(gap_indices) <= 2:
                 print(f"No valid time gaps found in session {session_name}, skipping auto-split.")
                 # Insert as a single session with no parent (it is the original data source)
                 cursor = conn.cursor()
@@ -354,12 +339,11 @@ class SessionService:
                 cursor.close()
                 return [session_name]
             
-            # Print gap indices
-            print(f"Found {len(gap_indices)} time gaps, split indices: {split_indices}")
+            print(f"Found {len(gap_indices)} time gaps, split indices: {gap_indices}")
             segments = []
-            for i in range(len(split_indices) - 1):
-                start_index = split_indices[i]
-                end_index = split_indices[i + 1]
+            for i in range(len(gap_indices) - 1):
+                start_index = gap_indices[i]
+                end_index = gap_indices[i + 1]
                 if start_index < end_index:
                     segment_df = df.iloc[start_index:end_index]
                     if not segment_df.empty:
@@ -417,7 +401,7 @@ class SessionService:
                         segment_bouts[i].append(adjusted_bout)
                         break
             
-            # Create new session names and directories
+            # Create new virtual sessions using start_idx/stop_idx (no physical file creation)
             new_sessions = []
             cursor = conn.cursor()
             
@@ -426,36 +410,18 @@ class SessionService:
 
                 # Generate unique name
                 new_name = self.generate_unique_session_name_upload(session_name, project_path, conn, project_id)
-                new_dir = os.path.join(project_path, new_name)
-                
-                # Create directory and save CSV
-                os.makedirs(new_dir, exist_ok=True)
-                segment.to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
-                
-                # Copy log file if it exists
-                log_path = os.path.join(project_path, session_name, 'log.csv')
-                if os.path.exists(log_path):
-                    shutil.copy(log_path, os.path.join(new_dir, 'log.csv'))
-                    
-                # Copy labels.json file if it exists
-                labels_path = os.path.join(project_path, session_name, 'labels.json')
-                if os.path.exists(labels_path):
-                    shutil.copy(labels_path, os.path.join(new_dir, 'labels.json'))
                 
                 # Use original session as parent for all split children
                 parent_session_name = session_name
                 
-                # Insert session into database with proper parent reference
+                # Insert virtual session into database - references data via start_idx/stop_idx
                 cursor.execute("""
                     INSERT INTO sessions (project_id, session_name, parent_name, status, keep, bouts, start_idx, stop_idx)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (project_id, new_name, parent_session_name, 'Initial', None, json.dumps(segment_bouts[i]), start_idx, stop_idx))
                 new_sessions.append(new_name)
             
-            # Remove the original session directory
-            original_dir = os.path.join(project_path, session_name)
-            if os.path.exists(original_dir):
-                shutil.rmtree(original_dir)
+            # Note: Original session directory and files remain intact as the data source
             
             return new_sessions
             
