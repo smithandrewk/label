@@ -1,3 +1,37 @@
+"""
+Labeling Service Module
+
+This module provides classes and utilities for managing labelings in the accelerometer 
+data visualization application. It defines the data structure for representing multiple
+labeling systems that can be overlaid on accelerometer data visualizations.
+
+Key components:
+- Labeling: Class representing a set of labels with visual properties
+- LabelingValidationError: Exception for validation errors
+
+Example usage:
+    # Create a new labeling
+    basic_labeling = Labeling(name="Activity Labels")
+    
+    # Create a labeling with custom properties
+    custom_labeling = Labeling(
+        name="Custom Activity Labels",
+        color="#FF5733",
+        visible=True
+    )
+    
+    # Add data to the labeling
+    custom_labeling.update(data={
+        "timestamps": [
+            {
+                "start": 1000.0, 
+                "end": 1500.0, 
+                "label": "walking"
+            }
+        ]
+    })
+"""
+
 from typing import Dict, List, Optional, Any, Union
 import uuid
 import json
@@ -6,7 +40,18 @@ from datetime import datetime
 
 
 class LabelingValidationError(Exception):
-    """Exception raised for validation errors in the Labeling class."""
+    """
+    Exception raised for validation errors in the Labeling class.
+    
+    This exception is raised when validation fails for Labeling attributes
+    during initialization or updates.
+    
+    Example:
+        try:
+            labeling = Labeling(name="", color="invalid-color")
+        except LabelingValidationError as e:
+            print(f"Validation failed: {e}")
+    """
     pass
 
 
@@ -18,12 +63,35 @@ class Labeling:
     be overlaid on accelerometer data visualizations. It contains properties to
     manage the visual representation and data of the labels.
     
+    A labeling object consists of:
+    1. Metadata (id, name, color, visibility status)
+    2. Label data containing timestamp ranges and associated labels
+    3. Creation and update timestamps for tracking changes
+    
+    Key functionalities:
+    - Create and manage labeling sets with visual properties
+    - Validate labeling data structure
+    - Convert to/from dictionary format for storage and transmission
+    - Update properties with validation
+    
     Attributes:
         id (str): Unique identifier for the labeling set
         name (str): Display name of the labeling set
         color (str): Hex color code for visual representation of this labeling set
         visible (bool): Whether this labeling set is currently visible in the UI
         data (dict): The actual label data containing timestamp ranges and labels
+        created_at (str): ISO-formatted timestamp of creation
+        updated_at (str): ISO-formatted timestamp of last update
+    
+    Example:
+        # Create a basic labeling
+        labeling = Labeling(name="Activity Labels")
+        
+        # Convert to dictionary for storage
+        data = labeling.to_dict()
+        
+        # Later, reconstruct the labeling
+        reconstructed = Labeling.from_dict(data)
     """
     
     def __init__(

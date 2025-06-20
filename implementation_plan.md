@@ -10,8 +10,8 @@
 - [x] Create validation methods for labeling data
 
 ### Commit 3: Document the class structure
-- [ ] Add docstrings and comments to Labeling class
-- [ ] Create usage examples
+- [x] Add docstrings and comments to Labeling class
+- [x] Create usage examples
 
 ### Commit 4: Add unit tests for the data model
 - [ ] Write tests for Labeling class creation and validation
