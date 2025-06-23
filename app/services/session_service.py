@@ -330,9 +330,21 @@ class SessionService:
             gap_indices = time_diffs[time_diffs > gap_threshold_ns].index
 
             if len(gap_indices) == 0:
+                print("no gaps!")
                 df = resample(df)
                 df.to_csv(csv_path, index=False)
-                return self._insert_single_session(session_name, project_id, bouts_json, conn)
+                print(bouts_json)
+                # Parse bouts data
+                try:
+                    parent_bouts = json.loads(bouts_json or '[]')
+                    if isinstance(parent_bouts, str):
+                        parent_bouts = json.loads(parent_bouts)
+                except json.JSONDecodeError:
+                    parent_bouts = []
+
+                segment_bouts = [{'start':segment_bout[0],'end':segment_bout[1],'label':'smoking'} for segment_bout in segment_bouts]
+                
+                return self._insert_single_session(session_name, project_id, json.dumps(segment_bouts), conn)
 
             split_points = []
             for idx in gap_indices:
@@ -406,7 +418,8 @@ class SessionService:
                         adjusted_bout = [float(segment_start), float(segment_end)]
                         segment_bouts[i].append(adjusted_bout)
                         break
-            
+
+
             # Create new session names and directories
             new_sessions = []
             cursor = conn.cursor()
@@ -429,6 +442,8 @@ class SessionService:
                 labels_path = os.path.join(project_path, session_name, 'labels.json')
                 if os.path.exists(labels_path):
                     shutil.copy(labels_path, os.path.join(new_dir, 'labels.json'))
+                
+                segment_bouts[i] = [{'start':segment_bout[0],'end':segment_bout[1],'label':'smoking'} for segment_bout in segment_bouts[i]]
                 
                 # Insert session into database
                 cursor.execute("""

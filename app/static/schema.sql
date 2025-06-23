@@ -17,7 +17,8 @@ CREATE TABLE projects (
     watch_returned_at TIMESTAMP NULL, -- Date when participant returns the watch
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (participant_id) REFERENCES participants(participant_id) ON DELETE RESTRICT,
-    UNIQUE (participant_id, project_name) -- Ensure unique project names per participant
+    UNIQUE (participant_id, project_name), -- Ensure unique project names per participant
+    labelings JSON
 );
 
 CREATE TABLE sessions (

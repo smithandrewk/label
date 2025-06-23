@@ -292,7 +292,6 @@ class ProjectController:
                 
             while upload_id in self.session_service.upload_progress:
                 progress_data = self.session_service.upload_progress[upload_id]
-                print(f"Sending progress update for {upload_id}: {progress_data}")
                 yield f"data: {json.dumps(progress_data)}\n\n"
                 
                 # If upload is complete, send final message and stop

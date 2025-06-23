@@ -641,8 +641,6 @@ function showTableView() {
 
 // Show visualization view
 async function visualizeSession(sessionId) {
-    console.log(`Attempting to visualize session: ${sessionId}`);
-    
     // If we're already viewing a session and switching to another, save changes first
     if (currentSessionId && currentSessionId !== sessionId) {
         const currentSession = sessions.find(s => s.session_id == currentSessionId);
@@ -725,6 +723,15 @@ async function visualizeSession(sessionId) {
         updateSessionsList();
     }
 
+    // If currentSelectedLabeling is "No Labeling", set it to the first available labeling
+    if (currentSelectedLabeling === "No Labeling") {
+        const availableLabelings = Object.keys(session.labelings || {});
+        console.log('Available labelings:', availableLabelings);
+        if (availableLabelings.length > 0) {
+            currentSelectedLabeling = availableLabelings[0];
+        }
+    }
+    console.log(currentSelectedLabeling)
     const actionButtons = document.getElementById("action-buttons");
     actionButtons.innerHTML = "";
     actionButtons.innerHTML += `
@@ -825,6 +832,42 @@ async function visualizeSession(sessionId) {
         toggleSplitMode();
     });
 
+    // Add event listeners for the clickable current labeling name
+    const current_labeling_name = document.getElementById('current-labeling-name');
+    if (current_labeling_name) {
+        // Hover effects
+        current_labeling_name.addEventListener('mouseenter', () => {
+            current_labeling_name.style.background = 'rgba(0, 123, 255, 0.2)';
+            current_labeling_name.style.transform = 'scale(1.02)';
+        });
+        
+        current_labeling_name.addEventListener('mouseleave', () => {
+            current_labeling_name.style.background = 'rgba(0, 123, 255, 0.1)';
+            current_labeling_name.style.transform = 'scale(1)';
+        });
+        
+        // Click to open labeling modal
+        current_labeling_name.addEventListener('click', function() {
+            const labelModal = document.getElementById('labelingModal');
+            if (labelModal) {
+                const modal = new bootstrap.Modal(labelModal);
+                modal.show();
+            } else {
+                console.error('Label Modal not found');
+            }
+        });
+    }
+
+    const score_btn_overlay = document.getElementById('score-btn-overlay');
+    score_btn_overlay.addEventListener('mouseenter', () => {
+        score_btn_overlay.style.background = 'rgba(0, 0, 0, 0.1)';
+    });
+    score_btn_overlay.addEventListener('mouseleave', () => {
+        score_btn_overlay.style.background ='rgba(224, 224, 224, 0)';
+    });
+    score_btn_overlay.addEventListener('click', function() {
+        scoreSession(sessionId);
+    });
     // Add event listeners for verified button in visualization view
     const verified_btn_overlay_viz = document.getElementById('verified-btn-overlay-viz');
     const verified_btn_viz = document.getElementById('verified-btn-viz');
@@ -903,14 +946,22 @@ async function visualizeSession(sessionId) {
 
     Plotly.newPlot('timeSeriesPlot', traces, layout).then(() => {
         const plotDiv = document.getElementById('timeSeriesPlot');
-        console.log(session.bouts);
 
         ensureSessionBoutsIsArray(session);
+
         const overlays = session.bouts.map((bout, index) => createBoutOverlays(index, container));
         // Update all overlay positions
         function updateAllOverlayPositions() {
             console.log('Updating overlay positions');
-            session.bouts.forEach((bout, index) => updateOverlayPositions(plotDiv, bout, index));
+            session.bouts.forEach((bout, index) => {
+                // Only show overlays for bouts that match the currently selected labeling
+                if (bout['label'] === currentSelectedLabeling) {
+                    updateOverlayPositions(plotDiv, bout, index);
+                } else {
+                    // Hide overlays that don't match the current labeling
+                    hideOverlay(index);
+                }
+            });
         }
         updateAllOverlayPositions();
 
@@ -961,7 +1012,227 @@ async function visualizeSession(sessionId) {
 function pixelToData(pixelX, xAxis) {
     return xAxis.range[0] + (pixelX - xAxis._offset) * (xAxis.range[1] - xAxis.range[0]) / xAxis._length;
 }
+// When opening the modal
+document.getElementById('labelingModal').addEventListener('show.bs.modal', function() {
+    console.log('Labeling modal opened');
+    fetchAndDisplayLabelings(currentProjectId);
+});
 
+async function createNewLabeling() {
+    // Show a prompt to get the new labeling name
+    const labelingName = prompt('Enter a name for the new labeling:');
+    
+    if (labelingName && labelingName.trim()) {
+        try {
+            // Make API call to create new labeling
+            const response = await fetch(`/api/labelings/${currentProjectId}/update`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: labelingName.trim(),
+                    labels: {}  // Initialize with empty labels structure
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('New labeling created:', result);
+            
+            // Refresh the labelings list to show the new labeling
+            await fetchAndDisplayLabelings(currentProjectId);
+            
+            // Select the new labeling immediately
+            selectLabeling(labelingName.trim());
+            
+        } catch (error) {
+            console.error('Error creating new labeling:', error);
+            alert('Failed to create new labeling. Please try again.');
+        }
+    }
+}
+// You can also initialize it in the DOMContentLoaded event listener
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize the global variable
+    labelingsList = document.getElementById('available-labelings-list');
+    
+    if (labelingsList) {
+        // Handle clicks on the plus icon
+        labelingsList.addEventListener('click', function(event) {
+            if (event.target.classList.contains('fa-plus')) {
+                event.preventDefault();
+                createNewLabeling();
+            }
+        });
+        
+        // Handle hover effects on the plus icon
+        labelingsList.addEventListener('mouseenter', function(event) {
+            if (event.target.classList.contains('fa-plus')) {
+                event.target.style.background = 'rgba(0,0,0,0.1)';
+                event.target.style.borderRadius = '50%';
+                event.target.style.padding = '4px';
+                event.target.style.cursor = 'pointer';
+            }
+        }, true);
+        
+        labelingsList.addEventListener('mouseleave', function(event) {
+            if (event.target.classList.contains('fa-plus')) {
+                event.target.style.background = 'rgba(224,224,224,0)';
+            }
+        }, true);
+    }
+});
+async function fetchAndDisplayLabelings(projectId) {
+    try {
+        const response = await fetch(`/api/labelings/${projectId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        labelingsList = document.getElementById('available-labelings-list');
+        
+        // Reset current labeling header when refreshing the list
+        updateCurrentLabelingHeader();
+        
+        // Clear existing content except the plus icon
+        const plusIcon = labelingsList.querySelector('.fa-plus');
+        labelingsList.innerHTML = '';
+        if (plusIcon) {
+            labelingsList.appendChild(plusIcon);
+        }
+        
+        // Parse the labelings JSON string
+        let labelings = [];
+        if (data.length > 0 && data[0].labelings) {
+            try {
+                labelings = JSON.parse(data[0].labelings);
+            } catch (e) {
+                console.error('Error parsing labelings JSON:', e);
+                labelings = [];
+            }
+        }
+
+        console.log('Parsed labelings:', labelings);
+        console.log(typeof(labelings))
+        // Display each labeling
+        if (labelings && labelings.length > 0) {
+            labelings.forEach((labeling, index) => {
+                console.log(typeof(labeling))
+                console.log('Labeling item:', labeling.name);
+                const currentColor = labeling.color || generateDefaultColor(index);
+                labeling = labeling.name;
+                const labelingItem = document.createElement('div');
+                labelingItem.className = 'labeling-item d-flex justify-content-between align-items-center py-1';
+
+                labelingItem.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <div class="color-picker-container me-2" style="position: relative;">
+                            <div class="color-circle" style="width: 20px; height: 20px; border-radius: 50%; background-color: ${currentColor}; border: 1px solid #ccc; cursor: pointer;" onclick="openColorPicker('${labeling}', this)"></div>
+                            <input type="color" class="color-picker" value="${currentColor}" style="position: absolute; opacity: 0; width: 20px; height: 20px; cursor: pointer;" onchange="updateLabelingColor('${labeling}', this.value, this)">
+                        </div>
+                        <span>${labeling}</span>
+                    </div>
+                    <div class="labeling-actions d-flex">
+                        <button class="btn btn-sm btn-outline-primary" onclick="selectLabeling('${labeling}')">
+                            Select
+                        </button>
+                    </div>
+                `;
+                labelingsList.appendChild(labelingItem);
+            });
+        } else {
+            const noLabelings = document.createElement('div');
+            noLabelings.className = 'text-muted small';
+            noLabelings.textContent = 'No labelings available';
+            labelingsList.appendChild(noLabelings);
+        }
+        
+    } catch (error) {
+        console.error('Error fetching labelings:', error);
+        const labelingsList = document.getElementById('available-labelings-list');
+        labelingsList.innerHTML = '<div class="text-danger small">Error loading labelings</div>';
+    }
+}
+
+function selectLabeling(labelingName) {
+    currentSelectedLabeling = labelingName;
+
+    // Update the current labeling input
+    // document.getElementById('cur').value = labelingName;
+    
+    // Update the current labeling header in modal
+    updateCurrentLabelingHeader(labelingName);
+    
+    // Update the current labeling name in visualization view with color and maintain interactivity
+    const currentLabelingNameElement = document.getElementById('current-labeling-name');
+    if (currentLabelingNameElement) {
+        const labelingColors = JSON.parse(localStorage.getItem('labelingColors') || '{}');
+        const labelingColor = labelingColors[labelingName] || generateDefaultColor(0);
+        
+        currentLabelingNameElement.innerHTML = `
+            <div class="color-circle me-1" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${labelingColor}; border: 1px solid #ccc; display: inline-block;"></div>
+            ${labelingName}
+        `;
+        
+        // Maintain the cursor pointer and transition styles
+        currentLabelingNameElement.style.cursor = 'pointer';
+        currentLabelingNameElement.style.transition = 'background-color 0.2s ease, transform 0.1s ease';
+    }
+    
+    // If we're in visualization view, update the overlays to show only bouts matching this labeling
+    if (dragContext.currentSession && dragContext.currentSession.bouts) {
+        const plotDiv = document.getElementById('timeSeriesPlot');
+        if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
+            dragContext.currentSession.bouts.forEach((bout, index) => {
+                if (bout['label'] === currentSelectedLabeling) {
+                    updateOverlayPositions(plotDiv, bout, index);
+                } else {
+                    hideOverlay(index);
+                }
+            });
+        }
+    }
+    
+    // You can add more logic here for what happens when a labeling is selected
+}
+
+function updateCurrentLabelingHeader(labelingName = null) {
+    const displayName = labelingName || currentSelectedLabeling;
+
+    // Update modal header
+    const currentLabelingHeader = document.getElementById('current-labeling-header');
+    if (currentLabelingHeader) {
+        if (displayName && displayName !== 'No Labeling') {
+            currentLabelingHeader.textContent = `Current Labeling: ${displayName}`;
+        } else {
+            currentLabelingHeader.textContent = 'Current Labeling: None Selected';
+        }
+    }
+    
+    // Update visualization view name display
+    const currentLabelingNameElement = document.getElementById('current-labeling-name');
+    if (currentLabelingNameElement) {
+        if (displayName && displayName !== 'No Labeling') {
+            const labelingColors = JSON.parse(localStorage.getItem('labelingColors') || '{}');
+            const labelingColor = labelingColors[displayName] || generateDefaultColor(0);
+            
+            currentLabelingNameElement.innerHTML = `
+                <div class="color-circle me-1" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${labelingColor}; border: 1px solid #ccc; display: inline-block;"></div>
+                ${displayName}
+            `;
+        } else {
+            currentLabelingNameElement.textContent = 'No Labeling';
+        }
+        
+        // Always maintain the interactive styling
+        currentLabelingNameElement.style.cursor = 'pointer';
+        currentLabelingNameElement.style.transition = 'background-color 0.2s ease, transform 0.1s ease';
+    }
+}
 function createBoutOverlays(index, container) {
     const dragOverlay = document.createElement('div');
     dragOverlay.id = `drag-overlay-${index}`;
@@ -988,6 +1259,7 @@ function createBoutOverlays(index, container) {
     let startX = 0;
     let originalLeft = 0;
     let originalWidth = 0;
+    let hasMovedBout = false; // Track if bout was actually moved
     
     // Add double-click event to remove the bout
     dragOverlay.addEventListener('dblclick', function() {
@@ -1021,6 +1293,7 @@ function createBoutOverlays(index, container) {
     // Element-specific mouse events for dragging
     dragOverlay.addEventListener('mousedown', function(e) {
         isDragging = true;
+        hasMovedBout = false; // Reset movement flag
         startX = e.clientX;
         originalLeft = parseInt(dragOverlay.style.left) || 0;
         originalWidth = parseInt(dragOverlay.style.width) || 0;
@@ -1033,6 +1306,7 @@ function createBoutOverlays(index, container) {
     // Mouse handlers for left and right resizing
     leftOverlay.addEventListener('mousedown', function(e) {
         isResizingLeft = true;
+        hasMovedBout = false; // Reset movement flag
         startX = e.clientX;
         originalLeft = parseInt(dragOverlay.style.left) || 0;
         originalWidth = parseInt(dragOverlay.style.width) || 0;
@@ -1045,6 +1319,7 @@ function createBoutOverlays(index, container) {
     
     rightOverlay.addEventListener('mousedown', function(e) {
         isResizingRight = true;
+        hasMovedBout = false; // Reset movement flag
         startX = e.clientX;
         originalLeft = parseInt(dragOverlay.style.left) || 0;
         originalWidth = parseInt(dragOverlay.style.width) || 0;
@@ -1068,6 +1343,11 @@ function createBoutOverlays(index, container) {
                 const dx = e.clientX - startX;
                 dragOverlay.style.left = `${originalLeft + dx}px`;
                 
+                // Mark that the bout has moved if there's significant movement
+                if (Math.abs(dx) > 2) {
+                    hasMovedBout = true;
+                }
+                
                 // Convert pixel position back to data coordinates
                 const newX0 = pixelToData(originalLeft + dx, xAxis);
                 const newX1 = pixelToData(originalLeft + originalWidth + dx, xAxis);
@@ -1088,6 +1368,11 @@ function createBoutOverlays(index, container) {
                 // Prevent width from becoming negative
                 if (newWidth <= 10) return;
                 
+                // Mark that the bout has moved if there's significant movement
+                if (Math.abs(dx) > 2) {
+                    hasMovedBout = true;
+                }
+                
                 dragOverlay.style.left = `${newLeft}px`;
                 dragOverlay.style.width = `${newWidth}px`;
                 leftOverlay.style.left = `${newLeft}px`;
@@ -1107,6 +1392,11 @@ function createBoutOverlays(index, container) {
                 // Prevent width from becoming negative
                 if (newWidth <= 10) return;
                 
+                // Mark that the bout has moved if there's significant movement
+                if (Math.abs(dx) > 2) {
+                    hasMovedBout = true;
+                }
+                
                 dragOverlay.style.width = `${newWidth}px`;
                 rightOverlay.style.left = `${originalLeft + newWidth - parseInt(rightOverlay.style.width || 10)}px`;
                 
@@ -1122,7 +1412,10 @@ function createBoutOverlays(index, container) {
             isDragging = isResizingLeft = isResizingRight = false;
             if (dragOverlay) dragOverlay.style.cursor = 'move';
 
-            saveBoutChanges().catch(err => console.error('Error in saveBoutChanges:', err));
+            // Only save bout changes if the bout was actually moved
+            if (hasMovedBout) {
+                saveBoutChanges().catch(err => console.error('Error in saveBoutChanges:', err));
+            }
             
             // Remove the temporary handlers
             document.removeEventListener('mousemove', mouseMoveHandler);
@@ -1154,8 +1447,8 @@ function createBoutOverlays(index, container) {
     function updateBoutData(boutIndex, x0, x1) {
         if (dragContext.currentSession && dragContext.currentSession.bouts) {
             if (dragContext.currentSession.bouts[boutIndex]) {
-                dragContext.currentSession.bouts[boutIndex][0] = x0;
-                dragContext.currentSession.bouts[boutIndex][1] = x1;
+                dragContext.currentSession.bouts[boutIndex]['start'] = x0;
+                dragContext.currentSession.bouts[boutIndex]['end'] = x1;
                 console.log(`Updated bout ${boutIndex} to [${x0}, ${x1}]`);
             } else {
                 console.error(`Bout index ${boutIndex} not found in session ${dragContext.currentSession.name}`);
@@ -1197,25 +1490,41 @@ function updateOverlayPositions(plotDiv, bout, index) {
         console.error('Plot layout not available');
         return;
     }
+    const bout_start = bout['start'];
+    const bout_end = bout['end'];
+    const bout_label = bout['label'];
 
-    // Get axis object from Plotly layout
-    const xAxis = plotDiv._fullLayout.xaxis;
-    const yAxis = plotDiv._fullLayout.yaxis;
-    
-    // Convert data coordinates to pixel positions
-    const pixelX0 = xAxis._length * (bout[0] - xAxis.range[0]) / (xAxis.range[1] - xAxis.range[0]) + xAxis._offset;
-    const pixelX1 = xAxis._length * (bout[1] - xAxis.range[0]) / (xAxis.range[1] - xAxis.range[0]) + xAxis._offset;
-    
     // Get the overlay elements
     const dragOverlay = document.getElementById(`drag-overlay-${index}`);
     const leftOverlay = document.getElementById(`left-overlay-${index}`);
     const rightOverlay = document.getElementById(`right-overlay-${index}`);
     
     if (!dragOverlay || !leftOverlay || !rightOverlay) return;
+
+    // Only show and position overlays for the currently selected labeling
+    if (bout_label !== currentSelectedLabeling) {
+        hideOverlay(index);
+        return;
+    }
+
+    // Show overlays (in case they were hidden)
+    dragOverlay.style.display = 'block';
+    leftOverlay.style.display = 'block';
+    rightOverlay.style.display = 'block';
+
+    // Get axis object from Plotly layout
+    const xAxis = plotDiv._fullLayout.xaxis;
+    const yAxis = plotDiv._fullLayout.yaxis;
+    
+    // Convert data coordinates to pixel positions
+    const pixelX0 = xAxis._length * (bout_start - xAxis.range[0]) / (xAxis.range[1] - xAxis.range[0]) + xAxis._offset;
+    const pixelX1 = xAxis._length * (bout_end - xAxis.range[0]) / (xAxis.range[1] - xAxis.range[0]) + xAxis._offset;
     
     // Set handle size
     const handleWidth = 20;
     const handleHeight = yAxis._length;
+    
+    const labelingColors = JSON.parse(localStorage.getItem('labelingColors') || '{}');
     
     // Set main overlay position and size
     dragOverlay.style.position = 'absolute';
@@ -1223,7 +1532,7 @@ function updateOverlayPositions(plotDiv, bout, index) {
     dragOverlay.style.width = `${pixelX1 - pixelX0}px`;
     dragOverlay.style.top = `${yAxis._offset}px`;
     dragOverlay.style.height = `${handleHeight}px`;
-    dragOverlay.style.backgroundColor = 'rgba(127, 249, 61, 0.2)';
+    dragOverlay.style.backgroundColor = labelingColors[bout_label]+"77" || 'rgba(0, 0, 255, 0.5)'; // Use the color for the bout label
     dragOverlay.style.border = '2px solid black';
     
     // Set left handle position and size
@@ -1246,6 +1555,18 @@ function updateOverlayPositions(plotDiv, bout, index) {
     rightOverlay.style.cursor = 'e-resize';
     rightOverlay.style.zIndex = '1000';
 }
+
+// Helper function to hide overlay that doesn't match current labeling
+function hideOverlay(index) {
+    const dragOverlay = document.getElementById(`drag-overlay-${index}`);
+    const leftOverlay = document.getElementById(`left-overlay-${index}`);
+    const rightOverlay = document.getElementById(`right-overlay-${index}`);
+    
+    if (dragOverlay) dragOverlay.style.display = 'none';
+    if (leftOverlay) leftOverlay.style.display = 'none';
+    if (rightOverlay) rightOverlay.style.display = 'none';
+}
+
 // Toggle splitting mode
 function toggleSplitMode() {
     isSplitting = !isSplitting;
@@ -1452,7 +1773,19 @@ function createNewBout() {
     // Create a bout that is 25% of the visible range (12.5% on each side of the midpoint)
     const visibleRange = visibleMax - visibleMin;
     const boutHalfWidth = (visibleRange * 0.25) / 2;
-    const newBout = [middleTimestamp - boutHalfWidth, middleTimestamp + boutHalfWidth];
+
+    // Get current labeling name
+    const currentLabelingElement = document.getElementById('current-labeling-name');
+    let currentLabelingName = '';
+    
+    if (currentLabelingElement) {
+        // Extract text content, removing any HTML elements
+        const textContent = currentLabelingElement.textContent || currentLabelingElement.innerText;
+        currentLabelingName = textContent.trim();
+    }
+
+    // Create a 480s wide bout (240s on each side of the midpoint)
+    const newBout = {'start':middleTimestamp - boutHalfWidth,'end':middleTimestamp + boutHalfWidth,'label':currentLabelingName};
     
     // Add the bout to the session and maintain view state
     addBoutToSession(newBout, currentViewState);
@@ -1492,39 +1825,6 @@ function addBoutToSession(newBout, viewState = null) {
     }
 }
 
-// Global drag context
-const dragContext = {
-    currentSession: null  // Will store the session being modified
-};
-// Add at the top of your file
-const activeHandlers = [];
-
-// Create global reference to these handlers so we can remove them
-let sessions = [];
-// Add this variable to track the current project
-let currentProjectId = null;
-let currentSessionId = null;
-let currentActiveSession = null;
-let isSplitting = false;
-let activeUploadId = null; // Track active upload
-let splitPoints = [];
-let minTimestamp = null;
-let maxTimestamp = null;
-
-// Make functions available globally for inline event handlers
-window.visualizeSession = visualizeSession;
-window.scoreSession = scoreSession;
-window.showTableView = showTableView;
-window.decideSession = decideSession;
-window.toggleSplitMode = toggleSplitMode;
-window.toggleVerifiedStatus = toggleVerifiedStatus;
-window.splitSession = splitSession;
-window.createNewBout = createNewBout;
-window.showCreateProjectForm = showCreateProjectForm;
-window.createNewProject = createNewProject;
-window.navigateToNextSession = navigateToNextSession;
-window.navigateToPreviousSession = navigateToPreviousSession;
-window.updateSidebarHighlighting = updateSidebarHighlighting;
 
 // Export functions
 async function exportLabelsJSON() {
@@ -1847,6 +2147,91 @@ function navigateToPreviousSession() {
     console.log(`Navigating to previous session: ${prevSession.session_name}`);
     visualizeSession(prevSession.session_id);
 }
+// Global drag context
+const dragContext = {
+    currentSession: null  // Will store the session being modified
+};
+// Add at the top of your file
+const activeHandlers = [];
+
+// Create global reference to these handlers so we can remove them
+let sessions = [];
+// Add this variable to track the current project
+let currentSelectedLabeling = 'No Labeling'; // Default value
+let labelingsList = null; // Add this global variable
+
+let currentProjectId = null;
+let currentSessionId = null;
+let currentActiveSession = null;
+let isSplitting = false;
+let activeUploadId = null; // Track active upload
+let splitPoints = [];
+let minTimestamp = null;
+let maxTimestamp = null;
+
+// Helper function to generate default colors for labelings
+function generateDefaultColor(index) {
+    const colors = [
+        '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+        '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+        '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D2B4DE'
+    ];
+    return colors[index % colors.length];
+}
+
+// Function to open color picker when circle is clicked
+function openColorPicker(labelingName, circleElement) {
+    const colorPicker = circleElement.parentElement.querySelector('.color-picker');
+    if (colorPicker) {
+        colorPicker.click();
+    }
+}
+
+// Function to update labeling color
+async function updateLabelingColor(labelingName, newColor, colorPickerElement) {
+    try {
+        // Update the visual circle
+        const colorCircle = colorPickerElement.parentElement.querySelector('.color-circle');
+        if (colorCircle) {
+            colorCircle.style.backgroundColor = newColor;
+        }
+        
+        // Here you could save the color preference to backend/localStorage
+        console.log(`Updated color for labeling "${labelingName}" to ${newColor}`);
+        
+        // Update color in database
+        const response = await fetch(`/api/labelings/${currentProjectId}/color`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                color: newColor,
+                name: labelingName
+            })
+        });
+        console.log(`Response from server: ${response.status} ${response.statusText}`);
+    } catch (error) {
+        console.error('Error updating labeling color:', error);
+    }
+}
+
+// Make functions available globally for inline event handlers
+window.visualizeSession = visualizeSession;
+window.openColorPicker = openColorPicker;
+window.updateLabelingColor = updateLabelingColor;
+window.selectLabeling = selectLabeling;
+window.scoreSession = scoreSession;
+window.showTableView = showTableView;
+window.decideSession = decideSession;
+window.toggleSplitMode = toggleSplitMode;
+window.toggleVerifiedStatus = toggleVerifiedStatus;
+window.splitSession = splitSession;
+window.createNewBout = createNewBout;
+window.showCreateProjectForm = showCreateProjectForm;
+window.createNewProject = createNewProject;
+window.navigateToNextSession = navigateToNextSession;
+window.navigateToPreviousSession = navigateToPreviousSession;
+window.updateSidebarHighlighting = updateSidebarHighlighting;
+
 
 initializeProjects();
 eventListeners.addEventListeners();
