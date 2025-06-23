@@ -3,51 +3,86 @@
 {% block title %}Dashboard - Accelerometer Data Visualization{% endblock %}
 
 {% block content %}
-    <!-- Table View -->
-    <div id="table-view">
-        <table class="table table-striped">
-            <thead>
-                <tr>
-                    <th>Session</th>
-                    <th>File</th>
-                    <th>Status</th>
-                    <th>Verified</th>
-                    <th>Action</th>
-                </tr>
-            </thead>
-            <tbody id="sessions-table-body">
-                <!-- Populated by JavaScript -->
-            </tbody>
-        </table>
-    </div>
+<!-- Table View -->
+<div id="table-view">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Session</th>
+                <th>File</th>
+                <th>Status</th>
+                <th>Verified</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="sessions-table-body">
+            <!-- Populated by JavaScript -->
+        </tbody>
+    </table>
+</div>
 
-    <!-- Visualization View -->
-    <div id="visualization-view">
-        <div class="visualization-container">
-            <span id="back-btn-overlay" class="control-btn">
-                <i id="back-btn-icon" class="fa-solid fa-arrow-left"></i>
-            </span>
-            
-            <h2>Accelerometer Data Visualization</h2>
-            <div id="action-buttons" class="mb-3">
-                <!-- Dynamic buttons based on status -->
+<!-- Visualization View -->
+<div id="visualization-view">
+    <div class="visualization-container">
+        <span id="back-btn-overlay" class="control-btn">
+            <i id="back-btn-icon" class="fa-solid fa-arrow-left"></i>
+        </span>
+
+        <h2>Accelerometer Data Visualization</h2>
+        <div id="action-buttons" class="mb-3">
+            <!-- Dynamic buttons based on status -->
+        </div>
+    </div>
+    <!-- Plot Container -->
+    <div class="plot-container">
+        <div id="timeSeriesPlot"></div>
+    </div>
+</div>
+<div class="modal fade" id="labelingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">
+                    <i class="fa-solid fa-tags me-2"></i>
+                    Labeling Management
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Current Labeling Header -->
+                <div class="mb-3">
+                    <h6 class="text-primary mb-1" id="current-labeling-header">Current Labeling: None Selected</h6>
+                </div>
+                
+                <!-- Available Labelings Section -->
+                <div>
+                    <h6 class="text-muted mb-2">Available Labelings</h6>
+                    <div id="available-labelings-list">
+                        <i class="fa-solid fa-plus"></i>
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <i class="fa-solid fa-keyboard me-1"></i>
+                        Press R to create bout for the current labeling
+                    </small>
+                </div>
             </div>
         </div>
-        <!-- Plot Container -->
-        <div class="plot-container">
-            <div id="timeSeriesPlot"></div>
-        </div>
     </div>
+</div>
 {% endblock %}
 
 {% block modals %}
-    <!-- Additional modals specific to this page can go here -->
+<!-- Additional modals specific to this page can go here -->
 {% endblock %}
 
 {% block scripts %}
-    <!-- Plotly for visualizations -->
-    <script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
-    
-    <!-- Page-specific JS -->
-    <script type="module" src="/static/script.js"></script>
+<!-- Plotly for visualizations -->
+<script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+
+<!-- Page-specific JS -->
+<script type="module" src="/static/script.js"></script>
 {% endblock %}

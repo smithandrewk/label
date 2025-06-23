@@ -19,7 +19,7 @@ def create_app():
     model_service   = ModelService(get_db_connection=get_db_connection)
 
     # Register blueprints
-    from app.routes import main, models, projects, sessions
+    from app.routes import main, models, projects, sessions, labelings
 
     main.init_controller(session_service=session_service, project_service=project_service)
     app.register_blueprint(main.main_bp)
@@ -32,5 +32,8 @@ def create_app():
 
     models.init_controller(model_service=model_service)
     app.register_blueprint(models.models_bp)
+
+    labelings.init_controller(session_service=session_service, project_service=project_service, model_service=model_service)
+    app.register_blueprint(labelings.labelings_bp)
 
     return app

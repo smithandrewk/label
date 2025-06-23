@@ -64,3 +64,129 @@ class ProjectRepository(BaseRepository):
             raise DatabaseError('Project not found or already deleted')
         
         return True
+
+    def get_labelings(self, project_id):
+        """Get labelings for a specific project"""
+        query = """
+            SELECT labelings
+            FROM projects
+            WHERE project_id = %s
+        """
+        return self._execute_query(query, (project_id,), fetch_all=True)
+        
+    def update_labelings(self, project_id, label):
+        """
+        Add a new labeling to a project's labelings list
+        
+        Args:
+            project_id: ID of the project to update
+            label: The labeling to add (can be string or dict with name/color)
+            
+        Returns:
+            dict: Updated labelings array
+        """
+        import json
+        
+        # First, get the current labelings
+        query = """
+            SELECT labelings
+            FROM projects
+            WHERE project_id = %s
+        """
+        result = self._execute_query(query, (project_id,), fetch_one=True)
+        
+        if not result:
+            raise DatabaseError('Project not found')
+            
+        # Parse existing labelings or initialize empty array
+        labelings = []
+        if result.get('labelings'):
+            try:
+                labelings = json.loads(result['labelings'])
+                if not isinstance(labelings, list):
+                    labelings = []
+            except (json.JSONDecodeError, TypeError):
+                labelings = []
+        
+        # Add the new labeling
+        labelings.append(label)
+        
+        # Update the project with new labelings
+        update_query = """
+            UPDATE projects
+            SET labelings = %s
+            WHERE project_id = %s
+        """
+        rows_affected = self._execute_query(update_query, (json.dumps(labelings), project_id), commit=True)
+        
+        if rows_affected == 0:
+            raise DatabaseError('Failed to update labelings')
+            
+        return {'status': 'success', 'labelings': labelings}
+        
+    def update_labeling_color(self, project_id, labeling_name, color):
+        """
+        Update the color of an existing labeling in a project
+        
+        Args:
+            project_id: ID of the project containing the labeling
+            labeling_name: Name of the labeling to update
+            color: New color value in hex format
+            
+        Returns:
+            dict: Status and message indicating success or failure
+        """
+        import json
+        
+        # First, get the current labelings
+        query = """
+            SELECT labelings
+            FROM projects
+            WHERE project_id = %s
+        """
+        result = self._execute_query(query, (project_id,), fetch_one=True)
+        
+        if not result or not result.get('labelings'):
+            raise DatabaseError('Project not found or no labelings exist')
+            
+        # Parse the labelings JSON
+        labelings = json.loads(result['labelings'])
+        updated = False
+        
+        # Find and update the matching labeling
+        for i, labeling in enumerate(labelings):
+            # Handle both string type and object type labelings
+            if isinstance(labeling, str) and labeling == labeling_name:
+                # Convert string labeling to object with color
+                labelings[i] = {"name": labeling_name, "color": color}
+                updated = True
+            elif isinstance(labeling, dict) and labeling.get('name') == labeling_name:
+                # Update existing object labeling
+                labelings[i]['color'] = color
+                updated = True
+            # Handle JSON string that's not yet parsed
+            elif isinstance(labeling, str) and labeling.startswith('{'):
+                try:
+                    labeling_obj = json.loads(labeling)
+                    if isinstance(labeling_obj, dict) and labeling_obj.get('name') == labeling_name:
+                        labeling_obj['color'] = color
+                        labelings[i] = labeling_obj
+                        updated = True
+                except:
+                    pass
+        
+        if not updated:
+            raise DatabaseError(f'Labeling "{labeling_name}" not found in project')
+            
+        # Save the updated labelings back to the database
+        update_query = """
+            UPDATE projects
+            SET labelings = %s
+            WHERE project_id = %s
+        """
+        rows_affected = self._execute_query(update_query, (json.dumps(labelings), project_id), commit=True)
+        
+        if rows_affected == 0:
+            raise DatabaseError('Failed to update labeling color')
+            
+        return {'status': 'success', 'message': f'Color updated for labeling "{labeling_name}"'}

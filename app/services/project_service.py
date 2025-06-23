@@ -149,6 +149,28 @@ class ProjectService:
                 shutil.rmtree(new_project_path)
             raise DatabaseError(f'Failed to create project with files: {str(e)}')
 
+    def get_labelings(self, project_id=None):
+        return self.project_repo.get_labelings(project_id)
+
+    def update_labelings(self, project_id, label):
+        """Update labelings for a specific project by appending a new label"""
+        print(f'Updating labelings for project {project_id} with label: {label}')
+        return self.project_repo.update_labelings(project_id, label)
+        
+    def update_labeling_color(self, project_id, labeling_name, color):
+        """Update the color of an existing labeling in a project
+        
+        Args:
+            project_id: ID of the project containing the labeling
+            labeling_name: Name of the labeling to update
+            color: New color value in hex format (e.g., '#FF0000')
+            
+        Returns:
+            dict: Status and message indicating success or failure
+        """
+        print(f'Updating color for labeling "{labeling_name}" to {color} in project {project_id}')
+        return self.project_repo.update_labeling_color(project_id, labeling_name, color)
+
     def discover_project_sessions(self, project_path):
         """
         Discover session directories within a project path
