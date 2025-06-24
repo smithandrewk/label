@@ -3,6 +3,8 @@ import { ensureSessionBoutsIsArray } from './helpers.js'
 import ProjectAPI from './js/api/projectAPI.js';
 import SessionAPI from './js/api/sessionAPI.js';
 import SessionService from './js/services/sessionService.js';
+import { ActionButtonTemplates, ActionButtonHandlers } from './js/templates/actionButtonTemplates.js';
+import { SessionListTemplates, SessionListHandlers } from './js/templates/sessionListTemplates.js';
 
 // Check URL parameters on page load
 function checkUrlParameters() {
@@ -197,11 +199,7 @@ function updateSessionsList() {
     if (sessions.length === 0) {
         // Display a message for empty sessions
         if (tbody) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="4" class="text-center">No sessions available for this project</td>
-                </tr>
-            `;
+            tbody.innerHTML = SessionListTemplates.emptyState();
         }
         return;
     }
@@ -214,8 +212,7 @@ function updateSessionsList() {
         if (sessionList) {
             const li = document.createElement("li");
             li.className = "nav-item";
-            const linkClass = session.session_name === currentActiveSession ? "nav-link active-session" : "nav-link";
-            li.innerHTML = `<a class="${linkClass}" href="#" onclick="visualizeSession('${session.session_id}')">${session.session_name}</a>`;
+            li.innerHTML = SessionListTemplates.sidebarItem(session, currentActiveSession);
             sessionList.appendChild(li);
         }
 
@@ -223,114 +220,18 @@ function updateSessionsList() {
         if (tbody) {
             const row = document.createElement("tr");
             const sessionId = session.session_id;
-            let trashButton = `
-                <div style="position: relative; display: inline-block; width: 32px; height: 32px;">
-                    <span id="cancel-btn-overlay-${sessionId}" style="position: absolute; right: 100%; display: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; cursor: pointer;">
-                        <i id="cancel-btn-${sessionId}" class="fa-solid fa-xmark" style="font-size: 20px;"></i>
-                    </span>
-                    <span id="trash-btn-overlay-${sessionId}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer;">
-                        <i id="trash-btn-${sessionId}" class="fa-solid fa-trash"></i>
-                    </span>
-                </div>
-            `;
             
-            // Create verified checkbox
-            const verifiedCheckbox = `
-                <span id="verified-btn-overlay-${sessionId}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer;">
-                    <i id="verified-btn-${sessionId}" class="fa-solid fa-check" style="color: ${session.verified ? '#28a745' : '#dee2e6'}; font-size: 18px;"></i>
-                </span>
-            `;
-            
-            row.innerHTML = `
-                <td>${session.session_name}</td>
-                <td>${session.project_name || ''}</td>
-                <td>${session.status}${session.label ? ': ' + session.label : ''}${session.keep === 0 ? ' (Discarded)' : ''}</td>
-                <td>${verifiedCheckbox}</td>
-                <td>
-                    <div class="btn-group" role="group">
-                        <button class="btn btn-sm btn-primary" onclick="visualizeSession('${session.session_id}')">
-                            <i class="fa-solid fa-eye"></i>
-                        </button>
-                    </div>
-                </td>
-                <td>${trashButton}</td>
-            `;
+            // Use template for table row
+            row.innerHTML = SessionListTemplates.tableRow(session);
             tbody.appendChild(row);
 
-            // Add event listeners for this row's trash button
-            const trash_btn_overlay = document.getElementById(`trash-btn-overlay-${sessionId}`);
-            const trash_btn = document.getElementById(`trash-btn-${sessionId}`);
-            const cancel_btn_overlay = document.getElementById(`cancel-btn-overlay-${sessionId}`);
+            // Setup event handlers using the template handlers
+            SessionListHandlers.setupTableRowHandlers(
+                sessionId, 
+                decideSession, 
+                toggleVerifiedStatus
+            );
 
-            if (trash_btn_overlay && trash_btn && cancel_btn_overlay) {
-                // Track armed state for each button
-                trash_btn_overlay.dataset.armed = "false";
-                
-                // Hover effects
-                trash_btn_overlay.addEventListener('mouseenter', () => {
-                    trash_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-                });
-                
-                trash_btn_overlay.addEventListener('mouseleave', () => {
-                    trash_btn_overlay.style.background = 'rgba(224,224,224,0)';
-                });
-                
-                // Click handling with confirmation
-                trash_btn_overlay.addEventListener('click', () => {
-                    const isArmed = trash_btn_overlay.dataset.armed === "true";
-                    if (!isArmed) {
-                        // Arm the trash button
-                        trash_btn_overlay.dataset.armed = "true";
-                        trash_btn.style.color = '#dc3545'; // Bootstrap red
-                        cancel_btn_overlay.style.display = 'inline-flex';
-                    } else {
-                        console.log('here')
-                        // Perform delete
-                        decideSession(sessionId, false);
-                        // Reset state
-                        trash_btn_overlay.dataset.armed = "false";
-                        trash_btn.style.color = '';
-                        cancel_btn_overlay.style.display = 'none';
-                    }
-                });
-                
-                // Cancel button handling
-                cancel_btn_overlay.addEventListener('mouseenter', () => {
-                    cancel_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-                });
-                
-                cancel_btn_overlay.addEventListener('mouseleave', () => {
-                    cancel_btn_overlay.style.background = 'rgba(224,224,224,0)';
-                });
-                
-                cancel_btn_overlay.addEventListener('click', (e) => {
-                    // Cancel delete and prevent event from bubbling to parent elements
-                    e.stopPropagation();
-                    trash_btn_overlay.dataset.armed = "false";
-                    trash_btn.style.color = '';
-                    cancel_btn_overlay.style.display = 'none';
-                });
-            }
-            
-            // Add event listeners for verified checkbox
-            const verified_btn_overlay = document.getElementById(`verified-btn-overlay-${sessionId}`);
-            const verified_btn = document.getElementById(`verified-btn-${sessionId}`);
-            
-            if (verified_btn_overlay && verified_btn) {
-                // Hover effects
-                verified_btn_overlay.addEventListener('mouseenter', () => {
-                    verified_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-                });
-                
-                verified_btn_overlay.addEventListener('mouseleave', () => {
-                    verified_btn_overlay.style.background = 'rgba(224,224,224,0)';
-                });
-                
-                // Click handling to toggle verified status
-                verified_btn_overlay.addEventListener('click', async () => {
-                    await toggleVerifiedStatus();
-                });
-            }
         }
     });
 }
@@ -673,159 +574,21 @@ async function visualizeSession(sessionId) {
     console.log(currentSelectedLabeling)
     const actionButtons = document.getElementById("action-buttons");
     actionButtons.innerHTML = "";
-    actionButtons.innerHTML += `
-        <span id="current-labeling-name" style="display: inline-flex; align-items: center; margin-right: 8px; padding: 4px 8px; background: rgba(0, 123, 255, 0.1); border-radius: 12px; font-size: 12px; color: #007bff; font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease;">
-        </span>
-    `;
-    actionButtons.innerHTML += `
-        <span id="score-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
-            <i class="fa-solid fa-rocket"></i>
-        </span>
-    `;
-    if (isSplitting) {
-        actionButtons.innerHTML += `
-            <span id="split-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224);">
-                <i class="fa-solid fa-arrows-split-up-and-left" ></i>
-            </span>
-        `;
-    } else {
-        actionButtons.innerHTML += `
-            <span id="split-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
-                <i class="fa-solid fa-arrows-split-up-and-left" ></i>
-            </span>
-        `;
-    }
-
-    // For the visualization view, update the trash button HTML:
-    actionButtons.innerHTML += `
-        <div style="position: relative; display: inline-block; width: 32px; height: 32px;">
-            <span id="cancel-btn-overlay" style="position: absolute; right: 100%; display: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; cursor: pointer;">
-                <i id="cancel-btn" class="fa-solid fa-xmark" style="font-size:20px;"></i>
-            </span>
-            <span id="trash-btn-overlay" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:rgba(224,224,224,0); cursor:pointer;">
-                <i id="trash-btn" class="fa-solid fa-trash"></i>
-            </span>
-        </div>
-        <span id="verified-btn-overlay-viz" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer; margin-left: 8px;">
-            <i id="verified-btn-viz" class="fa-solid fa-check" style="color: ${session.verified ? '#28a745' : '#dee2e6'}; font-size: 18px;"></i>
-        </span>
-    `;
-
-    // And update the event handlers to use dataset instead of a local variable:
-    const trash_btn_overlay = document.getElementById('trash-btn-overlay');
-    const trash_btn = document.getElementById('trash-btn');
-    const cancel_btn_overlay = document.getElementById('cancel-btn-overlay');
-
-    // Use dataset attribute instead of local variable
-    trash_btn_overlay.dataset.armed = "false";
-
-    trash_btn_overlay.addEventListener('mouseenter', () => {
-        trash_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-    });
-    trash_btn_overlay.addEventListener('mouseleave', () => {
-        trash_btn_overlay.style.background = 'rgba(224,224,224,0)';
-    });
-
-    // Click handling with confirmation
-    trash_btn_overlay.addEventListener('click', () => {
-        const isArmed = trash_btn_overlay.dataset.armed === "true";
-        if (!isArmed) {
-            // Arm the trash button
-            trash_btn_overlay.dataset.armed = "true";
-            trash_btn.style.color = '#dc3545'; // Bootstrap red
-            cancel_btn_overlay.style.display = 'inline-flex';
-        } else {
-            // Perform delete (placeholder)
-            decideSession(currentSessionId, false);
-            // Reset state
-            trash_btn_overlay.dataset.armed = "false";
-            trash_btn.style.color = '';
-            cancel_btn_overlay.style.display = 'none';
-        }
-    });
-
-    // Cancel button handling with stopPropagation
-    cancel_btn_overlay.addEventListener('click', (e) => {
-        // Cancel delete and prevent event from bubbling to parent
-        e.stopPropagation();
-        trash_btn_overlay.dataset.armed = "false";
-        trash_btn.style.color = '';
-        cancel_btn_overlay.style.display = 'none';
-    });
-
-    cancel_btn_overlay.addEventListener('mouseenter', () => {
-        cancel_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-    });
-    cancel_btn_overlay.addEventListener('mouseleave', () => {
-        cancel_btn_overlay.style.background = 'rgba(224,224,224,0)';
-    });
-
-    const split_btn_overlay = document.getElementById('split-btn-overlay');
-    split_btn_overlay.addEventListener('mouseenter', () => {
-        split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(0, 0, 0, 0.1)';
-    });
-    split_btn_overlay.addEventListener('mouseleave', () => {
-        split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(224, 224, 224, 0)';
-    });
-    split_btn_overlay.addEventListener('click', function() {
-        toggleSplitMode();
-    });
-
-    // Add event listeners for the clickable current labeling name
-    const current_labeling_name = document.getElementById('current-labeling-name');
-    if (current_labeling_name) {
-        // Hover effects
-        current_labeling_name.addEventListener('mouseenter', () => {
-            current_labeling_name.style.background = 'rgba(0, 123, 255, 0.2)';
-            current_labeling_name.style.transform = 'scale(1.02)';
-        });
-        
-        current_labeling_name.addEventListener('mouseleave', () => {
-            current_labeling_name.style.background = 'rgba(0, 123, 255, 0.1)';
-            current_labeling_name.style.transform = 'scale(1)';
-        });
-        
-        // Click to open labeling modal
-        current_labeling_name.addEventListener('click', function() {
-            const labelModal = document.getElementById('labelingModal');
-            if (labelModal) {
-                const modal = new bootstrap.Modal(labelModal);
-                modal.show();
-            } else {
-                console.error('Label Modal not found');
-            }
-        });
-    }
-
-    const score_btn_overlay = document.getElementById('score-btn-overlay');
-    score_btn_overlay.addEventListener('mouseenter', () => {
-        score_btn_overlay.style.background = 'rgba(0, 0, 0, 0.1)';
-    });
-    score_btn_overlay.addEventListener('mouseleave', () => {
-        score_btn_overlay.style.background ='rgba(224, 224, 224, 0)';
-    });
-    score_btn_overlay.addEventListener('click', function() {
-        scoreSession(sessionId);
-    });
-    // Add event listeners for verified button in visualization view
-    const verified_btn_overlay_viz = document.getElementById('verified-btn-overlay-viz');
-    const verified_btn_viz = document.getElementById('verified-btn-viz');
     
-    if (verified_btn_overlay_viz && verified_btn_viz) {
-        // Hover effects
-        verified_btn_overlay_viz.addEventListener('mouseenter', () => {
-            verified_btn_overlay_viz.style.background = 'rgba(0,0,0,0.1)';
-        });
-        
-        verified_btn_overlay_viz.addEventListener('mouseleave', () => {
-            verified_btn_overlay_viz.style.background = 'rgba(224,224,224,0)';
-        });
-        
-        // Click handling to toggle verified status
-        verified_btn_overlay_viz.addEventListener('click', async () => {
-            await toggleVerifiedStatus();
-        });
-    }
+    // Use template for action buttons
+    actionButtons.innerHTML = ActionButtonTemplates.visualizationActionButtons({
+        isSplitting: isSplitting,
+        isVerified: session.verified
+    });
+
+    // Setup event listeners using the template handlers
+    ActionButtonHandlers.setupVisualizationButtons({
+        onDelete: () => decideSession(currentSessionId, false),
+        onVerify: () => toggleVerifiedStatus(),
+        onSplit: () => toggleSplitMode(),
+        onScore: () => scoreSession(currentSessionId, session.project_name, session.session_name),
+        isSplitting: isSplitting
+    });
 
     const dataToPlot = session.data;
     if (!dataToPlot || dataToPlot.length === 0) {
@@ -1988,7 +1751,6 @@ function showProgressError(message) {
     `;
 }
 
-// Update sidebar highlighting for the active session
 function updateSidebarHighlighting() {
     // Remove active-session class from all links
     document.querySelectorAll('#session-list .nav-link').forEach(link => {
@@ -2004,7 +1766,6 @@ function updateSidebarHighlighting() {
     }
 }
 
-// Navigate to the next session
 function navigateToNextSession() {
     const nextSession = SessionService.getNextSession(sessions, currentSessionId);
     
@@ -2020,7 +1781,6 @@ function navigateToNextSession() {
     visualizeSession(nextSession.session_id);
 }
 
-// Navigate to the previous session
 function navigateToPreviousSession() {
     const prevSession = SessionService.getPreviousSession(sessions, currentSessionId);
     
