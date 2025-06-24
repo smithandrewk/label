@@ -1,0 +1,242 @@
+/**
+ * Action Button Templates
+ * Contains reusable HTML templates for action buttons in the visualization view
+ */
+
+export const ActionButtonTemplates = {
+    /**
+     * Current labeling display template
+     */
+    currentLabeling: () => `
+        <span id="current-labeling-name" style="display: inline-flex; align-items: center; margin-right: 8px; padding: 4px 8px; background: rgba(0, 123, 255, 0.1); border-radius: 12px; font-size: 12px; color: #007bff; font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease;">
+        </span>
+    `,
+
+    /**
+     * Score button template
+     */
+    scoreButton: () => `
+        <span id="score-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
+            <i class="fa-solid fa-rocket"></i>
+        </span>
+    `,
+
+    /**
+     * Split button template
+     * @param {boolean} isSplitting - Whether splitting mode is active
+     */
+    splitButton: (isSplitting = false) => `
+        <span id="split-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, ${isSplitting ? '1' : '0'});">
+            <i class="fa-solid fa-arrows-split-up-and-left"></i>
+        </span>
+    `,
+
+    /**
+     * Trash/Delete button with confirmation template
+     */
+    deleteButton: () => `
+        <div style="position: relative; display: inline-block; width: 32px; height: 32px;">
+            <span id="cancel-btn-overlay" style="position: absolute; right: 100%; display: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; cursor: pointer;">
+                <i id="cancel-btn" class="fa-solid fa-xmark" style="font-size:20px;"></i>
+            </span>
+            <span id="trash-btn-overlay" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:rgba(224,224,224,0); cursor:pointer;">
+                <i id="trash-btn" class="fa-solid fa-trash"></i>
+            </span>
+        </div>
+    `,
+
+    /**
+     * Verified status button template
+     * @param {boolean} isVerified - Whether the session is verified
+     */
+    verifiedButton: (isVerified = false) => `
+        <span id="verified-btn-overlay-viz" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer; margin-left: 8px;">
+            <i id="verified-btn-viz" class="fa-solid fa-check" style="color: ${isVerified ? '#28a745' : '#dee2e6'}; font-size: 18px;"></i>
+        </span>
+    `,
+
+    /**
+     * Complete action buttons container for visualization view
+     * @param {Object} options - Configuration options
+     * @param {boolean} options.isSplitting - Whether splitting mode is active
+     * @param {boolean} options.isVerified - Whether the session is verified
+     */
+    visualizationActionButtons: ({ isSplitting = false, isVerified = false } = {}) => {
+        return [
+            ActionButtonTemplates.currentLabeling(),
+            ActionButtonTemplates.scoreButton(),
+            ActionButtonTemplates.splitButton(isSplitting),
+            ActionButtonTemplates.deleteButton(),
+            ActionButtonTemplates.verifiedButton(isVerified)
+        ].join('');
+    }
+};
+
+/**
+ * Event Handler Utilities for Action Buttons
+ */
+export const ActionButtonHandlers = {
+    /**
+     * Setup event listeners for visualization action buttons
+     * @param {Object} options - Configuration options
+     * @param {Function} options.onDelete - Delete callback function
+     * @param {Function} options.onVerify - Verify callback function
+     * @param {Function} options.onSplit - Split toggle callback function
+     * @param {Function} options.onScore - Score callback function
+     * @param {boolean} options.isSplitting - Current splitting state
+     */
+    setupVisualizationButtons: ({ onDelete, onVerify, onSplit, onScore, isSplitting = false } = {}) => {
+        // Setup delete button with confirmation
+        ActionButtonHandlers.setupDeleteButton(onDelete);
+        
+        // Setup verified button
+        ActionButtonHandlers.setupVerifiedButton(onVerify);
+        
+        // Setup split button
+        ActionButtonHandlers.setupSplitButton(onSplit, isSplitting);
+        
+        // Setup score button
+        ActionButtonHandlers.setupScoreButton(onScore);
+    },
+
+    /**
+     * Setup delete button with confirmation behavior
+     * @param {Function} onDelete - Delete callback function
+     */
+    setupDeleteButton: (onDelete) => {
+        const trash_btn_overlay = document.getElementById('trash-btn-overlay');
+        const trash_btn = document.getElementById('trash-btn');
+        const cancel_btn_overlay = document.getElementById('cancel-btn-overlay');
+
+        if (!trash_btn_overlay || !trash_btn || !cancel_btn_overlay) return;
+
+        // Initialize armed state
+        trash_btn_overlay.dataset.armed = "false";
+
+        // Hover effects
+        trash_btn_overlay.addEventListener('mouseenter', () => {
+            trash_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+        });
+        
+        trash_btn_overlay.addEventListener('mouseleave', () => {
+            trash_btn_overlay.style.background = 'rgba(224,224,224,0)';
+        });
+
+        // Click handling with confirmation
+        trash_btn_overlay.addEventListener('click', () => {
+            const isArmed = trash_btn_overlay.dataset.armed === "true";
+            if (!isArmed) {
+                // Arm the button
+                trash_btn_overlay.dataset.armed = "true";
+                trash_btn.style.color = '#dc3545';
+                cancel_btn_overlay.style.display = 'inline-flex';
+            } else {
+                // Execute delete
+                if (onDelete) onDelete();
+                ActionButtonHandlers.resetDeleteButton();
+            }
+        });
+
+        // Cancel button handling
+        cancel_btn_overlay.addEventListener('mouseenter', () => {
+            cancel_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+        });
+        
+        cancel_btn_overlay.addEventListener('mouseleave', () => {
+            cancel_btn_overlay.style.background = 'rgba(224,224,224,0)';
+        });
+        
+        cancel_btn_overlay.addEventListener('click', (e) => {
+            e.stopPropagation();
+            ActionButtonHandlers.resetDeleteButton();
+        });
+    },
+
+    /**
+     * Reset delete button to unarmed state
+     */
+    resetDeleteButton: () => {
+        const trash_btn_overlay = document.getElementById('trash-btn-overlay');
+        const trash_btn = document.getElementById('trash-btn');
+        const cancel_btn_overlay = document.getElementById('cancel-btn-overlay');
+
+        if (trash_btn_overlay) trash_btn_overlay.dataset.armed = "false";
+        if (trash_btn) trash_btn.style.color = '';
+        if (cancel_btn_overlay) cancel_btn_overlay.style.display = 'none';
+    },
+
+    /**
+     * Setup verified button
+     * @param {Function} onVerify - Verify callback function
+     */
+    setupVerifiedButton: (onVerify) => {
+        const verified_btn_overlay = document.getElementById('verified-btn-overlay-viz');
+
+        if (!verified_btn_overlay) return;
+
+        // Hover effects
+        verified_btn_overlay.addEventListener('mouseenter', () => {
+            verified_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+        });
+        
+        verified_btn_overlay.addEventListener('mouseleave', () => {
+            verified_btn_overlay.style.background = 'rgba(224,224,224,0)';
+        });
+        
+        // Click handling
+        verified_btn_overlay.addEventListener('click', () => {
+            if (onVerify) onVerify();
+        });
+    },
+
+    /**
+     * Setup split button
+     * @param {Function} onSplit - Split toggle callback function
+     * @param {boolean} isSplitting - Current splitting state
+     */
+    setupSplitButton: (onSplit, isSplitting = false) => {
+        const split_btn_overlay = document.getElementById('split-btn-overlay');
+
+        if (!split_btn_overlay) return;
+
+        // Hover effects
+        split_btn_overlay.addEventListener('mouseenter', () => {
+            split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(0, 0, 0, 0.1)';
+        });
+        
+        split_btn_overlay.addEventListener('mouseleave', () => {
+            split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(224, 224, 224, 0)';
+        });
+        
+        // Click handling
+        split_btn_overlay.addEventListener('click', () => {
+            if (onSplit) onSplit();
+        });
+    },
+
+    /**
+     * Setup score button
+     * @param {Function} onScore - Score callback function
+     */
+    setupScoreButton: (onScore) => {
+        const score_btn_overlay = document.getElementById('score-btn-overlay');
+
+        if (!score_btn_overlay) return;
+
+        // Hover effects
+        score_btn_overlay.addEventListener('mouseenter', () => {
+            score_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+        });
+        
+        score_btn_overlay.addEventListener('mouseleave', () => {
+            score_btn_overlay.style.background = 'rgba(224,224,224,0)';
+        });
+        
+        // Click handling
+        score_btn_overlay.addEventListener('click', () => {
+            if (onScore) onScore();
+        });
+    }
+};
+
+export default ActionButtonTemplates;
