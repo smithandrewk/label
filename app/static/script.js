@@ -1,5 +1,6 @@
 import * as eventListeners from './eventListeners.js';
 import { ensureSessionBoutsIsArray } from './helpers.js'
+import ProjectAPI from './js/api/projectAPI.js';
 
 // Check URL parameters on page load
 function checkUrlParameters() {
@@ -19,10 +20,7 @@ function checkUrlParameters() {
 // Add to your script.js
 async function initializeProjects() {
     try {
-        const response = await fetch('/api/projects');
-        if (!response.ok) throw new Error('Failed to fetch projects');
-        const projects = await response.json();
-        
+        const projects = await ProjectAPI.fetchProjects();
         // Populate the dropdown
         const dropdownMenu = document.getElementById('project-dropdown-menu');
         dropdownMenu.innerHTML = ''; // Clear existing items
