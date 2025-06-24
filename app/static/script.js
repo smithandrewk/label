@@ -729,7 +729,6 @@ async function visualizeSession(sessionId) {
     actionButtons.innerHTML = "";
     actionButtons.innerHTML += `
         <span id="current-labeling-name" style="display: inline-flex; align-items: center; margin-right: 8px; padding: 4px 8px; background: rgba(0, 123, 255, 0.1); border-radius: 12px; font-size: 12px; color: #007bff; font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease;">
-            ${currentSelectedLabeling}
         </span>
     `;
     actionButtons.innerHTML += `
