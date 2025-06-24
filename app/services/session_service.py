@@ -3,13 +3,23 @@ import os
 import shutil
 import json
 from app.services.utils import timeit, resample
+from app.repositories.session_repository import SessionRepository
 import pandas as pd
 from app.exceptions import DatabaseError
 
 class SessionService:
     def __init__(self, get_db_connection=None):
         self.get_db_connection = get_db_connection
+        self.session_repo = SessionRepository(get_db_connection)
         self.upload_progress = {}
+    
+    def delete_sessions_by_project(self, project_id):
+        """Delete all sessions for a project"""
+        return self.session_repo.delete_by_project(project_id)
+    
+    def delete_session_lineage_by_project(self, project_id):
+        """Delete session lineage records for a project"""
+        return self.session_repo.delete_lineage_by_project(project_id)
 
     def process_sessions_async(self, upload_id, sessions, new_project_path, project_id):
         try:

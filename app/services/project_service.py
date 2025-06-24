@@ -1,370 +1,179 @@
 from app.exceptions import DatabaseError
+from app.repositories.project_repository import ProjectRepository
+from app.repositories.participant_repository import ParticipantRepository
+from app.repositories.session_repository import SessionRepository
+import os
+import shutil
+from datetime import datetime
+
 class ProjectService:
     def __init__(self, get_db_connection=None):
-        self.get_db_connection = get_db_connection
+        self.project_repo = ProjectRepository(get_db_connection)
+        self.participant_repo = ParticipantRepository(get_db_connection)
+        self.session_repo = SessionRepository(get_db_connection)
     
     def list_projects(self):
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute("""
-                SELECT p.project_id, p.project_name, p.path, pt.participant_code
-                FROM projects p
-                JOIN participants pt ON p.participant_id = pt.participant_id
-            """)
-            projects = cursor.fetchall()
-            return projects
-        finally:
-            cursor.close()
-            conn.close()
+        """Get all projects"""
+        return self.project_repo.get_all()
     
     def get_participant_by_code(self, participant_code):
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute("""
-                SELECT participant_id FROM participants WHERE participant_code = %s
-            """, (participant_code,))
-            participant = cursor.fetchone()
-            return participant
-        finally:
-            cursor.close()
-            conn.close()
+        """Find participant by code"""
+        return self.participant_repo.find_by_code(participant_code)
 
     def insert_project(self, project_name, participant_id, path):
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                INSERT INTO projects (project_name, participant_id, path) 
-                VALUES (%s, %s, %s)
-            """, (project_name, participant_id, path))
-            conn.commit()
-            project_id = cursor.lastrowid
-            return {'project_id': project_id}
-        except Exception as e:
-            conn.rollback()
-            raise DatabaseError(f'Failed to insert project: {str(e)}')
-        finally:
-            cursor.close()
-            conn.close()
+        """Create a new project"""
+        return self.project_repo.create(project_name, participant_id, path)
 
     def create_participant(self, participant_code):
         """Create a new participant, handling race conditions if it already exists"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor()
-        try:
-            # Create new participant - use INSERT IGNORE to handle race conditions
-            cursor.execute("""
-                INSERT INTO participants (participant_code) 
-                VALUES (%s)
-            """, (participant_code,))
-            participant_id = cursor.lastrowid
-            conn.commit()
-            return {'participant_id': participant_id}
-        except Exception as e:
-            if hasattr(e, 'errno') and e.errno == 1062:  # Duplicate entry error
-                # Another process created the participant, fetch it
-                cursor.execute("""
-                    SELECT participant_id FROM participants WHERE participant_code = %s
-                """, (participant_code,))
-                participant = cursor.fetchone()
-                if participant:
-                    return {'participant_id': participant[0]}
-                else:
-                    raise DatabaseError("Failed to create or find participant")
-            else:
-                conn.rollback()
-                raise DatabaseError(f'Failed to create participant: {str(e)}')
-        finally:
-            cursor.close()
-            conn.close()
+        return self.participant_repo.create(participant_code)
 
     def create_participant_with_details(self, participant_code, first_name, last_name, email, notes):
         """Create a new participant with detailed information"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                INSERT INTO participants (participant_code, first_name, last_name, email, notes)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (participant_code, first_name, last_name, email, notes))
-            participant_id = cursor.lastrowid
-            conn.commit()
-            
-            return {
-                'participant_id': participant_id,
-                'participant_code': participant_code
-            }
-        except Exception as e:
-            conn.rollback()
-            if hasattr(e, 'errno') and e.errno == 1062:  # Duplicate entry error
-                raise DatabaseError(f'Participant code "{participant_code}" already exists')
-            else:
-                raise DatabaseError(f'Failed to create participant: {str(e)}')
-        finally:
-            cursor.close()
-            conn.close()
+        result = self.participant_repo.create_with_details(participant_code, first_name, last_name, email, notes)
+        return {
+            'participant_id': result['participant_id'],
+            'participant_code': result['participant_code']
+        }
 
     def get_project_with_participant(self, project_id):
         """Get detailed project information including participant data"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute("""
-                SELECT p.project_id, p.project_name, p.path, p.participant_id,
-                    pt.participant_code
-                FROM projects p
-                JOIN participants pt ON p.participant_id = pt.participant_id
-                WHERE p.project_id = %s
-            """, (project_id,))
-            
-            project_info = cursor.fetchone()
-            return project_info
-        finally:
-            cursor.close()
-            conn.close()
+        return self.project_repo.find_with_participant(project_id)
 
     def cleanup_participant_if_needed(self, participant_id):
         """Check if participant has any remaining projects and delete if none exist"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor(dictionary=True)
-        try:
-            # Check if participant has any other projects
-            cursor.execute("""
-                SELECT COUNT(*) as project_count FROM projects WHERE participant_id = %s
-            """, (participant_id,))
-            remaining_projects = cursor.fetchone()['project_count']
-            
-            participant_deleted = False
-            if remaining_projects == 0:
-                # Delete participant if they have no other projects
-                cursor.execute("""
-                    DELETE FROM participants WHERE participant_id = %s
-                """, (participant_id,))
-                participant_deleted = True
-            
-            conn.commit()
-            return participant_deleted
-        except Exception as e:
-            conn.rollback()
-            raise DatabaseError(f'Failed to cleanup participant: {str(e)}')
-        finally:
-            cursor.close()
-            conn.close()
+        remaining_projects = self.participant_repo.count_projects(participant_id)
+        if remaining_projects == 0:
+            self.participant_repo.delete(participant_id)
+            return True
+        return False
 
     def delete_project(self, project_id):
         """Delete a project by ID"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                DELETE FROM projects WHERE project_id = %s
-            """, (project_id,))
-            
-            if cursor.rowcount == 0:
-                raise DatabaseError('Project not found or already deleted')
-            
-            conn.commit()
-            return True
-        except Exception as e:
-            conn.rollback()
-            if 'Project not found' in str(e):
-                raise e
-            raise DatabaseError(f'Failed to delete project: {str(e)}')
-        finally:
-            cursor.close()
-            conn.close()
+        return self.project_repo.delete(project_id)
 
     def get_all_participants_with_stats(self):
         """Get all participants with their project and session statistics"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute("""
-                SELECT 
-                    pt.participant_id, 
-                    pt.participant_code, 
-                    pt.first_name, 
-                    pt.last_name, 
-                    pt.email, 
-                    pt.notes,
-                    pt.created_at,
-                    COUNT(DISTINCT p.project_id) as project_count,
-                    GROUP_CONCAT(DISTINCT p.project_name SEPARATOR ', ') as project_names,
-                    GROUP_CONCAT(DISTINCT p.project_id SEPARATOR ',') as project_ids,
-                    SUM(CASE WHEN s.keep != 0 OR s.keep IS NULL THEN 1 ELSE 0 END) as total_sessions
-                FROM participants pt
-                LEFT JOIN projects p ON pt.participant_id = p.participant_id
-                LEFT JOIN sessions s ON p.project_id = s.project_id 
-                    AND (s.status != 'Split' OR s.status IS NULL)
-                GROUP BY pt.participant_id, pt.participant_code, pt.first_name, pt.last_name, pt.email, pt.notes, pt.created_at
-                ORDER BY pt.participant_code
-            """)
-            participants = cursor.fetchall()
-            return participants
-        finally:
-            cursor.close()
-            conn.close()
+        return self.participant_repo.get_all_with_stats()
 
     def update_participant(self, participant_id, participant_code, first_name, last_name, email, notes):
         """Update an existing participant's information"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                UPDATE participants 
-                SET participant_code = %s, first_name = %s, last_name = %s, email = %s, notes = %s
-                WHERE participant_id = %s
-            """, (participant_code, first_name, last_name, email, notes, participant_id))
-            
-            if cursor.rowcount == 0:
-                raise DatabaseError('Participant not found')
-            
-            conn.commit()
-            return {
-                'participant_id': participant_id,
-                'participant_code': participant_code
-            }
-        except Exception as e:
-            conn.rollback()
-            if 'Participant not found' in str(e):
-                raise e
-            if hasattr(e, 'errno') and e.errno == 1062:  # Duplicate entry error
-                raise DatabaseError(f'Participant code "{participant_code}" already exists')
-            else:
-                raise DatabaseError(f'Failed to update participant: {str(e)}')
-        finally:
-            cursor.close()
-            conn.close()
+        result = self.participant_repo.update(participant_id, participant_code, first_name, last_name, email, notes)
+        return {
+            'participant_id': result['participant_id'],
+            'participant_code': result['participant_code']
+        }
 
     def get_participant_info(self, participant_id):
         """Get basic participant information"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute("""
-                SELECT participant_id, participant_code FROM participants WHERE participant_id = %s
-            """, (participant_id,))
-            
-            participant_info = cursor.fetchone()
-            return participant_info
-        finally:
-            cursor.close()
-            conn.close()
+        return self.participant_repo.find_by_id(participant_id)
 
     def get_participant_projects(self, participant_id):
         """Get all projects for a participant"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute("""
-                SELECT project_id, project_name, path FROM projects WHERE participant_id = %s
-            """, (participant_id,))
-            projects = cursor.fetchall()
-            return projects
-        finally:
-            cursor.close()
-            conn.close()
+        return self.project_repo.find_by_participant(participant_id)
 
     def count_participant_sessions(self, participant_id):
         """Count total sessions for a participant across all their projects"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
-        
-        cursor = conn.cursor(dictionary=True)
-        try:
-            cursor.execute("""
-                SELECT COUNT(*) as session_count FROM sessions s
-                JOIN projects p ON s.project_id = p.project_id
-                WHERE p.participant_id = %s
-            """, (participant_id,))
-            result = cursor.fetchone()
-            return result['session_count']
-        finally:
-            cursor.close()
-            conn.close()
+        return self.participant_repo.count_sessions(participant_id)
 
     def delete_participant_cascade(self, participant_id):
         """Delete participant and all associated data (projects, sessions, lineage)"""
-        conn = self.get_db_connection()
-        if conn is None:
-            raise DatabaseError('Database connection failed')
+        return self.participant_repo.delete_cascade(participant_id)
+
+    def create_project_with_files(self, project_name, participant_code, uploaded_files, data_dir):
+        """
+        Create a new project with uploaded files, handling participant creation and file storage
         
-        cursor = conn.cursor(dictionary=True)
+        Args:
+            project_name: Name of the project
+            participant_code: Code for the participant
+            uploaded_files: List of uploaded file objects
+            data_dir: Base directory for storing project data
+            
+        Returns:
+            dict: Project creation result with project_id, participant_id, and project_path
+        """
+        # Get or create participant
+        participant = self.get_participant_by_code(participant_code)
+        if participant:
+            participant_id = participant['participant_id']
+        else:
+            created_participant = self.create_participant(participant_code)
+            participant_id = created_participant['participant_id']
+
+        # Create project directory
+        central_data_dir = os.path.expanduser(data_dir)
+        os.makedirs(central_data_dir, exist_ok=True)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        project_dir_name = f"{project_name}_{participant_code}_{timestamp}"
+        new_project_path = os.path.join(central_data_dir, project_dir_name)
+        
         try:
-            # Delete session lineage records first (due to foreign key constraints)
-            cursor.execute("""
-                DELETE sl FROM session_lineage sl
-                JOIN sessions s ON (sl.child_session_id = s.session_id OR sl.parent_session_id = s.session_id)
-                JOIN projects p ON s.project_id = p.project_id
-                WHERE p.participant_id = %s
-            """, (participant_id,))
+            # Create project directory and save files
+            os.makedirs(new_project_path, exist_ok=True)
             
-            # Delete sessions
-            cursor.execute("""
-                DELETE s FROM sessions s
-                JOIN projects p ON s.project_id = p.project_id
-                WHERE p.participant_id = %s
-            """, (participant_id,))
-            sessions_deleted = cursor.rowcount
+            # Process uploaded files and recreate directory structure
+            for file in uploaded_files:
+                if file.filename and file.filename != '':
+                    # Get relative path within the selected folder
+                    relative_path = file.filename
+                    if '/' in relative_path:
+                        # Remove the root folder name from the path since we're creating our own structure
+                        path_parts = relative_path.split('/')
+                        if len(path_parts) > 1:
+                            relative_path = '/'.join(path_parts[1:])  # Remove the first part (root folder name)
+                    
+                    # Create full file path
+                    file_path = os.path.join(new_project_path, relative_path)
+                    
+                    # Create directories if they don't exist
+                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                    
+                    # Save the file
+                    file.save(file_path)
             
-            # Delete projects
-            cursor.execute("""
-                DELETE FROM projects WHERE participant_id = %s
-            """, (participant_id,))
-            projects_deleted = cursor.rowcount
+            # Create project record in database
+            created_project = self.insert_project(project_name, participant_id, new_project_path)
             
-            # Delete participant
-            cursor.execute("""
-                DELETE FROM participants WHERE participant_id = %s
-            """, (participant_id,))
-            
-            conn.commit()
             return {
-                'sessions_deleted': sessions_deleted,
-                'projects_deleted': projects_deleted
+                'project_id': created_project['project_id'],
+                'participant_id': participant_id,
+                'project_path': new_project_path,
+                'files_processed': len([f for f in uploaded_files if f.filename and f.filename != ''])
             }
+            
         except Exception as e:
-            conn.rollback()
-            raise DatabaseError(f'Failed to delete participant: {str(e)}')
-        finally:
-            cursor.close()
-            conn.close()
+            # Clean up on error
+            if os.path.exists(new_project_path):
+                shutil.rmtree(new_project_path)
+            raise DatabaseError(f'Failed to create project with files: {str(e)}')
+
+    def discover_project_sessions(self, project_path):
+        """
+        Discover session directories within a project path
+        
+        Args:
+            project_path: Path to the project directory
+            
+        Returns:
+            list: List of session dictionaries with name and file information, sorted by date
+        """
+        sessions = []
+        if os.path.exists(project_path):
+            for item in os.listdir(project_path):
+                item_path = os.path.join(project_path, item)
+                if os.path.isdir(item_path):
+                    accel_file = os.path.join(item_path, 'accelerometer_data.csv')
+                    if os.path.exists(accel_file):
+                        sessions.append({'name': item, 'file': 'accelerometer_data.csv'})
+            
+            # Sort sessions by date/time in the name
+            try:
+                from datetime import datetime
+                sessions.sort(key=lambda s: datetime.strptime('_'.join(s['name'].split('_')[:4]), '%Y-%m-%d_%H_%M_%S'))
+            except:
+                # If sorting fails, keep original order
+                pass
+        
+        return sessions

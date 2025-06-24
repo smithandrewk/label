@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 import os
 from datetime import datetime
 import threading
@@ -44,75 +44,17 @@ class ProjectController:
             if not uploaded_files:
                 return jsonify({'error': 'No files uploaded'}), 400
 
-            participant = self.project_service.get_participant_by_code(participant_code)
-            if participant:
-                # Use existing participant
-                participant_id = participant['participant_id']
-            else:
-                # Create new participant
-                created_participant = self.project_service.create_participant(participant_code)
-                participant_id = created_participant['participant_id']
-
-            # Create new directory in central data store
-            central_data_dir = os.path.expanduser(DATA_DIR)
-            os.makedirs(central_data_dir, exist_ok=True)
-            
-            # Create a unique project directory name
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            project_dir_name = f"{project_name}_{participant_code}_{timestamp}"
-            new_project_path = os.path.join(central_data_dir, project_dir_name)
-            
-            # Create the project directory structure from uploaded files
-            try:
-                os.makedirs(new_project_path, exist_ok=True)
-                
-                # Process uploaded files and recreate directory structure
-                for file in uploaded_files:
-                    if file.filename and file.filename != '':
-                        # Get relative path within the selected folder
-                        relative_path = file.filename
-                        if '/' in relative_path:
-                            # Remove the root folder name from the path since we're creating our own structure
-                            path_parts = relative_path.split('/')
-                            if len(path_parts) > 1:
-                                relative_path = '/'.join(path_parts[1:])  # Remove the first part (root folder name)
-                        
-                        # Create full file path
-                        file_path = os.path.join(new_project_path, relative_path)
-                        
-                        # Create directories if they don't exist
-                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                        
-                        # Save the file
-                        file.save(file_path)
-                        
-            except Exception as e:
-                # Clean up on error
-                if os.path.exists(new_project_path):
-                    shutil.rmtree(new_project_path)
-                return jsonify({'error': f'Failed to save uploaded files: {str(e)}'}), 500
+            # Create project with uploaded files using service layer
+            project_result = self.project_service.create_project_with_files(
+                project_name, participant_code, uploaded_files, DATA_DIR
+            )
+            project_id = project_result['project_id']
+            participant_id = project_result['participant_id']
+            new_project_path = project_result['project_path']
 
 
-            created_project = self.project_service.insert_project(project_name, participant_id, new_project_path) # dictionary
-
-            project_id = created_project['project_id']
-
-            # Find all session directories in the uploaded project
-            sessions = []
-            if os.path.exists(new_project_path):
-                for item in os.listdir(new_project_path):
-                    item_path = os.path.join(new_project_path, item)
-                    if os.path.isdir(item_path):
-                        accel_file = os.path.join(item_path, 'accelerometer_data.csv')
-                        if os.path.exists(accel_file):
-                            sessions.append({'name': item, 'file': 'accelerometer_data.csv'})
-                
-                # Sort sessions by date/time in the name
-                try:
-                    sessions.sort(key=lambda s: datetime.strptime('_'.join(s['name'].split('_')[:4]), '%Y-%m-%d_%H_%M_%S'))
-                except:
-                    # If sorting fails, keep original order
-                    pass
+            # Discover sessions in the uploaded project using service layer
+            sessions = self.project_service.discover_project_sessions(new_project_path)
 
             # Generate unique upload ID for progress tracking
             upload_id = str(uuid.uuid4())
@@ -140,7 +82,7 @@ class ProjectController:
                 'central_path': new_project_path,
                 'upload_id': upload_id,
                 'sessions_found': len(sessions),
-                'files_uploaded': len(uploaded_files),
+                'files_uploaded': project_result['files_processed'],
                 'progress_url': f'/api/upload-progress/{upload_id}'
             })
             
@@ -337,7 +279,6 @@ class ProjectController:
         """Server-Sent Events endpoint for upload progress tracking"""
         import json
         import time
-        from flask import Response
         
         print(f"SSE connection established for upload {upload_id}")
         print(f"Current upload_progress keys: {list(self.session_service.upload_progress.keys())}")
@@ -404,12 +345,10 @@ def create_participant():
 def delete_participant(participant_id):
     return controller.delete_participant(participant_id)
 
-# Update participant
 @projects_bp.route('/api/participants/<int:participant_id>', methods=['PUT'])
-def update_participant(self, participant_id):
+def update_participant(participant_id):
     return controller.update_participant(participant_id)
 
 @projects_bp.route('/api/upload-progress/<upload_id>', methods=['GET'])
 def upload_progress_stream(upload_id):
-    return controller.upload_progress_stream(upload_id)
     return controller.upload_progress_stream(upload_id)
