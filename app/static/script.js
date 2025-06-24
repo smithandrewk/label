@@ -261,10 +261,6 @@ function updateSessionsList() {
                         <button class="btn btn-sm btn-primary" onclick="visualizeSession('${session.session_id}')">
                             <i class="fa-solid fa-eye"></i>
                         </button>
-                        <button class="btn btn-sm btn-success" onclick="scoreSession('${session.session_id}')"
-                                id="score-btn-${session.id}" title="Score with Neural Network">
-                            <i class="fa-solid fa-brain"></i>
-                        </button>
                     </div>
                 </td>
                 <td>${trashButton}</td>
@@ -731,7 +727,11 @@ async function visualizeSession(sessionId) {
 
     const actionButtons = document.getElementById("action-buttons");
     actionButtons.innerHTML = "";
-
+    actionButtons.innerHTML += `
+        <span id="current-labeling-name" style="display: inline-flex; align-items: center; margin-right: 8px; padding: 4px 8px; background: rgba(0, 123, 255, 0.1); border-radius: 12px; font-size: 12px; color: #007bff; font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease;">
+            ${currentSelectedLabeling}
+        </span>
+    `;
     actionButtons.innerHTML += `
         <span id="score-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
             <i class="fa-solid fa-rocket"></i>
@@ -824,17 +824,6 @@ async function visualizeSession(sessionId) {
     });
     split_btn_overlay.addEventListener('click', function() {
         toggleSplitMode();
-    });
-
-    const score_btn_overlay = document.getElementById('score-btn-overlay');
-    score_btn_overlay.addEventListener('mouseenter', () => {
-        score_btn_overlay.style.background = 'rgba(0, 0, 0, 0.1)';
-    });
-    score_btn_overlay.addEventListener('mouseleave', () => {
-        score_btn_overlay.style.background ='rgba(224, 224, 224, 0)';
-    });
-    score_btn_overlay.addEventListener('click', function() {
-        scoreSession(sessionId);
     });
 
     // Add event listeners for verified button in visualization view
