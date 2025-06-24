@@ -1438,9 +1438,11 @@ function createNewBout() {
     
     // If there's no active plot, fall back to the full dataset range
     if (!plotDiv || !plotDiv._fullLayout || !plotDiv._fullLayout.xaxis) {
-        // Fallback to using full dataset range
+        // Fallback to using full dataset range with 25% width
         const middleTimestamp = (minTimestamp + maxTimestamp) / 2;
-        const newBout = [middleTimestamp - (240*1e9), middleTimestamp + (240*1e9)];
+        const fullRange = maxTimestamp - minTimestamp;
+        const boutHalfWidth = (fullRange * 0.25) / 2;
+        const newBout = [middleTimestamp - boutHalfWidth, middleTimestamp + boutHalfWidth];
         addBoutToSession(newBout);
         return;
     }
@@ -1459,8 +1461,10 @@ function createNewBout() {
     // Calculate the midpoint of the visible range
     const middleTimestamp = (visibleMin + visibleMax) / 2;
     
-    // Create a 480s wide bout (240s on each side of the midpoint)
-    const newBout = [middleTimestamp - (240*1e9), middleTimestamp + (240*1e9)];
+    // Create a bout that is 25% of the visible range (12.5% on each side of the midpoint)
+    const visibleRange = visibleMax - visibleMin;
+    const boutHalfWidth = (visibleRange * 0.25) / 2;
+    const newBout = [middleTimestamp - boutHalfWidth, middleTimestamp + boutHalfWidth];
     
     // Add the bout to the session and maintain view state
     addBoutToSession(newBout, currentViewState);
