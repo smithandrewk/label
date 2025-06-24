@@ -1,6 +1,8 @@
 import * as eventListeners from './eventListeners.js';
 import { ensureSessionBoutsIsArray } from './helpers.js'
 import ProjectAPI from './js/api/projectAPI.js';
+import SessionAPI from './js/api/sessionAPI.js';
+import SessionService from './js/services/sessionService.js';
 
 // Check URL parameters on page load
 function checkUrlParameters() {
@@ -21,6 +23,7 @@ function checkUrlParameters() {
 async function initializeProjects() {
     try {
         const projects = await ProjectAPI.fetchProjects();
+
         // Populate the dropdown
         const dropdownMenu = document.getElementById('project-dropdown-menu');
         dropdownMenu.innerHTML = ''; // Clear existing items
@@ -121,26 +124,15 @@ async function initializeProjects() {
         console.error('Error initializing projects:', error);
     }
 }
+
 // Fetch sessions for a specific project
 async function fetchProjectSessions(projectId) {
     try {
-        // Build URL with query parameter
-        const url = `/api/sessions?project_id=${projectId}`;
+        sessions = await ProjectAPI.fetchProjectSessions(projectId);
         
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Failed to fetch sessions');
-        sessions = await response.json();
-        
-        console.log('Fetched sessions for project:', projectId, sessions);
-        
-        // Debug: Log keep values for each session to understand the data structure
-        sessions.forEach(session => {
-            console.log(`Session ${session.session_id} (${session.session_name}): keep=${session.keep}, type=${typeof session.keep}`);
-        });
-        
-        // Log filtered sessions
-        const filteredSessions = getFilteredSessions();
-        console.log('Filtered sessions count:', filteredSessions.length, 'out of', sessions.length);
+        // Log session statistics
+        const stats = SessionService.getSessionStats(sessions);
+        console.log(`Session statistics: ${stats.available} available, ${stats.discarded} discarded, ${stats.verified} verified (${stats.total} total)`);
         
         // Update the session table/list
         updateSessionsList();
@@ -585,52 +577,6 @@ function showCreateProjectForm() {
     }
 }
 
-async function updateSessionMetadata(session) {
-    try {
-        const response = await fetch(`/api/session/${session.session_id}/metadata`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                status: session.status,
-                keep: session.keep,
-                verified: session.verified || 0,
-                bouts: JSON.stringify(session.bouts || [])
-            })
-        });
-        if (!response.ok) throw new Error('Failed to update metadata');
-        const result = await response.json();
-        console.log('Metadata update result:', result);
-    } catch (error) {
-        console.error('Error updating metadata:', error);
-    }
-}
-
-// Update loadSessionData to use sessionId
-async function loadSessionData(sessionId) {
-    try {
-        const response = await fetch(`/api/session/${sessionId}`);
-        if (!response.ok) throw new Error('Failed to fetch session data');
-        const data = await response.json();
-                
-        // Ensure bouts is an array
-        let bouts = data.bouts;
-        if (typeof bouts === 'string') {
-            try {
-                bouts = JSON.parse(bouts);
-            } catch (e) {
-                console.error('Error parsing bouts in loadSessionData:', e);
-                bouts = [];
-            }
-        } else if (!Array.isArray(bouts)) {
-            bouts = [];
-        }
-        return { bouts: bouts, data: data.data };
-    } catch (error) {
-        console.error('Error loading session data:', error);
-        return { bouts: [], data: [] };
-    }
-}
-
 // Show table view
 function showTableView() {
     document.getElementById("table-view").style.display = "block";
@@ -645,7 +591,7 @@ async function visualizeSession(sessionId) {
         if (currentSession) {
             try {
                 console.log(`Saving bout changes before switching from ${currentSessionId} to ${sessionId}`);
-                await updateSessionMetadata(currentSession);
+                await SessionAPI.updateSessionMetadata(currentSession);
             } catch (error) {
                 console.error('Error saving bout changes before switching sessions:', error);
             }
@@ -668,11 +614,11 @@ async function visualizeSession(sessionId) {
     }
     
     // Check if the session is actually available (not deleted)
-    if (session.keep === 0) {
+    if (!SessionService.isSessionAvailable(session)) {
         console.error('Attempted to visualize deleted session:', sessionId);
         
         // Find an available session to visualize instead
-        const availableSessions = getFilteredSessions();
+        const availableSessions = SessionService.getFilteredSessions(sessions);
         if (availableSessions.length > 0) {
             console.log('Redirecting to first available session');
             visualizeSession(availableSessions[0].session_id);
@@ -690,7 +636,7 @@ async function visualizeSession(sessionId) {
     dragContext.currentSession = session;
 
     if (!session.data || session.data.length === 0) {
-        const { bouts, data } = await loadSessionData(sessionId);
+        const { bouts, data } = await SessionAPI.loadSessionData(sessionId);
         session.bouts = bouts;
         session.data = data;
         if (!session.data || session.data.length === 0) {
@@ -698,12 +644,7 @@ async function visualizeSession(sessionId) {
             return;
         }
     }
-    const validData = session.data.every(d => 
-        d.ns_since_reboot && 
-        typeof d.x === 'number' && 
-        typeof d.y === 'number' && 
-        typeof d.z === 'number'
-    );
+    const validData = SessionService.validateSessionData(session);
     if (!validData) {
         console.error('Invalid data format:', session.data);
         return;
@@ -717,7 +658,7 @@ async function visualizeSession(sessionId) {
 
     if (session.status === "Initial") {
         session.status = "Visualized";
-        await updateSessionMetadata(session);
+        await SessionAPI.updateSessionMetadata(session);
         updateSessionsList();
     }
 
@@ -1279,7 +1220,7 @@ function createBoutOverlays(index, container) {
             
             dragContext.currentSession.bouts.splice(boutIndex, 1);
             console.log(`Removed bout ${boutIndex}`);
-            updateSessionMetadata(dragContext.currentSession);
+            SessionAPI.updateSessionMetadata(dragContext.currentSession);
             
             // Refresh the plot and restore zoom level
             visualizeSession(currentSessionId).then(() => {
@@ -1467,7 +1408,7 @@ function createBoutOverlays(index, container) {
             if (session) {
                 console.log(`Saving bout changes for session ${session.session_name} (ID: ${currentSessionId})`);
                 try {
-                    await updateSessionMetadata(session);
+                    await SessionAPI.updateSessionMetadata(session);
                     console.log('Successfully saved bout changes to server');
                 } catch (error) {
                     console.error('Failed to save bout changes:', error);
@@ -1602,7 +1543,7 @@ async function toggleVerifiedStatus() {
     
     // Save to backend
     try {
-        await updateSessionMetadata(session);
+        await SessionAPI.updateSessionMetadata(session);
         console.log(`Session ${session.session_id} verified status updated to: ${session.verified}`);
         
         // Also update the sessions list if we're in table view or sidebar
@@ -1617,7 +1558,7 @@ async function toggleVerifiedStatus() {
 }
 
 function getCurrentSession() {
-    return sessions.find(s => s.session_id == currentSessionId);
+    return SessionService.findSessionById(sessions, currentSessionId);
 }
 
 async function decideSession(sessionId, keep) {
@@ -1629,26 +1570,14 @@ async function decideSession(sessionId, keep) {
     // Find the next session before marking this one as deleted
     let nextSessionToShow = null;
     if (!keep && wasCurrentlyVisualized) {
-        const currentSessionsBeforeDeletion = getFilteredSessions();
-        const currentIndex = currentSessionsBeforeDeletion.findIndex(s => s.session_id == sessionId);
-        
-        // If there are other sessions, find the next one to navigate to
-        if (currentSessionsBeforeDeletion.length > 1) {
-            const nextIndex = (currentIndex + 1) % currentSessionsBeforeDeletion.length;
-            // If we're at the end, go to the previous one
-            if (currentIndex === currentSessionsBeforeDeletion.length - 1 && currentIndex > 0) {
-                nextSessionToShow = currentSessionsBeforeDeletion[currentIndex - 1];
-            } else {
-                nextSessionToShow = currentSessionsBeforeDeletion[nextIndex];
-            }
-        }
+        nextSessionToShow = SessionService.findNextSessionAfterDeletion(sessions, sessionId);
     }
     
     // Update the session status
     session.status = "Decision Made";
     // Explicitly set keep to 0 or 1, rather than false/true
     session.keep = keep ? 1 : 0;
-    await updateSessionMetadata(session);
+    await SessionAPI.updateSessionMetadata(session);
     
     // Update the UI with the new session list
     updateSessionsList();
@@ -1661,7 +1590,7 @@ async function decideSession(sessionId, keep) {
             visualizeSession(nextSessionToShow.session_id);
         } else {
             // If we couldn't find a proper next session or only this session exists
-            const remainingSessions = getFilteredSessions();
+            const remainingSessions = SessionService.getFilteredSessions(sessions);
             if (remainingSessions.length > 0) {
                 console.log(`Navigating to first available session: ${remainingSessions[0].session_name}`);
                 visualizeSession(remainingSessions[0].session_id);
@@ -1690,7 +1619,7 @@ async function splitSession() {
     if (currentSession) {
         try {
             // Wait for metadata update to complete before proceeding
-            await updateSessionMetadata(currentSession);
+            await SessionAPI.updateSessionMetadata(currentSession);
             console.log('Ensured latest bout changes are saved before splitting');
         } catch (error) {
             console.error('Error saving bout changes before split:', error);
@@ -1800,7 +1729,7 @@ function addBoutToSession(newBout, viewState = null) {
         dragContext.currentSession.bouts.push(newBout);
         
         // Update the session metadata in the background
-        updateSessionMetadata(dragContext.currentSession).then(() => {
+        SessionAPI.updateSessionMetadata(dragContext.currentSession).then(() => {
             // Instead of full reloading, just add the new overlay
             const container = document.querySelector('.plot-container');
             
@@ -1826,49 +1755,6 @@ function addBoutToSession(newBout, viewState = null) {
         console.error('No current session in drag context');
     }
 }
-
-
-// Export functions
-async function exportLabelsJSON() {
-    try {
-        const response = await fetch('/api/export/labels');
-        if (!response.ok) {
-            throw new Error('Failed to export data');
-        }
-        
-        const data = await response.json();
-        
-        // Create downloadable JSON file
-        const jsonString = JSON.stringify(data, null, 2);
-        const blob = new Blob([jsonString], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        
-        // Create download link
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' + 
-                         new Date().toISOString().replace(/[:.]/g, '-').split('T')[1].split('-')[0];
-        const filename = `smoking_labels_export_${timestamp}.json`;
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        // Success - file downloaded automatically, no need for alert/toast
-        console.log(`Successfully exported ${data.total_sessions} sessions with ${data.total_labels} labels to ${filename}`);
-        
-    } catch (error) {
-        console.error('Error exporting JSON:', error);
-        // Show error notification only
-        showNotification('Failed to export data: ' + error.message, 'error');
-    }
-}
-
-// Make export functions available globally
-window.exportLabelsJSON = exportLabelsJSON;
-
 // Delete project function
 async function deleteProject(projectId, projectName) {
     // Show confirmation dialog
@@ -1923,6 +1809,44 @@ async function deleteProject(projectId, projectName) {
     } catch (error) {
         console.error('Error deleting project:', error);
         alert(`Failed to delete project: ${error.message}`);
+    }
+}
+
+// Export functions
+async function exportLabelsJSON() {
+    try {
+        const response = await fetch('/api/export/labels');
+        if (!response.ok) {
+            throw new Error('Failed to export data');
+        }
+        
+        const data = await response.json();
+        
+        // Create downloadable JSON file
+        const jsonString = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create download link
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' + 
+                         new Date().toISOString().replace(/[:.]/g, '-').split('T')[1].split('-')[0];
+        const filename = `smoking_labels_export_${timestamp}.json`;
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // Success - file downloaded automatically, no need for alert/toast
+        console.log(`Successfully exported ${data.total_sessions} sessions with ${data.total_labels} labels to ${filename}`);
+        
+    } catch (error) {
+        console.error('Error exporting JSON:', error);
+        // Show error notification only
+        showNotification('Failed to export data: ' + error.message, 'error');
     }
 }
 
@@ -2049,7 +1973,6 @@ function updateProgressDisplay(progress) {
         console.log('[DEBUG] Updated details to:', detailsEl.textContent);
     }
 }
-
 function showProgressError(message) {
     const tableBody = document.getElementById('sessions-table-body');
     tableBody.innerHTML = `
@@ -2063,15 +1986,6 @@ function showProgressError(message) {
                 </</td>
         </tr>
     `;
-}
-
-// Helper function to get filtered sessions (excludes discarded sessions)
-function getFilteredSessions() {
-    // Only filter out sessions explicitly marked as discarded (keep === 0)
-    return sessions.filter(session => {
-        // Session is available unless explicitly marked as keep=0
-        return session.keep !== 0;
-    });
 }
 
 // Update sidebar highlighting for the active session
@@ -2092,29 +2006,15 @@ function updateSidebarHighlighting() {
 
 // Navigate to the next session
 function navigateToNextSession() {
-    const filteredSessions = getFilteredSessions();
-    if (filteredSessions.length === 0) {
-        console.log('No available sessions');
-        showTableView();
+    const nextSession = SessionService.getNextSession(sessions, currentSessionId);
+    
+    if (!nextSession) {
+        console.log('No next session available');
+        if (SessionService.getFilteredSessions(sessions).length === 0) {
+            showTableView();
+        }
         return;
     }
-    
-    if (filteredSessions.length === 1) {
-        console.log('Only one session available');
-        return;
-    }
-    
-    const currentIndex = filteredSessions.findIndex(s => s.session_id == currentSessionId);
-    if (currentIndex === -1) {
-        // Current session not found (probably deleted), navigate to first available session
-        console.log('Current session not found, navigating to first available session');
-        visualizeSession(filteredSessions[0].session_id);
-        return;
-    }
-    
-    // Get next session with wraparound
-    const nextIndex = (currentIndex + 1) % filteredSessions.length;
-    const nextSession = filteredSessions[nextIndex];
     
     console.log(`Navigating to next session: ${nextSession.session_name}`);
     visualizeSession(nextSession.session_id);
@@ -2122,54 +2022,19 @@ function navigateToNextSession() {
 
 // Navigate to the previous session
 function navigateToPreviousSession() {
-    const filteredSessions = getFilteredSessions();
-    if (filteredSessions.length === 0) {
-        console.log('No available sessions');
-        showTableView();
+    const prevSession = SessionService.getPreviousSession(sessions, currentSessionId);
+    
+    if (!prevSession) {
+        console.log('No previous session available');
+        if (SessionService.getFilteredSessions(sessions).length === 0) {
+            showTableView();
+        }
         return;
     }
-    
-    if (filteredSessions.length === 1) {
-        console.log('Only one session available');
-        return;
-    }
-    
-    const currentIndex = filteredSessions.findIndex(s => s.session_id == currentSessionId);
-    if (currentIndex === -1) {
-        // Current session not found (probably deleted), navigate to first available session
-        console.log('Current session not found, navigating to first available session');
-        visualizeSession(filteredSessions[0].session_id);
-        return;
-    }
-    
-    // Get previous session with wraparound
-    const prevIndex = currentIndex === 0 ? filteredSessions.length - 1 : currentIndex - 1;
-    const prevSession = filteredSessions[prevIndex];
     
     console.log(`Navigating to previous session: ${prevSession.session_name}`);
     visualizeSession(prevSession.session_id);
 }
-// Global drag context
-const dragContext = {
-    currentSession: null  // Will store the session being modified
-};
-// Add at the top of your file
-const activeHandlers = [];
-
-// Create global reference to these handlers so we can remove them
-let sessions = [];
-// Add this variable to track the current project
-let currentSelectedLabeling = 'No Labeling'; // Default value
-let labelingsList = null; // Add this global variable
-
-let currentProjectId = null;
-let currentSessionId = null;
-let currentActiveSession = null;
-let isSplitting = false;
-let activeUploadId = null; // Track active upload
-let splitPoints = [];
-let minTimestamp = null;
-let maxTimestamp = null;
 
 // Helper function to generate default colors for labelings
 function generateDefaultColor(index) {
@@ -2215,6 +2080,27 @@ async function updateLabelingColor(labelingName, newColor, colorPickerElement) {
         console.error('Error updating labeling color:', error);
     }
 }
+// Global drag context
+const dragContext = {
+    currentSession: null  // Will store the session being modified
+};
+// Add at the top of your file
+const activeHandlers = [];
+
+// Create global reference to these handlers so we can remove them
+let sessions = [];
+// Add this variable to track the current project
+let currentSelectedLabeling = 'No Labeling'; // Default value
+let labelingsList = null; // Add this global variable
+
+let currentProjectId = null;
+let currentSessionId = null;
+let currentActiveSession = null;
+let isSplitting = false;
+let activeUploadId = null; // Track active upload
+let splitPoints = [];
+let minTimestamp = null;
+let maxTimestamp = null;
 
 // Make functions available globally for inline event handlers
 window.visualizeSession = visualizeSession;
@@ -2233,6 +2119,7 @@ window.createNewProject = createNewProject;
 window.navigateToNextSession = navigateToNextSession;
 window.navigateToPreviousSession = navigateToPreviousSession;
 window.updateSidebarHighlighting = updateSidebarHighlighting;
+window.exportLabelsJSON = exportLabelsJSON;
 
 
 initializeProjects();
