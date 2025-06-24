@@ -9,6 +9,7 @@ export const ActionButtonTemplates = {
      */
     currentLabeling: () => `
         <span id="current-labeling-name" style="display: inline-flex; align-items: center; margin-right: 8px; padding: 4px 8px; background: rgba(0, 123, 255, 0.1); border-radius: 12px; font-size: 12px; color: #007bff; font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease;">
+            No Labeling
         </span>
     `,
 
@@ -85,7 +86,7 @@ export const ActionButtonHandlers = {
      * @param {Function} options.onScore - Score callback function
      * @param {boolean} options.isSplitting - Current splitting state
      */
-    setupVisualizationButtons: ({ onDelete, onVerify, onSplit, onScore, isSplitting = false } = {}) => {
+    setupVisualizationButtons: ({ onDelete, onVerify, onSplit, onScore, onLabeling, isSplitting = false } = {}) => {
         // Setup delete button with confirmation
         ActionButtonHandlers.setupDeleteButton(onDelete);
         
@@ -97,6 +98,9 @@ export const ActionButtonHandlers = {
         
         // Setup score button
         ActionButtonHandlers.setupScoreButton(onScore);
+
+        // Setup current labeling button
+        ActionButtonHandlers.setupCurrentLabelingButton(onLabeling);
     },
 
     /**
@@ -235,6 +239,35 @@ export const ActionButtonHandlers = {
         // Click handling
         score_btn_overlay.addEventListener('click', () => {
             if (onScore) onScore();
+        });
+    },
+    /**
+     * Setup current labeling button to open modal
+     * @param {Function} onLabeling - Callback to open labeling modal
+     */
+    setupCurrentLabelingButton: (onLabeling) => {
+        const labelingBtn = document.getElementById('current-labeling-name');
+        if (!labelingBtn) return;
+
+        labelingBtn.addEventListener('mouseenter', () => {
+            labelingBtn.style.backgroundColor = 'rgba(0, 123, 255, 0.15)';
+            labelingBtn.style.transform = 'scale(1.03)';
+        });
+        labelingBtn.addEventListener('mouseleave', () => {
+            labelingBtn.style.backgroundColor = 'rgba(0, 123, 255, 0.1)';
+            labelingBtn.style.transform = 'scale(1)';
+        });
+        labelingBtn.addEventListener('click', () => {
+            if (onLabeling) {
+                onLabeling();
+            } else {
+                // Default: open modal with id 'labelingModal' if present
+                const labelingModal = document.getElementById('labelingModal');
+                if (labelingModal && window.bootstrap) {
+                    const modal = new bootstrap.Modal(labelingModal);
+                    modal.show();
+                }
+            }
         });
     }
 };

@@ -791,6 +791,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }, true);
     }
+
 });
 async function fetchAndDisplayLabelings(projectId) {
     try {
