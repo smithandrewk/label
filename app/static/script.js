@@ -998,6 +998,10 @@ async function visualizeSession(sessionId) {
             console.log('Plotly relayout event');
             updateAllOverlayPositions();
         });
+        // Update overlays during pan/zoom interaction
+        plotDiv.on('plotly_relayouting', () => {
+            updateAllOverlayPositions();
+        });
         // Update overlays on window resize
         window.addEventListener('resize', () => {
             Plotly.Plots.resize(plotDiv).then(() => {
