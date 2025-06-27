@@ -636,7 +636,12 @@ async function visualizeSession(sessionId) {
     const container = document.querySelector('.plot-container');
     container.querySelectorAll('.drag-overlay').forEach(el => el.remove());
 
-    Plotly.newPlot('timeSeriesPlot', traces, layout).then(() => {
+    // Disables double-click zoom
+    const config = {
+        doubleClick: false
+    };
+
+    Plotly.newPlot('timeSeriesPlot', traces, layout, config).then(() => {
         const plotDiv = document.getElementById('timeSeriesPlot');
 
         ensureSessionBoutsIsArray(session);
@@ -699,6 +704,19 @@ async function visualizeSession(sessionId) {
             Plotly.Plots.resize(plotDiv).then(() => {
                 updateAllOverlayPositions();
             });
+        });
+        // Handle double click for pan and zoom
+        plotDiv.on('plotly_doubleclick', (eventData) => {
+            const mouseMode = plotDiv._fullLayout.dragmode;
+            if (mouseMode === 'pan') { 
+                createNewBout();
+            }
+            else if (mouseMode === 'zoom') {
+                Plotly.relayout(plotDiv, {
+                    'xaxis.autorange': true,
+                    'yaxis.autorange': true
+                });
+            }
         });
     });
 
