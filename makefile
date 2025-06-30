@@ -28,7 +28,7 @@ help:
 .PHONY: run
 run:
 	@echo "Starting Flask application..."
-	@flask run
+	@flask run --host 0.0.0.0
 
 # Create a backup of the current database
 .PHONY: backup
