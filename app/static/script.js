@@ -916,16 +916,6 @@ function selectLabeling(labelingName) {
 function updateCurrentLabelingHeader(labelingName = null) {
     const displayName = labelingName || currentLabelingName;
 
-    // Update modal header
-    const currentLabelingHeader = document.getElementById('current-labeling-header');
-    if (currentLabelingHeader) {
-        if (displayName && displayName !== 'No Labeling') {
-            currentLabelingHeader.textContent = `Current Labeling: ${displayName}`;
-        } else {
-            currentLabelingHeader.textContent = 'Current Labeling: None Selected';
-        }
-    }
-    
     // Update visualization view name display
     const currentLabelingNameElement = document.getElementById('current-labeling-name');
     if (currentLabelingNameElement) {
