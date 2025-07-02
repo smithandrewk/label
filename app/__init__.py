@@ -12,13 +12,38 @@ def create_app():
     
     CORS(app)
     
+    # Initialize database connection function
+    from app.services.database_service import get_db_connection
+    
+    # Initialize repositories
+    from app.repositories.project_repository import ProjectRepository
+    from app.repositories.session_repository import SessionRepository
+    from app.repositories.participant_repository import ParticipantRepository
+    
+    project_repository = ProjectRepository(get_db_connection=get_db_connection)
+    session_repository = SessionRepository(get_db_connection=get_db_connection)
+    participant_repository = ParticipantRepository(get_db_connection=get_db_connection)
+    
+    # Initialize services with repositories
     from app.services.project_service import ProjectService
     from app.services.session_service import SessionService
     from app.services.model_service import ModelService
-    from app.services.database_service import get_db_connection
-    session_service = SessionService(get_db_connection=get_db_connection)
-    project_service = ProjectService(get_db_connection=get_db_connection)
-    model_service   = ModelService(get_db_connection=get_db_connection)
+    
+    session_service = SessionService(
+        get_db_connection=get_db_connection,
+        session_repository=session_repository,
+        project_repository=project_repository
+    )
+    project_service = ProjectService(
+        get_db_connection=get_db_connection,
+        project_repository=project_repository,
+        session_repository=session_repository,
+        participant_repository=participant_repository
+    )
+    model_service = ModelService(
+        get_db_connection=get_db_connection,
+        session_repository=session_repository
+    )
 
     # Register blueprints
     from app.routes import main, models, projects, sessions, labelings

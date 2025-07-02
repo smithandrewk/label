@@ -8,9 +8,12 @@ import pandas as pd
 from app.exceptions import DatabaseError
 
 class SessionService:
-    def __init__(self, get_db_connection=None):
+    def __init__(self, get_db_connection=None, session_repository=None, project_repository=None):
         self.get_db_connection = get_db_connection
-        self.session_repo = SessionRepository(get_db_connection)
+        # Use injected repositories if provided, otherwise create new instances
+        self.session_repo = session_repository or SessionRepository(get_db_connection)
+        # Store project_repository for potential future use
+        self.project_repo = project_repository
     
     def delete_sessions_by_project(self, project_id):
         """Delete all sessions for a project"""
