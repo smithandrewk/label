@@ -19,6 +19,7 @@ SCRIPTS_DIR = ./app/static
 help:
 	@echo "Available targets:"
 	@echo "  run           : Start the Flask application (default)"
+	@echo "  test          : Run pytest tests"
 	@echo "  backup        : Create a backup of the current database"
 	@echo "  restore-backup: List and restore from available backups (auto-backs up first)"
 	@echo "  show-tables   : Show all tables in the database"
@@ -29,6 +30,12 @@ help:
 run:
 	@echo "Starting Flask application..."
 	@flask run --host 0.0.0.0
+
+# Run pytest tests
+.PHONY: test
+test:
+	@echo "Running pytest tests..."
+	@python3 -m pytest -v
 
 # Create a backup of the current database
 .PHONY: backup
