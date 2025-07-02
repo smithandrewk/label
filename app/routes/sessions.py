@@ -117,15 +117,12 @@ class SessionController:
             verified = data.get('verified')
             
             try:
+                print(f"Updating session {session_id} with status={status}, keep={keep}, bouts={bouts}, verified={verified}")
                 rows_affected = self.session_service.update_session(session_id, status, keep, bouts, verified)
-                if rows_affected == 0:
-                    return jsonify({'error': 'Session not found'}), 404
+                
             except DatabaseError as e:
                 return jsonify({'error': str(e)}), 500
             
-            if rows_affected == 0:
-                return jsonify({'warning': 'No session found with that ID'}), 200
-                
             return jsonify({'message': 'Metadata updated', 'rows_affected': rows_affected})
         except Exception as e:
             print(f"Error updating session metadata: {e}")
