@@ -245,13 +245,49 @@ class SessionService:
             List of session names that were created (empty list if session was invalid/skipped)
         """
         try:
-            csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
-            df = pd.read_csv(csv_path).iloc[:-1]
-            df['ns_since_reboot'] = df['ns_since_reboot'].astype(float)
-            df['x'] = df['x'].astype(float)
-            df['y'] = df['y'].astype(float)
-            df['z'] = df['z'].astype(float)
-            df = df.sort_values('ns_since_reboot').reset_index(drop=True)
+            accel_csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
+            gyro_csv_path = os.path.join(project_path, session_name, 'gyroscope_data.csv')
+
+            accel_df = pd.read_csv(accel_csv_path).iloc[:-1]
+            gyro_df = pd.read_csv(gyro_csv_path).iloc[:-1]
+
+            accel_df = accel_df.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
+            gyro_df = gyro_df.rename(columns={'x': 'gyro_x', 'y': 'gyro_y', 'z': 'gyro_z'})
+
+            accel_df['ns_since_reboot'] = accel_df['ns_since_reboot'].astype(float)
+            accel_df['accel_x'] = accel_df['accel_x'].astype(float)
+            accel_df['accel_y'] = accel_df['accel_y'].astype(float)
+            accel_df['accel_z'] = accel_df['accel_z'].astype(float)
+            accel_df = accel_df.sort_values('ns_since_reboot').reset_index(drop=True)
+
+            gyro_df['ns_since_reboot'] = gyro_df['ns_since_reboot'].astype(float)
+            gyro_df['gyro_x'] = gyro_df['gyro_x'].astype(float)
+            gyro_df['gyro_y'] = gyro_df['gyro_y'].astype(float)
+            gyro_df['gyro_z'] = gyro_df['gyro_z'].astype(float)
+            gyro_df = gyro_df.sort_values('ns_since_reboot').reset_index(drop=True)
+
+            accel_sample_interval = accel_df['ns_since_reboot'].diff().median() * 1e-9
+            accel_sample_rate = 1 / accel_sample_interval
+
+            gyro_sample_interval = gyro_df['ns_since_reboot'].diff().median() * 1e-9
+            gyro_sample_rate = 1 / gyro_sample_interval
+
+            print(f"Sample rate = {accel_sample_rate:.2f} Hz (accel), {gyro_sample_rate:.2f} Hz (gyro)")
+
+            if abs(accel_sample_rate - gyro_sample_rate) > 0.01:
+                raise ValueError(f"Sample rates differ significantly: accel {accel_sample_rate:.2f} Hz, gyro {gyro_sample_rate:.2f} Hz")
+            
+            sample_rate = min(accel_sample_rate, gyro_sample_rate)
+
+            df = pd.merge_asof(
+                accel_df.sort_values('ns_since_reboot'),
+                gyro_df.sort_values('ns_since_reboot'),
+                on='ns_since_reboot',
+                tolerance=int(1e9 / sample_rate),
+                direction='nearest'
+            )
+
+            df = df.dropna()
 
             gap_threshold_minutes = 30
             gap_threshold_ns = gap_threshold_minutes * 60 * 1_000_000_000
@@ -262,7 +298,8 @@ class SessionService:
             if len(gap_indices) == 0:
                 print("no gaps!")
                 df = resample(df)
-                df.to_csv(csv_path, index=False)
+                df[['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']].to_csv(accel_csv_path, index=False)
+                df[['ns_since_reboot', 'gyro_x', 'gyro_y', 'gyro_z']].to_csv(gyro_csv_path, index=False)
                 print(bouts_json)
                 # Parse bouts data
                 try:
@@ -362,7 +399,8 @@ class SessionService:
                 
                 # Create directory and save CSV
                 os.makedirs(new_dir, exist_ok=True)
-                segment.to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
+                segment[['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']].to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
+                segment[['ns_since_reboot', 'gyro_x', 'gyro_y', 'gyro_z']].to_csv(os.path.join(new_dir, 'gyroscope_data.csv'), index=False)
                 
                 # Copy log file if it exists
                 log_path = os.path.join(project_path, session_name, 'log.csv')
