@@ -267,6 +267,21 @@ export const ActionButtonHandlers = {
                 if (labelingModal && window.bootstrap) {
                     const modal = new bootstrap.Modal(labelingModal);
                     modal.show();
+                    
+                    // Add keyboard listener for 'R' key to close modal
+                    const handleKeyPress = (event) => {
+                        if (event.key.toLowerCase() === 'r') {
+                            modal.hide();
+                            document.removeEventListener('keydown', handleKeyPress);
+                        }
+                    };
+                    
+                    document.addEventListener('keydown', handleKeyPress);
+                    
+                    // Clean up listener when modal is hidden
+                    labelingModal.addEventListener('hidden.bs.modal', () => {
+                        document.removeEventListener('keydown', handleKeyPress);
+                    }, { once: true });
                 }
             }
         });
