@@ -30,18 +30,16 @@ def create_app():
     from app.services.model_service import ModelService
     
     session_service = SessionService(
-        get_db_connection=get_db_connection,
+        get_db_connection=get_db_connection, # TODO: get rid of eventually when repository layer is fully implemented
         session_repository=session_repository,
         project_repository=project_repository
     )
     project_service = ProjectService(
-        get_db_connection=get_db_connection,
         project_repository=project_repository,
         session_repository=session_repository,
         participant_repository=participant_repository
     )
     model_service = ModelService(
-        get_db_connection=get_db_connection,
         session_repository=session_repository
     )
 

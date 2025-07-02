@@ -3,17 +3,16 @@ import os
 import shutil
 import json
 from app.services.utils import timeit, resample
-from app.repositories.session_repository import SessionRepository
 import pandas as pd
 from app.exceptions import DatabaseError
+from app.repositories.session_repository import SessionRepository
+from app.repositories.project_repository import ProjectRepository
 
 class SessionService:
     def __init__(self, get_db_connection=None, session_repository=None, project_repository=None):
         self.get_db_connection = get_db_connection
-        # Use injected repositories if provided, otherwise create new instances
-        self.session_repo = session_repository or SessionRepository(get_db_connection)
-        # Store project_repository for potential future use
-        self.project_repo = project_repository
+        self.session_repo: SessionRepository = session_repository
+        self.project_repo: ProjectRepository = project_repository
     
     def delete_sessions_by_project(self, project_id):
         """Delete all sessions for a project"""

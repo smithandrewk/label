@@ -7,11 +7,10 @@ import shutil
 from datetime import datetime
 
 class ProjectService:
-    def __init__(self, get_db_connection=None, project_repository=None, session_repository=None, participant_repository=None):
-        # Use injected repositories if provided, otherwise create new instances
-        self.project_repo = project_repository or ProjectRepository(get_db_connection)
-        self.participant_repo = participant_repository or ParticipantRepository(get_db_connection)
-        self.session_repo = session_repository or SessionRepository(get_db_connection)
+    def __init__(self, project_repository=None, session_repository=None, participant_repository=None):
+        self.project_repo: ProjectRepository = project_repository
+        self.participant_repo: ParticipantRepository = participant_repository
+        self.session_repo: SessionRepository = session_repository
     
     def list_projects(self):
         """Get all projects"""

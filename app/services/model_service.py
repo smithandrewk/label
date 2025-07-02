@@ -13,12 +13,11 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.nn.functional import relu
 from torch.utils.data import DataLoader, TensorDataset
+from app.repositories.session_repository import SessionRepository
 
 class ModelService:
-    def __init__(self, get_db_connection=None, session_repository=None):
-        self.get_db_connection = get_db_connection
-        # Use injected repository if provided, otherwise create new instance
-        self.session_repo = session_repository
+    def __init__(self, session_repository=None):
+        self.session_repo: SessionRepository = session_repository
         self.model = SmokingCNN(window_size=3000, num_features=3)
         self.model.load_state_dict(torch.load('model.pth', map_location='cpu'))
         self.model.eval()
