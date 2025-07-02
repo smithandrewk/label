@@ -8,14 +8,17 @@ from app.exceptions import DatabaseError
 import logging
 import traceback
 
+from app.services.project_service import ProjectService
+from app.services.session_service import SessionService
+
 DATA_DIR = os.getenv('DATA_DIR', '~/.delta/data')
 
 projects_bp = Blueprint('projects', __name__)
 
 class ProjectController:
     def __init__(self, project_service, session_service):
-        self.project_service = project_service
-        self.session_service = session_service
+        self.project_service: ProjectService = project_service
+        self.session_service: SessionService = session_service
 
     def list_projects(self):
         try:
