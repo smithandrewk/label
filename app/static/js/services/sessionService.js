@@ -100,9 +100,9 @@ export class SessionService {
 
         return session.data.every(d => 
             d.ns_since_reboot && 
-            typeof d.x === 'number' && 
-            typeof d.y === 'number' && 
-            typeof d.z === 'number'
+            typeof d.accel_x === 'number' && 
+            typeof d.accel_y === 'number' && 
+            typeof d.accel_z === 'number'
         );
     }
 
