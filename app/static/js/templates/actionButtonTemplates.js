@@ -66,7 +66,7 @@ export const ActionButtonTemplates = {
     visualizationActionButtons: ({ isSplitting = false, isVerified = false, labelingName = "No Labeling", labelingColor = "#000000" } = {}) => {
         return [
             ActionButtonTemplates.currentLabeling(labelingName, labelingColor),
-            ActionButtonTemplates.scoreButton(),
+            // ActionButtonTemplates.scoreButton(),
             ActionButtonTemplates.splitButton(isSplitting),
             ActionButtonTemplates.deleteButton(),
             ActionButtonTemplates.verifiedButton(isVerified)
@@ -98,7 +98,7 @@ export const ActionButtonHandlers = {
         ActionButtonHandlers.setupSplitButton(onSplit, isSplitting);
         
         // Setup score button
-        ActionButtonHandlers.setupScoreButton(onScore);
+        // ActionButtonHandlers.setupScoreButton(onScore);
 
         // Setup current labeling button
         ActionButtonHandlers.setupCurrentLabelingButton(onLabeling);

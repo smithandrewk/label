@@ -348,6 +348,7 @@ async function pollScoringStatus(scoringId, sessionId, sessionName) {
         }
     }, 1000); // Poll every second
 }
+
 function resetScoreButton(sessionId) {
     const scoreBtn = document.getElementById(`score-btn-overlay`);
     if (scoreBtn) {
