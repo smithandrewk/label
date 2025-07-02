@@ -189,6 +189,23 @@ class ProjectService:
                     accel_file = os.path.join(item_path, 'accelerometer_data.csv')
                     if os.path.exists(accel_file):
                         sessions.append({'name': item, 'file': 'accelerometer_data.csv'})
+                    elif os.path.exists(os.path.join(item_path, 'accelerometer_data.gz')):
+                        # Unzip
+                        gz_file = os.path.join(item_path, 'accelerometer_data.gz')
+                        csv_file = os.path.join(item_path, 'accelerometer_data.csv')
+                        os.system(f'gunzip -c "{gz_file}" | head -n -1 > "{csv_file}"')
+                        sessions.append({'name': item, 'file': 'accelerometer_data.csv'})
+                        os.remove(gz_file)
+                    
+                    # TODO: Handle gyroscope data similarly
+                    gyro_data = os.path.join(item_path, 'gyroscope_data.csv')
+                    gz_file = os.path.join(item_path, 'gyroscope_data.gz')
+                    if os.path.exists(gyro_data):
+                        os.remove(gyro_data)
+                    if os.path.exists(gz_file):
+                        os.remove(gz_file)
+                        
+
             
             # Sort sessions by date/time in the name
             try:
