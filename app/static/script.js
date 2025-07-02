@@ -1658,7 +1658,6 @@ async function createOrUpdateModelLabeling(labelingName) {
                 },
                 body: JSON.stringify({
                     name: labelingName,
-                    color: '#FF6B6B', // Distinct red color for model results
                     labels: {}
                 })
             });

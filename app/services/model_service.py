@@ -99,8 +99,7 @@ class ModelService:
 
             # Remove bouts shorter than 20 seconds and format as dictionaries
             model_name = "SmokingCNN"  # You can make this configurable
-            timestamp = int(time.time())
-            label = f"{model_name}_{timestamp}"
+            label = f"{model_name}"
             
             smoking_bouts = [
                 {

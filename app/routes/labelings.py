@@ -6,15 +6,19 @@ import json
 import shutil
 import logging
 import traceback
+import random
+from app.services.project_service import ProjectService
+from app.services.session_service import SessionService
+from app.services.model_service import ModelService
 
 labelings_bp = Blueprint('labels', __name__)
 
 class LabelController:
     def __init__(self, project_service, session_service, model_service):
-        self.project_service = project_service
-        self.session_service = session_service
-        self.model_service = model_service
-        
+        self.project_service: ProjectService = project_service
+        self.session_service: SessionService = session_service
+        self.model_service: ModelService = model_service
+
     def get_labelings(self, project_id):
         try:
             labelings = self.project_service.get_labelings(project_id)
@@ -54,7 +58,27 @@ def update_labelings(project_id):
             
             # Initialize with empty labels structure if not provided
             labels = data.get('labels', {})
-            color = data.get('color', '#FF6B6B')  # Default color if none provided
+            
+            # Pretty color palette for automatic labeling colors
+            pretty_colors = [
+                '#FF6B6B',  # Coral Red
+                '#4ECDC4',  # Turquoise
+                '#45B7D1',  # Sky Blue
+                '#96CEB4',  # Mint Green
+                '#FFEAA7',  # Warm Yellow
+                '#DDA0DD',  # Plum
+                '#98D8C8',  # Seafoam
+                '#F7DC6F',  # Light Gold
+                '#BB8FCE',  # Lavender
+                '#85C1E9',  # Light Blue
+                '#F8C471',  # Peach
+                '#82E0AA',  # Light Green
+                '#F1948A',  # Salmon
+                '#85C1E9',  # Powder Blue
+                '#D7BDE2'   # Light Purple
+            ]
+            
+            color = data.get('color', random.choice(pretty_colors))  # Random pretty color if none provided
             
             # Create a labeling object with name and color
             labeling = {
