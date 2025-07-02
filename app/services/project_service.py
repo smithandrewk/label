@@ -197,16 +197,18 @@ class ProjectService:
                         sessions.append({'name': item, 'file': 'accelerometer_data.csv'})
                         os.remove(gz_file)
                     
-                    # TODO: Handle gyroscope data similarly
                     gyro_data = os.path.join(item_path, 'gyroscope_data.csv')
                     gz_file = os.path.join(item_path, 'gyroscope_data.gz')
+
                     if os.path.exists(gyro_data):
-                        os.remove(gyro_data)
-                    if os.path.exists(gz_file):
+                        print('Found gyroscope data:', gyro_data)
+                    else:
+                        print('No gyroscope data found in:', item_path)
+                        if os.path.exists(gz_file):
+                            os.system(f'gunzip -c "{gz_file}" | head -n -1 > "{gyro_data}"')
+                    if os.path.exists(gz_file):                         
                         os.remove(gz_file)
                         
-
-            
             # Sort sessions by date/time in the name
             try:
                 from datetime import datetime
