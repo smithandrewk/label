@@ -300,6 +300,16 @@ async function pollScoringStatus(scoringId, sessionId, sessionName) {
                         }
                         sessions[sessionIndex].bouts = bouts || [];
                         sessions[sessionIndex].data = sessionData.data;
+                        
+                        // Extract the labeling name from the new bouts and create/update labeling
+                        if (bouts && bouts.length > 0) {
+                            const modelLabelingName = bouts[bouts.length - 1].label; // Get label from last bout (newest)
+                            if (modelLabelingName && currentProjectId) {
+                                await createOrUpdateModelLabeling(modelLabelingName);
+                                // Automatically select the new model labeling to show the results
+                                selectLabeling(modelLabelingName);
+                            }
+                        }
                     }
                 }
                 
@@ -1629,6 +1639,53 @@ function navigateToPreviousSession() {
     
     console.log(`Navigating to previous session: ${prevSession.session_name}`);
     visualizeSession(prevSession.session_id);
+}
+
+// Create or update labeling for model-generated bouts
+async function createOrUpdateModelLabeling(labelingName) {
+    try {
+        console.log(`Creating/updating labeling: ${labelingName} for project ${currentProjectId}`);
+        
+        // Check if labeling already exists
+        const existingLabeling = labelings.find(l => l.name === labelingName);
+        
+        if (!existingLabeling) {
+            // Create new labeling with a distinct color for model results
+            const response = await fetch(`/api/labelings/${currentProjectId}/update`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: labelingName,
+                    color: '#FF6B6B', // Distinct red color for model results
+                    labels: {}
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('New model labeling created:', result);
+            
+            // Refresh labelings list to include the new one
+            labelings = await ProjectAPI.fetchLabelings(currentProjectId);
+            
+            // Update the labelings display if modal is open
+            const labelingModal = document.getElementById('labelingModal');
+            if (labelingModal && labelingModal.classList.contains('show')) {
+                await fetchAndDisplayLabelings(currentProjectId);
+            }
+            
+        } else {
+            console.log(`Labeling ${labelingName} already exists, no need to create`);
+        }
+        
+    } catch (error) {
+        console.error('Error creating/updating model labeling:', error);
+    }
 }
 
 // Helper function to generate default colors for labelings

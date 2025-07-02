@@ -31,3 +31,8 @@ class SessionRepository(BaseRepository):
         """Get smoking bouts for a session"""
         query = "SELECT bouts FROM sessions WHERE session_id = %s"
         return self._execute_query(query, (session_id,), fetch_one=True)
+    
+    def set_bouts_by_session(self, session_id, bouts):
+        """Set smoking bouts for a session"""
+        query = "UPDATE sessions SET bouts = %s WHERE session_id = %s"
+        return self._execute_query(query, (bouts, session_id), commit=True)

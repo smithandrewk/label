@@ -97,21 +97,27 @@ class ModelService:
                         smoking_bouts.append(current_bout)
                         current_bout = None
 
-            # Remove bouts shorter than 20 seconds
-            smoking_bouts = [bout for bout in smoking_bouts if (bout[1] - bout[0]) >= 30 * 1e9]
-            print(smoking_bouts)
-
-            conn = self.get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                UPDATE sessions
-                SET bouts = %s
-                WHERE session_id = %s
-            """, (json.dumps(smoking_bouts), session_id))
+            # Remove bouts shorter than 20 seconds and format as dictionaries
+            model_name = "SmokingCNN"  # You can make this configurable
+            timestamp = int(time.time())
+            label = f"{model_name}_{timestamp}"
             
-            conn.commit()
-            cursor.close()
-            conn.close()
+            smoking_bouts = [
+                {
+                    'start': bout[0],
+                    'end': bout[1], 
+                    'label': label
+                }
+                for bout in smoking_bouts 
+                if (bout[1] - bout[0]) >= 30 * 1e9
+            ]
+            print(f"Generated {len(smoking_bouts)} bouts with label: {label}")
+
+            bouts = self.session_repo.get_bouts_by_session(session_id)
+            json_bouts = json.loads(bouts['bouts']) if bouts and bouts['bouts'] else []
+            print(json_bouts + smoking_bouts)
+
+            self.session_repo.set_bouts_by_session(session_id, json.dumps(json_bouts + smoking_bouts))
 
             # Update status on completion
             self.scoring_status[scoring_id].update({
