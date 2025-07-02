@@ -113,10 +113,10 @@ def init_controller(project_service, session_service):
 def serve_index():
     return render_template('index.html', active_view='sessions')
 
-# Serve dashboard page
-@main_bp.route('/dashboard')
-def serve_dashboard():
-    return render_template('dashboard.html', active_view='dashboard')
+# Serve projects page
+@main_bp.route('/projects')
+def serve_projects():
+    return render_template('projects.html', active_view='projects')
 
 # Serve participants page
 @main_bp.route('/participants')
