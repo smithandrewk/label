@@ -210,13 +210,23 @@ class SessionController:
             segment_bouts = [[] for _ in segments]
             
             for bout in parent_bouts:
-                # Each bout is [start_time, stop_time]
-                if len(bout) != 2:
-                    continue  # Skip malformed bouts
-                    
-                bout_start = bout[0]
-                bout_end = bout[1]
-                
+                """
+                Each bout is represented as a dictionary with 'start', 'end', and 'label' keys.
+
+                Example:
+                bout = {
+                    'start': 1234567890.0,
+                    'end': 1234567895.0,
+                    'label': 'smoking'
+                }
+
+                bout['start'] and bout['end'] are in ns_since_reboot format.
+                bout['label'] is a string representing the label of the bout.
+                """
+                bout_start = bout['start']
+                bout_end = bout['end']
+                bout_label = bout['label']
+
                 for i, (segment_start, segment_end) in enumerate(segment_ranges):
                     # If bout is entirely within segment
                     if segment_start <= bout_start <= segment_end and segment_start <= bout_end <= segment_end:
