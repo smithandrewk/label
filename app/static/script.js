@@ -131,7 +131,17 @@ async function initializeProjects() {
 async function fetchProjectSessions(projectId) {
     try {
         sessions = await ProjectAPI.fetchProjectSessions(projectId);
-        
+        labelings = await ProjectAPI.fetchLabelings(projectId);
+
+        // Set currentLabeling to the first available labeling or "No Labeling"
+        if (labelings && labelings.length > 0) {
+            currentLabelingJSON = labelings[0];
+            currentLabelingName = currentLabelingJSON.name;
+        } else {
+            currentLabelingJSON = null;
+            currentLabelingName = "No Labeling";
+        }
+        console.log(labelings)
         // Log session statistics
         const stats = SessionService.getSessionStats(sessions);
         console.log(`Session statistics: ${stats.available} available, ${stats.discarded} discarded, ${stats.verified} verified (${stats.total} total)`);
@@ -563,22 +573,24 @@ async function visualizeSession(sessionId) {
         updateSessionsList();
     }
 
-    // If currentSelectedLabeling is "No Labeling", set it to the first available labeling
-    if (currentSelectedLabeling === "No Labeling") {
+    // If currentLabelingName is "No Labeling", set it to the first available labeling
+    if (currentLabelingName === "No Labeling") {
         const availableLabelings = Object.keys(session.labelings || {});
         console.log('Available labelings:', availableLabelings);
         if (availableLabelings.length > 0) {
-            currentSelectedLabeling = availableLabelings[0];
+            currentLabelingName = availableLabelings[0];
         }
     }
-    console.log(currentSelectedLabeling)
+    console.log('Current selected labeling:', currentLabelingName);
     const actionButtons = document.getElementById("action-buttons");
     actionButtons.innerHTML = "";
     
     // Use template for action buttons
     actionButtons.innerHTML = ActionButtonTemplates.visualizationActionButtons({
         isSplitting: isSplitting,
-        isVerified: session.verified
+        isVerified: session.verified,
+        labelingName: currentLabelingName,
+        labelingColor: currentLabelingJSON ? currentLabelingJSON.color : '#000000',
     });
 
     // Setup event listeners using the template handlers
@@ -657,7 +669,7 @@ async function visualizeSession(sessionId) {
             console.log('Updating overlay positions');
             session.bouts.forEach((bout, index) => {
                 // Only show overlays for bouts that match the currently selected labeling
-                if (bout['label'] === currentSelectedLabeling) {
+                if (bout['label'] === currentLabelingName) {
                     updateOverlayPositions(plotDiv, bout, index);
                 } else {
                     // Hide overlays that don't match the current labeling
@@ -795,11 +807,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 async function fetchAndDisplayLabelings(projectId) {
     try {
-        const response = await fetch(`/api/labelings/${projectId}`);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
+        labelings = await ProjectAPI.fetchLabelings(projectId);
         labelingsList = document.getElementById('available-labelings-list');
         
         // Reset current labeling header when refreshing the list
@@ -812,17 +820,6 @@ async function fetchAndDisplayLabelings(projectId) {
             labelingsList.appendChild(plusIcon);
         }
         
-        // Parse the labelings JSON string
-        let labelings = [];
-        if (data.length > 0 && data[0].labelings) {
-            try {
-                labelings = JSON.parse(data[0].labelings);
-            } catch (e) {
-                console.error('Error parsing labelings JSON:', e);
-                labelings = [];
-            }
-        }
-
         console.log('Parsed labelings:', labelings);
         console.log(typeof(labelings))
         // Display each labeling
@@ -865,20 +862,28 @@ async function fetchAndDisplayLabelings(projectId) {
     }
 }
 
-function selectLabeling(labelingName) {
-    currentSelectedLabeling = labelingName;
+function getLabelingFromLabelingName(labelingName) {
+    if (!labelings || labelings.length === 0) {
+        console.warn('No labelings available to search from');
+        return null;
+    }
+    const labeling = labelings.find(l => l.name === labelingName);
+    if (!labeling) {
+        console.warn(`Labeling not found for name: ${labelingName}`);
+        return null;
+    }
+    return labeling;
+}
 
-    // Update the current labeling input
-    // document.getElementById('cur').value = labelingName;
-    
-    // Update the current labeling header in modal
-    updateCurrentLabelingHeader(labelingName);
-    
+function selectLabeling(labelingName) {
+    currentLabelingName = labelingName;
+
     // Update the current labeling name in visualization view with color and maintain interactivity
     const currentLabelingNameElement = document.getElementById('current-labeling-name');
     if (currentLabelingNameElement) {
-        const labelingColors = JSON.parse(localStorage.getItem('labelingColors') || '{}');
-        const labelingColor = labelingColors[labelingName] || generateDefaultColor(0);
+
+        const currentLabeling = getLabelingFromLabelingName(labelingName);
+        const labelingColor = currentLabeling.color
         
         currentLabelingNameElement.innerHTML = `
             <div class="color-circle me-1" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${labelingColor}; border: 1px solid #ccc; display: inline-block;"></div>
@@ -895,7 +900,7 @@ function selectLabeling(labelingName) {
         const plotDiv = document.getElementById('timeSeriesPlot');
         if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
             dragContext.currentSession.bouts.forEach((bout, index) => {
-                if (bout['label'] === currentSelectedLabeling) {
+                if (bout['label'] === currentLabelingName) {
                     updateOverlayPositions(plotDiv, bout, index);
                 } else {
                     hideOverlay(index);
@@ -908,7 +913,7 @@ function selectLabeling(labelingName) {
 }
 
 function updateCurrentLabelingHeader(labelingName = null) {
-    const displayName = labelingName || currentSelectedLabeling;
+    const displayName = labelingName || currentLabelingName;
 
     // Update modal header
     const currentLabelingHeader = document.getElementById('current-labeling-header');
@@ -924,9 +929,9 @@ function updateCurrentLabelingHeader(labelingName = null) {
     const currentLabelingNameElement = document.getElementById('current-labeling-name');
     if (currentLabelingNameElement) {
         if (displayName && displayName !== 'No Labeling') {
-            const labelingColors = JSON.parse(localStorage.getItem('labelingColors') || '{}');
-            const labelingColor = labelingColors[displayName] || generateDefaultColor(0);
-            
+            const currentLabeling = getLabelingFromLabelingName(displayName);
+            const labelingColor = currentLabeling ? currentLabeling.color : generateDefaultColor(0);
+
             currentLabelingNameElement.innerHTML = `
                 <div class="color-circle me-1" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${labelingColor}; border: 1px solid #ccc; display: inline-block;"></div>
                 ${displayName}
@@ -1156,8 +1161,8 @@ function createBoutOverlays(index, container) {
             if (dragContext.currentSession.bouts[boutIndex]) {
                 dragContext.currentSession.bouts[boutIndex]['start'] = x0;
                 dragContext.currentSession.bouts[boutIndex]['end'] = x1;
-                console.log(`Updated bout ${boutIndex} to [${x0}, ${x1}]`);
             } else {
+                // If boutIndex is out of bounds, log an error
                 console.error(`Bout index ${boutIndex} not found in session ${dragContext.currentSession.name}`);
             }
         } else {
@@ -1209,7 +1214,7 @@ function updateOverlayPositions(plotDiv, bout, index) {
     if (!dragOverlay || !leftOverlay || !rightOverlay) return;
 
     // Only show and position overlays for the currently selected labeling
-    if (bout_label !== currentSelectedLabeling) {
+    if (bout_label !== currentLabelingName) {
         hideOverlay(index);
         return;
     }
@@ -1231,15 +1236,16 @@ function updateOverlayPositions(plotDiv, bout, index) {
     const handleWidth = 20;
     const handleHeight = yAxis._length;
     
-    const labelingColors = JSON.parse(localStorage.getItem('labelingColors') || '{}');
-    
+    const currentLabeling = getLabelingFromLabelingName(currentLabelingName);
+    const labelingColor = currentLabeling ? currentLabeling.color : generateDefaultColor(0);
+
     // Set main overlay position and size
     dragOverlay.style.position = 'absolute';
     dragOverlay.style.left = `${pixelX0}px`;
     dragOverlay.style.width = `${pixelX1 - pixelX0}px`;
     dragOverlay.style.top = `${yAxis._offset}px`;
     dragOverlay.style.height = `${handleHeight}px`;
-    dragOverlay.style.backgroundColor = labelingColors[bout_label]+"77" || 'rgba(0, 0, 255, 0.5)'; // Use the color for the bout label
+    dragOverlay.style.backgroundColor = labelingColor + "77"
     dragOverlay.style.border = '2px solid black';
     
     // Set left handle position and size
@@ -1837,6 +1843,28 @@ async function updateLabelingColor(labelingName, newColor, colorPickerElement) {
             })
         });
         console.log(`Response from server: ${response.status} ${response.statusText}`);
+        labelings = await ProjectAPI.fetchLabelings(currentProjectId);
+        // If we're in visualization view, update the overlays to show only bouts matching this labeling
+        if (dragContext.currentSession && dragContext.currentSession.bouts) {
+            const plotDiv = document.getElementById('timeSeriesPlot');
+            if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
+                dragContext.currentSession.bouts.forEach((bout, index) => {
+                    if (bout['label'] === currentLabelingName) {
+                        updateOverlayPositions(plotDiv, bout, index);
+                    } else {
+                        hideOverlay(index);
+                    }
+                });
+            }
+        }
+        const currentLabelingNameElement = document.getElementById('current-labeling-name');
+        if (labelingName == currentLabelingName) {
+            currentLabelingNameElement.innerHTML = `
+                <div class="color-circle me-1" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${newColor}; border: 1px solid #ccc; display: inline-block;"></div>
+                ${labelingName}
+            `;
+        }
+
     } catch (error) {
         console.error('Error updating labeling color:', error);
     }
@@ -1851,9 +1879,11 @@ const activeHandlers = [];
 // Create global reference to these handlers so we can remove them
 let sessions = [];
 // Add this variable to track the current project
-let currentSelectedLabeling = 'No Labeling'; // Default value
+let currentLabelingName = 'No Labeling';
+let currentLabelingJSON = null;
 let labelingsList = null; // Add this global variable
 
+let labelings = null;
 let currentProjectId = null;
 let currentSessionId = null;
 let currentActiveSession = null;

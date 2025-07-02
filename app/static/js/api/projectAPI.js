@@ -35,6 +35,44 @@ export class ProjectAPI {
             throw error;
         }
     }
+
+    static async fetchLabelingMetadata(projectId) {
+        try {
+            const response = await fetch(`/api/labeling_metadata?project_id=${projectId}`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch labeling metadata');
+            }
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching labeling metadata:', error);
+            throw error;
+        }
+    }
+    /**
+     * Fetch labelings for a given project
+     * @param {string|number} projectId
+     * @returns {Promise<Object[]>}
+     */
+    static async fetchLabelings(projectId) {
+        const response = await fetch(`/api/labelings/${projectId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        // Parse the labelings JSON string
+        let labelings = [];
+        if (data.length > 0 && data[0].labelings) {
+            try {
+                labelings = JSON.parse(data[0].labelings);
+            } catch (e) {
+                console.error('Error parsing labelings JSON:', e);
+                labelings = [];
+            }
+        }
+
+        return labelings;
+    }
+
 }
 
 export default ProjectAPI;
