@@ -78,7 +78,7 @@ class SessionController:
             
             bouts = session_info['bouts']
             
-            expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
+            expected_columns = ['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']
             if not all(col in df.columns for col in expected_columns):
                 return jsonify({'error': f'Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}'}), 400
             

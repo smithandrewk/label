@@ -587,9 +587,9 @@ async function visualizeSession(sessionId) {
     }
 
     const timestamps = dataToPlot.map(d => d.ns_since_reboot).filter(t => t);
-    const xValues = dataToPlot.map(d => d.x).filter(x => typeof x === 'number');
-    const yValues = dataToPlot.map(d => d.y).filter(y => typeof y === 'number');
-    const zValues = dataToPlot.map(d => d.z).filter(z => typeof z === 'number');
+    const xValues = dataToPlot.map(d => d.accel_x).filter(accel_x => typeof accel_x === 'number');
+    const yValues = dataToPlot.map(d => d.accel_y).filter(accel_y => typeof accel_y === 'number');
+    const zValues = dataToPlot.map(d => d.accel_z).filter(accel_z => typeof accel_z === 'number');
     const labels = dataToPlot.map(d => d.label).filter(label => typeof label === 'number');
     if (timestamps.length === 0) {
         console.error('No valid timestamps for plotting');
