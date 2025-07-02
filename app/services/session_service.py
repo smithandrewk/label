@@ -11,7 +11,6 @@ class SessionService:
     def __init__(self, get_db_connection=None):
         self.get_db_connection = get_db_connection
         self.session_repo = SessionRepository(get_db_connection)
-        self.upload_progress = {}
     
     def delete_sessions_by_project(self, project_id):
         """Delete all sessions for a project"""
@@ -25,27 +24,8 @@ class SessionService:
         try:
             print(f"Starting async processing for upload {upload_id} with {len(sessions)} sessions")
             
-            # Initialize progress tracking
-            self.upload_progress[upload_id] = {
-                'status': 'processing',
-                'current_session': 0,
-                'total_sessions': len(sessions),
-                'current_file': '',
-                'sessions_created': [],
-                'message': 'Starting session processing...'
-            }
-            
-            # Small delay to ensure frontend connects to SSE
-            time.sleep(1)
-            
             # Get new database connection for this thread
             conn = self.get_db_connection()
-            if conn is None:
-                self.upload_progress[upload_id] = {
-                    'status': 'error',
-                    'message': 'Database connection failed'
-                }
-                return
             
             all_created_sessions = []
             skipped_sessions = []
@@ -54,32 +34,18 @@ class SessionService:
                 try:
                     print(f"Processing session {i+1}/{len(sessions)}: {session['name']}")
                     
-                    # Update progress
-                    self.upload_progress[upload_id].update({
-                        'current_session': i + 1,
-                        'current_file': session['name'],
-                        'message': f'Processing session {i + 1} of {len(sessions)}: {session["name"]}'
-                    })
-                    
-                    # Add a small delay to make progress visible
-                    time.sleep(0.5)
-                    
                     # First, validate the session data
                     csv_path = os.path.join(new_project_path, session['name'], 'accelerometer_data.csv')
-                    self.upload_progress[upload_id]['message'] = f'Validating data for {session["name"]}...'
-                    time.sleep(0.3)
                     
                     if not self.validate_session_data(csv_path):
                         print(f"Skipping session {session['name']} - no valid data")
                         skipped_sessions.append(session['name'])
-                        self.upload_progress[upload_id]['message'] = f'Skipped {session["name"]} - no valid data'
                         
                         # Remove the invalid session directory
                         session_dir = os.path.join(new_project_path, session['name'])
                         if os.path.exists(session_dir):
                             shutil.rmtree(session_dir)
                         
-                        time.sleep(1)
                         continue  # Skip to next session
                     
                     # Look for labels.json first, then fall back to log.csv for bout extraction
@@ -89,7 +55,6 @@ class SessionService:
                     
                     if os.path.exists(labels_json_path):
                         try:
-                            self.upload_progress[upload_id]['message'] = f'Loading labels from labels.json for {session["name"]}...'
                             with open(labels_json_path, 'r') as f:
                                 labels_data = json.load(f)
                             
@@ -142,7 +107,6 @@ class SessionService:
                     
                     elif os.path.exists(log_csv_path):
                         try:
-                            self.upload_progress[upload_id]['message'] = f'Analyzing log file for {session["name"]}...'
                             log = pd.read_csv(log_csv_path, skiprows=5)
                             
                             if 'message' in log.columns:
@@ -177,10 +141,6 @@ class SessionService:
                             print(f"Error processing log file for bouts: {e}")
                             bouts_json = '[]'
                     
-                    # Update progress for splitting
-                    self.upload_progress[upload_id]['message'] = f'Checking for time gaps in {session["name"]}...'
-                    time.sleep(0.5)
-                    
                     # Preprocess data
                     project_path = new_project_path
                     session_name = session['name']
@@ -198,39 +158,11 @@ class SessionService:
                     if created_sessions:
                         all_created_sessions.extend(created_sessions)
                     
-                    # Update progress with created sessions
-                    self.upload_progress[upload_id]['sessions_created'] = all_created_sessions
-                    self.upload_progress[upload_id]['skipped_sessions'] = skipped_sessions
-                    
-                    if len(created_sessions) > 1:
-                        self.upload_progress[upload_id]['message'] = f'Split {session["name"]} into {len(created_sessions)} sessions'
-                    elif len(created_sessions) == 1:
-                        self.upload_progress[upload_id]['message'] = f'No splitting needed for {session["name"]}'
-                    else:
-                        self.upload_progress[upload_id]['message'] = f'Session {session["name"]} was filtered out'
-                    
                     print(f"Completed processing {session['name']}, created {len(created_sessions)} sessions")
-                    time.sleep(1)  # Additional delay to show progress
                         
                 except Exception as e:
                     print(f"Error processing session {session['name']}: {e}")
-                    self.upload_progress[upload_id]['message'] = f'Error processing {session["name"]}: {str(e)}'
-                    time.sleep(1)
                     continue  # Skip this session and continue with others
-            
-            # Mark as complete
-            completion_message = f'Upload complete! Created {len(all_created_sessions)} sessions'
-            if len(skipped_sessions) > 0:
-                completion_message += f', skipped {len(skipped_sessions)} sessions with no data'
-            
-            self.upload_progress[upload_id].update({
-                'status': 'complete',
-                'message': completion_message,
-                'total_sessions_created': len(all_created_sessions),
-                'total_sessions_skipped': len(skipped_sessions),
-                'skipped_sessions': skipped_sessions,
-                'auto_split_applied': len(all_created_sessions) > (len(sessions) - len(skipped_sessions))
-            })
             
             print(f"Async processing complete for upload {upload_id}. Created {len(all_created_sessions)} sessions, skipped {len(skipped_sessions)} sessions")
             
@@ -239,10 +171,6 @@ class SessionService:
             
         except Exception as e:
             print(f"Error in async processing: {e}")
-            self.upload_progress[upload_id] = {
-                'status': 'error',
-                'message': f'Processing failed: {str(e)}'
-            }
     
     @timeit
     def validate_session_data(self, csv_path, min_rows=10):
@@ -342,7 +270,8 @@ class SessionService:
                 except json.JSONDecodeError:
                     parent_bouts = []
 
-                segment_bouts = [{'start':segment_bout[0],'end':segment_bout[1],'label':'smoking'} for segment_bout in segment_bouts]
+                print(parent_bouts)
+                segment_bouts = [{'start':segment_bout[0],'end':segment_bout[1],'label':'smoking'} for segment_bout in parent_bouts]
                 
                 return self._insert_single_session(session_name, project_id, json.dumps(segment_bouts), conn)
 

@@ -67,13 +67,6 @@ class ProjectController:
                 )
                 processing_thread.daemon = True
                 processing_thread.start()
-            else:
-                # No sessions to process
-                self.session_service.upload_progress[upload_id] = {
-                    'status': 'complete',
-                    'message': 'No sessions found in uploaded project',
-                    'total_sessions_created': 0
-                }
                         
             return jsonify({
                 'message': 'Project upload started',
@@ -82,8 +75,7 @@ class ProjectController:
                 'central_path': new_project_path,
                 'upload_id': upload_id,
                 'sessions_found': len(sessions),
-                'files_uploaded': project_result['files_processed'],
-                'progress_url': f'/api/upload-progress/{upload_id}'
+                'files_uploaded': project_result['files_processed']
             })
             
         except Exception as e:
@@ -275,45 +267,6 @@ class ProjectController:
             print(f"Error deleting participant: {e}")
             return jsonify({'error': f'Failed to delete participant: {str(e)}'}), 500
 
-    def upload_progress_stream(self, upload_id):
-        """Server-Sent Events endpoint for upload progress tracking"""
-        import json
-        import time
-        
-        print(f"SSE connection established for upload {upload_id}")
-        print(f"Current upload_progress keys: {list(self.session_service.upload_progress.keys())}")
-        
-        def generate_progress():
-            # Check if upload_id exists before starting
-            if upload_id not in self.session_service.upload_progress:
-                print(f"Upload ID {upload_id} not found in progress tracking")
-                yield f"data: {json.dumps({'status': 'error', 'message': 'Upload not found'})}\n\n"
-                return
-                
-            while upload_id in self.session_service.upload_progress:
-                progress_data = self.session_service.upload_progress[upload_id]
-                yield f"data: {json.dumps(progress_data)}\n\n"
-                
-                # If upload is complete, send final message and stop
-                if progress_data.get('status') == 'complete':
-                    print(f"Upload {upload_id} complete, closing SSE connection")
-                    # Clean up progress data after a short delay
-                    import threading
-                    threading.Timer(5.0, lambda: self.session_service.upload_progress.pop(upload_id, None)).start()
-                    break
-                elif progress_data.get('status') == 'error':
-                    print(f"Upload {upload_id} error, closing SSE connection")
-                    threading.Timer(5.0, lambda: self.session_service.upload_progress.pop(upload_id, None)).start()
-                    break
-                    
-                time.sleep(0.5)  # Update every 500ms
-        
-        response = Response(generate_progress(), mimetype='text/event-stream')
-        response.headers['Cache-Control'] = 'no-cache'
-        response.headers['Connection'] = 'keep-alive'
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        return response
-
 controller = None
 
 def init_controller(session_service, project_service):
@@ -347,7 +300,3 @@ def delete_participant(participant_id):
 @projects_bp.route('/api/participants/<int:participant_id>', methods=['PUT'])
 def update_participant(participant_id):
     return controller.update_participant(participant_id)
-
-@projects_bp.route('/api/upload-progress/<upload_id>', methods=['GET'])
-def upload_progress_stream(upload_id):
-    return controller.upload_progress_stream(upload_id)
