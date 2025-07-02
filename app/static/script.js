@@ -1402,6 +1402,22 @@ async function splitSession() {
 }
 
 function createNewBout() {
+    // Get current labeling name
+    const currentLabelingElement = document.getElementById('current-labeling-name');
+    let currentLabelingName = '';
+    
+    if (currentLabelingElement) {
+        // Extract text content, removing any HTML elements
+        const textContent = currentLabelingElement.textContent || currentLabelingElement.innerText;
+        currentLabelingName = textContent.trim();
+    }
+
+    // Check if currentLabelingName is "No Labeling" and do nothing
+    if (currentLabelingName === "No Labeling") {
+        console.log('Cannot create bout: No labeling selected');
+        return;
+    }
+
     // Get the current plotly visualization
     const plotDiv = document.getElementById('timeSeriesPlot');
     
@@ -1433,16 +1449,6 @@ function createNewBout() {
     // Create a bout that is 25% of the visible range (12.5% on each side of the midpoint)
     const visibleRange = visibleMax - visibleMin;
     const boutHalfWidth = (visibleRange * 0.25) / 2;
-
-    // Get current labeling name
-    const currentLabelingElement = document.getElementById('current-labeling-name');
-    let currentLabelingName = '';
-    
-    if (currentLabelingElement) {
-        // Extract text content, removing any HTML elements
-        const textContent = currentLabelingElement.textContent || currentLabelingElement.innerText;
-        currentLabelingName = textContent.trim();
-    }
 
     // Create a 480s wide bout (240s on each side of the midpoint)
     const newBout = {'start':middleTimestamp - boutHalfWidth,'end':middleTimestamp + boutHalfWidth,'label':currentLabelingName};
