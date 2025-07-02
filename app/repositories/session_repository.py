@@ -26,3 +26,8 @@ class SessionRepository(BaseRepository):
             WHERE p.participant_id = %s
         """
         return self._execute_query(query, (participant_id,), commit=True)
+
+    def get_bouts_by_session(self, session_id):
+        """Get smoking bouts for a session"""
+        query = "SELECT bouts FROM sessions WHERE session_id = %s"
+        return self._execute_query(query, (session_id,), fetch_one=True)
