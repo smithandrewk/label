@@ -7,9 +7,10 @@ export const ActionButtonTemplates = {
     /**
      * Current labeling display template
      */
-    currentLabeling: () => `
+    currentLabeling: (labelingName, labelingColor) => `
         <span id="current-labeling-name" style="display: inline-flex; align-items: center; margin-right: 8px; padding: 4px 8px; background: rgba(0, 123, 255, 0.1); border-radius: 12px; font-size: 12px; color: #007bff; font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease;">
-            No Labeling
+            <div class="color-circle me-1" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${labelingColor}; border: 1px solid #ccc; display: inline-block;"></div>
+            ${labelingName}
         </span>
     `,
 
@@ -62,9 +63,9 @@ export const ActionButtonTemplates = {
      * @param {boolean} options.isSplitting - Whether splitting mode is active
      * @param {boolean} options.isVerified - Whether the session is verified
      */
-    visualizationActionButtons: ({ isSplitting = false, isVerified = false } = {}) => {
+    visualizationActionButtons: ({ isSplitting = false, isVerified = false, labelingName = "No Labeling", labelingColor = "#000000" } = {}) => {
         return [
-            ActionButtonTemplates.currentLabeling(),
+            ActionButtonTemplates.currentLabeling(labelingName, labelingColor),
             ActionButtonTemplates.scoreButton(),
             ActionButtonTemplates.splitButton(isSplitting),
             ActionButtonTemplates.deleteButton(),
