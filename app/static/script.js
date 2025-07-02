@@ -585,7 +585,7 @@ async function visualizeSession(sessionId) {
     console.log('Current selected labeling:', currentLabelingName);
     const actionButtons = document.getElementById("action-buttons");
     actionButtons.innerHTML = "";
-    
+
     // Use template for action buttons
     actionButtons.innerHTML = ActionButtonTemplates.visualizationActionButtons({
         isSplitting: isSplitting,
@@ -878,6 +878,7 @@ function getLabelingFromLabelingName(labelingName) {
 
 function selectLabeling(labelingName) {
     currentLabelingName = labelingName;
+    currentLabelingJSON = getLabelingFromLabelingName(labelingName);
 
     // Update the current labeling name in visualization view with color and maintain interactivity
     const currentLabelingNameElement = document.getElementById('current-labeling-name');
