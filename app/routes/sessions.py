@@ -79,9 +79,15 @@ class SessionController:
             bouts = session_info['bouts']
             
             expected_columns = ['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']
-            if not all(col in df.columns for col in expected_columns):
+            expected_columns_original = ['ns_since_reboot','x','y','z']
+
+            if not all(col in df.columns for col in expected_columns) or not all(col in df.columns for col in expected_columns_original):
                 return jsonify({'error': f'Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}'}), 400
-            
+            else:
+                # Determine whether columns are new or original
+                if 'x' in df.columns:
+                    expected_columns = expected_columns_original
+                    
             data = df[expected_columns].to_dict(orient='records')
             data = {
                 'bouts': bouts,
