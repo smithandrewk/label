@@ -54,6 +54,19 @@ class MainController:
                             }
                             processed_bouts.append(processed_bout)
                             total_labels_count += 1
+                        elif isinstance(bout, dict):
+                            processed_bout = {
+                                'bout_index': i,
+                                'start_time': bout.get('start'),
+                                'end_time': bout.get('end'),
+                                'duration_ns': bout.get('end') - bout.get('start') if bout.get('start') and bout.get('end') else None,
+                                'duration_seconds': (bout.get('end') - bout.get('start')) / 1e9 if bout.get('start') and bout.get('end') else None, 
+                                'label': bout.get('label','smoking'),
+                                'confidence': bout.get('confidence')
+                            }
+                            processed_bouts.append(processed_bout)
+                            total_labels_count += 1
+
                 
                 # Create session object
                 session_obj = {
