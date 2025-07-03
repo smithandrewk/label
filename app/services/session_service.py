@@ -2,11 +2,17 @@ import time
 import os
 import shutil
 import json
+import logging
+import traceback
 from app.services.utils import timeit, resample
 import pandas as pd
 from app.exceptions import DatabaseError
 from app.repositories.session_repository import SessionRepository
 from app.repositories.project_repository import ProjectRepository
+from app.logging_config import get_logger
+
+# Get logger for this module
+logger = get_logger(__name__)
 
 class SessionService:
     def __init__(self, get_db_connection=None, session_repository=None, project_repository=None):
@@ -24,7 +30,7 @@ class SessionService:
 
     def process_sessions_async(self, upload_id, sessions, new_project_path, project_id):
         try:
-            print(f"Starting async processing for upload {upload_id} with {len(sessions)} sessions")
+            logger.info(f"Starting async processing for upload {upload_id} with {len(sessions)} sessions")
             
             # Get new database connection for this thread
             conn = self.get_db_connection()
@@ -34,13 +40,13 @@ class SessionService:
             
             for i, session in enumerate(sessions):
                 try:
-                    print(f"Processing session {i+1}/{len(sessions)}: {session['name']}")
+                    logger.debug(f"Processing session {i+1}/{len(sessions)}: {session['name']}")
                     
                     # First, validate the session data
                     csv_path = os.path.join(new_project_path, session['name'], 'accelerometer_data.csv')
                     
                     if not self.validate_session_data(csv_path):
-                        print(f"Skipping session {session['name']} - no valid data")
+                        logger.warning(f"Skipping session {session['name']} - no valid data")
                         skipped_sessions.append(session['name'])
                         
                         # Remove the invalid session directory
@@ -101,10 +107,10 @@ class SessionService:
                                         valid_bouts.append(bout)
                             
                             bouts_json = json.dumps(valid_bouts)
-                            print(f"Loaded {len(valid_bouts)} valid bouts from labels.json for {session['name']}")
+                            logger.info(f"Loaded {len(valid_bouts)} valid bouts from labels.json for {session['name']}")
                             
                         except Exception as e:
-                            print(f"Error processing labels.json file for bouts: {e}")
+                            logger.error(f"Error processing labels.json file for bouts in session {session['name']}: {e}", exc_info=True)
                             bouts_json = '[]'
                     
                     elif os.path.exists(log_csv_path):
@@ -137,10 +143,10 @@ class SessionService:
                                 bouts.append([start_transitions[i], stop_transitions[i]])
                             
                             bouts_json = json.dumps(bouts)
-                            print(f"Extracted {len(bouts)} valid bouts from log.csv for {session['name']}")
+                            logger.info(f"Extracted {len(bouts)} valid bouts from log.csv for {session['name']}")
                             
                         except Exception as e:
-                            print(f"Error processing log file for bouts: {e}")
+                            logger.error(f"Error processing log file for bouts in session {session['name']}: {e}", exc_info=True)
                             bouts_json = '[]'
                     
                     # Preprocess data
@@ -160,19 +166,32 @@ class SessionService:
                     if created_sessions:
                         all_created_sessions.extend(created_sessions)
                     
-                    print(f"Completed processing {session['name']}, created {len(created_sessions)} sessions")
+                    logger.debug(f"Completed processing {session['name']}, created {len(created_sessions)} sessions")
                         
                 except Exception as e:
-                    print(f"Error processing session {session['name']}: {e}")
+                    logger.error(
+                        f"Error processing session {session['name']}: {e}", 
+                        exc_info=True,
+                        extra={
+                            'session_name': session['name'],
+                            'upload_id': upload_id,
+                            'project_id': project_id
+                        }
+                    )
                     continue  # Skip this session and continue with others
             
-            print(f"Async processing complete for upload {upload_id}. Created {len(all_created_sessions)} sessions, skipped {len(skipped_sessions)} sessions")
+            logger.info(f"Async processing complete for upload {upload_id}. Created {len(all_created_sessions)} sessions, skipped {len(skipped_sessions)} sessions")
             
             conn.commit()
             conn.close()
             
         except Exception as e:
-            print(f"Error in async processing: {e}")
+            logger.error(f"Critical error in async processing for upload {upload_id}: {e}", exc_info=True)
+            if 'conn' in locals() and conn:
+                try:
+                    conn.close()
+                except:
+                    pass
     
     @timeit
     def validate_session_data(self, csv_path, min_rows=10):
@@ -189,13 +208,13 @@ class SessionService:
         try:
             # Check if file exists and has content
             if not os.path.exists(csv_path):
-                print(f"Data file does not exist: {csv_path}")
+                logger.warning(f"Data file does not exist: {csv_path}")
                 return False
             
             # Check file size (empty files or very small files are invalid)
             file_size = os.path.getsize(csv_path)
             if file_size < 100:  # Less than 100 bytes is likely empty or just headers
-                print(f"Data file is too small ({file_size} bytes): {csv_path}")
+                logger.warning(f"Data file is too small ({file_size} bytes): {csv_path}")
                 return False
             
             # Try to read the CSV and validate content
@@ -204,30 +223,29 @@ class SessionService:
             
             # Check if required columns exist
             if not all(col in df.columns for col in expected_columns):
-                print(f"Invalid CSV format in {csv_path}. Expected columns: {expected_columns}, Found: {list(df.columns)}")
+                logger.warning(f"Invalid CSV format in {csv_path}. Expected columns: {expected_columns}, Found: {list(df.columns)}")
                 return False
             
             # Check if we have enough data rows
             if len(df) < min_rows:
-                print(f"Insufficient data rows ({len(df)}) in {csv_path}. Minimum required: {min_rows}")
+                logger.warning(f"Insufficient data rows ({len(df)}) in {csv_path}. Minimum required: {min_rows}")
                 return False
-            
             # Check for valid timestamp data (not all NaN or zeros)
             if df['ns_since_reboot'].isna().all() or (df['ns_since_reboot'] == 0).all():
-                print(f"Invalid timestamp data in {csv_path}")
+                logger.warning(f"Invalid timestamp data in {csv_path}")
                 return False
             
             # Check for valid accelerometer data (not all NaN)
             accel_cols = ['x', 'y', 'z']
             if df[accel_cols].isna().all().all():
-                print(f"No valid accelerometer data in {csv_path}")
+                logger.warning(f"No valid accelerometer data in {csv_path}")
                 return False
             
-            print(f"Data validation passed for {csv_path}: {len(df)} rows")
+            logger.debug(f"Data validation passed for {csv_path}: {len(df)} rows")
             return True
             
         except Exception as e:
-            print(f"Error validating data in {csv_path}: {e}")
+            logger.error(f"Error validating data in {csv_path}: {e}", exc_info=True)
             return False
     
     def preprocess_and_split_session_on_upload(self, session_name, project_path, project_id, bouts_json, conn, gyro=False):
@@ -280,7 +298,7 @@ class SessionService:
             gap_indices = time_diffs[time_diffs > gap_threshold_ns].index
 
             if len(gap_indices) == 0:
-                print("no gaps!")
+                logger.debug(f"No time gaps found in session {session_name}, proceeding without splitting")
                 df = resample(df)
                 df[['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']].to_csv(accel_csv_path, index=False)
                 if gyro:
@@ -294,7 +312,7 @@ class SessionService:
                 except json.JSONDecodeError:
                     parent_bouts = []
 
-                print(parent_bouts)
+                logger.debug(f"Parsed {len(parent_bouts)} bouts for single session {session_name}")
                 segment_bouts = [{'start':segment_bout[0],'end':segment_bout[1],'label':'smoking'} for segment_bout in parent_bouts]
                 
                 return self._insert_single_session(session_name, project_id, json.dumps(segment_bouts), conn)
@@ -320,13 +338,13 @@ class SessionService:
                 if start_index < end_index:
                     segment_df = df.iloc[start_index:end_index]
                     if not segment_df.empty:
-                        print(f"Made segment {i + 1} with {len(segment_df)} rows.")
+                        logger.debug(f"Created segment {i + 1} with {len(segment_df)} rows for session {session_name}")
                         segment_df = resample(segment_df)
                         segments.append(segment_df)
                     else:
-                        print(f"Segment {i + 1} is empty, skipping.")
+                        logger.warning(f"Segment {i + 1} is empty, skipping for session {session_name}")
                 else:
-                    print(f"Invalid segment indices: {start_index}, {end_index}.")
+                    logger.warning(f"Invalid segment indices for session {session_name}: start={start_index}, end={end_index}")
             
             # Define time ranges for each segment
             segment_ranges = []
@@ -416,16 +434,38 @@ class SessionService:
             return new_sessions
             
         except Exception as e:
-            print(f"Error auto-splitting session {session_name}: {e}")
+            logger.error(
+                f"Failed to auto-split session '{session_name}' in project {project_id}: {str(e)}", 
+                exc_info=True,
+                extra={
+                    'session_name': session_name,
+                    'project_id': project_id,
+                    'project_path': project_path,
+                    'error_type': type(e).__name__,
+                    'traceback': traceback.format_exc()
+                }
+            )
             # Fallback: insert original session
             try:
+                logger.info(f"Attempting fallback: inserting original session '{session_name}' without splitting")
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO sessions (project_id, session_name, status, keep, bouts)
                     VALUES (%s, %s, %s, %s, %s)
                 """, (project_id, session_name, 'Initial', None, bouts_json))
+                logger.info(f"Successfully inserted fallback session '{session_name}'")
                 return [session_name]
-            except:
+            except Exception as fallback_error:
+                logger.error(
+                    f"Fallback insertion also failed for session '{session_name}': {str(fallback_error)}", 
+                    exc_info=True,
+                    extra={
+                        'session_name': session_name,
+                        'project_id': project_id,
+                        'original_error': str(e),
+                        'fallback_error': str(fallback_error)
+                    }
+                )
                 return []
     
     def _insert_single_session(self, session_name, project_id, bouts_json, conn):
@@ -439,9 +479,17 @@ class SessionService:
                 VALUES (%s, %s, %s, %s, %s)
             """, (project_id, session_name, 'Initial', None, bouts_json))
             cursor.close()
+            logger.debug(f"Successfully inserted single session '{session_name}' for project {project_id}")
             return [session_name]
         except Exception as e:
-            print(f"Error inserting session {session_name}: {e}")
+            logger.error(
+                f"Error inserting session {session_name}: {e}", 
+                exc_info=True,
+                extra={
+                    'session_name': session_name,
+                    'project_id': project_id
+                }
+            )
             return []
 
     def generate_unique_session_name_upload(self, original_name, project_path, conn, project_id):
@@ -500,7 +548,6 @@ class SessionService:
             finally:
                 cursor.close()
                 conn.close()
-    import logging
 
     def get_sessions(self, project_id=None, show_split=False):
         """Get sessions, optionally filtered by project and split status"""

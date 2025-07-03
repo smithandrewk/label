@@ -2,6 +2,10 @@ import pandas as pd
 import time
 import functools
 import os
+from app.logging_config import get_logger
+
+# Get logger for this module
+logger = get_logger(__name__)
 
 def timeit(func):
     """Decorator to time function execution"""
@@ -13,7 +17,7 @@ def timeit(func):
         
         # Get the first argument (csv_path) for logging
         csv_path = args[0] if args else "unknown"
-        print(f"Function {func.__name__} took {elapsed_time:.3f}s for {csv_path}")
+        logger.debug(f"Function {func.__name__} took {elapsed_time:.3f}s for {csv_path}")
         
         return result
     return wrapper

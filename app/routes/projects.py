@@ -5,11 +5,13 @@ import threading
 import uuid
 import shutil
 from app.exceptions import DatabaseError
-import logging
+from app.logging_config import get_logger
 import traceback
 
 from app.services.project_service import ProjectService
 from app.services.session_service import SessionService
+
+logger = get_logger(__name__)
 
 DATA_DIR = os.getenv('DATA_DIR', '~/.delta/data')
 
@@ -24,8 +26,8 @@ class ProjectController:
         try:
             return self.project_service.list_projects()
         except Exception as e:
-            logging.error(f"Error in list_projects: {str(e)}")
-            logging.error(f"Stack trace: {traceback.format_exc()}")
+            logger.error(f"Error in list_projects: {str(e)}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
             return jsonify({'error': str(e)}), 500
     
     def upload_new_project(self):
@@ -44,6 +46,7 @@ class ProjectController:
             
             # Get uploaded files
             uploaded_files = request.files.getlist('files')
+
             if not uploaded_files:
                 return jsonify({'error': 'No files uploaded'}), 400
 
@@ -54,7 +57,6 @@ class ProjectController:
             project_id = project_result['project_id']
             participant_id = project_result['participant_id']
             new_project_path = project_result['project_path']
-
 
             # Discover sessions in the uploaded project using service layer
             sessions = self.project_service.discover_project_sessions(new_project_path)
@@ -82,8 +84,8 @@ class ProjectController:
             })
             
         except Exception as e:
-            logging.error(f"Error in upload_new_project: {str(e)}")
-            logging.error(f"Stack trace: {traceback.format_exc()}")
+            logger.error(f"Error in upload_new_project: {str(e)}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
             return jsonify({'error': f'Upload failed: {str(e)}'}), 500
         
     def delete_project(self, project_id):
@@ -123,9 +125,9 @@ class ProjectController:
                 try:
                     shutil.rmtree(project_path)
                     directory_deleted = True
-                    print(f"Deleted project directory: {project_path}")
+                    logger.info(f"Deleted project directory: {project_path}")
                 except Exception as e:
-                    print(f"Warning: Could not delete project directory {project_path}: {e}")
+                    logger.warning(f"Could not delete project directory {project_path}: {e}")
                     # Don't fail the entire operation if directory deletion fails
             
             return jsonify({
@@ -140,7 +142,7 @@ class ProjectController:
             })
             
         except Exception as e:
-            print(f"Error deleting project: {e}")
+            logger.error(f"Error deleting project: {e}")
             return jsonify({'error': f'Failed to delete project: {str(e)}'}), 500
 
     def list_participants(self):
@@ -162,7 +164,7 @@ class ProjectController:
 
             return jsonify(participants)
         except Exception as e:
-            print(f"Error listing participants: {e}")
+            logger.error(f"Error listing participants: {e}")
             return jsonify({'error': str(e)}), 500
 
     def create_participant(self):
@@ -192,7 +194,7 @@ class ProjectController:
                 return jsonify({'error': str(e)}), 500
                     
         except Exception as e:
-            print(f"Error creating participant: {e}")
+            logger.error(f"Error creating participant: {e}")
             return jsonify({'error': str(e)}), 500
 
     def update_participant(self, participant_id):
@@ -224,7 +226,7 @@ class ProjectController:
                 return jsonify({'error': str(e)}), 500
                     
         except Exception as e:
-            print(f"Error updating participant: {e}")
+            logger.error(f"Error updating participant: {e}")
             return jsonify({'error': str(e)}), 500
 
     def delete_participant(self, participant_id):
@@ -253,9 +255,9 @@ class ProjectController:
                 if project_path and os.path.exists(project_path):
                     try:
                         shutil.rmtree(project_path)
-                        print(f"Deleted project directory: {project_path}")
+                        logger.info(f"Deleted project directory: {project_path}")
                     except Exception as e:
-                        print(f"Warning: Could not delete project directory {project_path}: {e}")
+                        logger.warning(f"Could not delete project directory {project_path}: {e}")
                         # Don't fail the entire operation if directory deletion fails
             
             return jsonify({
@@ -267,7 +269,7 @@ class ProjectController:
             })
             
         except Exception as e:
-            print(f"Error deleting participant: {e}")
+            logger.error(f"Error deleting participant: {e}")
             return jsonify({'error': f'Failed to delete participant: {str(e)}'}), 500
 
 controller = None
