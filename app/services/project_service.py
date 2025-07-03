@@ -193,7 +193,12 @@ class ProjectService:
                         # Unzip
                         gz_file = os.path.join(item_path, 'accelerometer_data.gz')
                         csv_file = os.path.join(item_path, 'accelerometer_data.csv')
-                        os.system(f'gunzip -c "{gz_file}" | head -n -1 > "{csv_file}"')
+                        # Use sed on macOS to remove last line, head on other systems
+                        import platform
+                        if platform.system() == 'Darwin':  # macOS
+                            os.system(f'gunzip -c "{gz_file}" | sed \'$d\' > "{csv_file}"')
+                        else:
+                            os.system(f'gunzip -c "{gz_file}" | head -n -1 > "{csv_file}"')
                         sessions.append({'name': item, 'file': 'accelerometer_data.csv'})
                         os.remove(gz_file)
                     
@@ -205,7 +210,11 @@ class ProjectService:
                     else:
                         print('No gyroscope data found in:', item_path)
                         if os.path.exists(gz_file):
-                            os.system(f'gunzip -c "{gz_file}" | head -n -1 > "{gyro_data}"')
+                            # Use sed on macOS to remove last line, head on other systems
+                            if platform.system() == 'Darwin':  # macOS
+                                os.system(f'gunzip -c "{gz_file}" | sed \'$d\' > "{gyro_data}"')
+                            else:
+                                os.system(f'gunzip -c "{gz_file}" | head -n -1 > "{gyro_data}"')
                     if os.path.exists(gz_file):                         
                         os.remove(gz_file)
                         
