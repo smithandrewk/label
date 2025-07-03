@@ -200,7 +200,7 @@ class SessionService:
             
             # Try to read the CSV and validate content
             df = pd.read_csv(csv_path,nrows=1000) # tested to save ~1 second per file
-            expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
+            expected_columns = ['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']
             
             # Check if required columns exist
             if not all(col in df.columns for col in expected_columns):
@@ -218,7 +218,7 @@ class SessionService:
                 return False
             
             # Check for valid accelerometer data (not all NaN)
-            accel_cols = ['x', 'y', 'z']
+            accel_cols = ['accel_x', 'accel_y', 'accel_z']
             if df[accel_cols].isna().all().all():
                 print(f"No valid accelerometer data in {csv_path}")
                 return False

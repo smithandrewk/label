@@ -66,7 +66,7 @@ class ModelService:
             window_stride_seconds = 60
 
             X = []
-            data = torch.tensor(df[['x', 'y', 'z']].values, dtype=torch.float32)
+            data = torch.tensor(df[['accel_x', 'accel_y', 'accel_z']].values, dtype=torch.float32)
             window_size = fs * window_size_seconds
             window_stride = fs * window_stride_seconds
             windowed_data = data.unfold(dimension=0,size=window_size,step=window_stride)
