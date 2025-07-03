@@ -199,8 +199,8 @@ class SessionService:
                 return False
             
             # Try to read the CSV and validate content
-            df = pd.read_csv(csv_path,nrows=1000) # tested to save ~1 second per file
-            expected_columns = ['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']
+            df = pd.read_csv(csv_path, nrows=1000) # tested to save ~1 second per file
+            expected_columns = ['ns_since_reboot', 'x', 'y', 'z']
             
             # Check if required columns exist
             if not all(col in df.columns for col in expected_columns):
@@ -218,7 +218,7 @@ class SessionService:
                 return False
             
             # Check for valid accelerometer data (not all NaN)
-            accel_cols = ['accel_x', 'accel_y', 'accel_z']
+            accel_cols = ['x', 'y', 'z']
             if df[accel_cols].isna().all().all():
                 print(f"No valid accelerometer data in {csv_path}")
                 return False
@@ -230,7 +230,7 @@ class SessionService:
             print(f"Error validating data in {csv_path}: {e}")
             return False
     
-    def preprocess_and_split_session_on_upload(self, session_name, project_path, project_id, bouts_json, conn):
+    def preprocess_and_split_session_on_upload(self, session_name, project_path, project_id, bouts_json, conn, gyro=False):
         """
         Automatically split a session based on time gaps during upload.
         
@@ -245,49 +245,33 @@ class SessionService:
             List of session names that were created (empty list if session was invalid/skipped)
         """
         try:
+            from app.services.utils import load_dataframe_from_csv, get_sample_rate_from_dataframe, check_sample_rate_consistency
+            
             accel_csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
             gyro_csv_path = os.path.join(project_path, session_name, 'gyroscope_data.csv')
 
-            accel_df = pd.read_csv(accel_csv_path).iloc[:-1]
-            gyro_df = pd.read_csv(gyro_csv_path).iloc[:-1]
+            df = load_dataframe_from_csv(accel_csv_path, column_prefix='accel')
 
-            accel_df = accel_df.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
-            gyro_df = gyro_df.rename(columns={'x': 'gyro_x', 'y': 'gyro_y', 'z': 'gyro_z'})
+            if os.path.exists(gyro_csv_path):
+                gyro = True
 
-            accel_df['ns_since_reboot'] = accel_df['ns_since_reboot'].astype(float)
-            accel_df['accel_x'] = accel_df['accel_x'].astype(float)
-            accel_df['accel_y'] = accel_df['accel_y'].astype(float)
-            accel_df['accel_z'] = accel_df['accel_z'].astype(float)
-            accel_df = accel_df.sort_values('ns_since_reboot').reset_index(drop=True)
+                accel_sample_rate = get_sample_rate_from_dataframe(df)
 
-            gyro_df['ns_since_reboot'] = gyro_df['ns_since_reboot'].astype(float)
-            gyro_df['gyro_x'] = gyro_df['gyro_x'].astype(float)
-            gyro_df['gyro_y'] = gyro_df['gyro_y'].astype(float)
-            gyro_df['gyro_z'] = gyro_df['gyro_z'].astype(float)
-            gyro_df = gyro_df.sort_values('ns_since_reboot').reset_index(drop=True)
+                gyro_df = load_dataframe_from_csv(gyro_csv_path, column_prefix='gyro')
+                gyro_sample_rate = get_sample_rate_from_dataframe(gyro_df)
 
-            accel_sample_interval = accel_df['ns_since_reboot'].diff().median() * 1e-9
-            accel_sample_rate = 1 / accel_sample_interval
+                check_sample_rate_consistency(accel_sample_rate, gyro_sample_rate)
+                merge_tolerance = min(accel_sample_rate, gyro_sample_rate)
 
-            gyro_sample_interval = gyro_df['ns_since_reboot'].diff().median() * 1e-9
-            gyro_sample_rate = 1 / gyro_sample_interval
+                df = pd.merge_asof(
+                    df.sort_values('ns_since_reboot'),
+                    gyro_df.sort_values('ns_since_reboot'),
+                    on='ns_since_reboot',
+                    tolerance=int(1e9 / merge_tolerance),
+                    direction='nearest'
+                )
 
-            print(f"Sample rate = {accel_sample_rate:.2f} Hz (accel), {gyro_sample_rate:.2f} Hz (gyro)")
-
-            if abs(accel_sample_rate - gyro_sample_rate) > 0.01:
-                raise ValueError(f"Sample rates differ significantly: accel {accel_sample_rate:.2f} Hz, gyro {gyro_sample_rate:.2f} Hz")
-            
-            sample_rate = min(accel_sample_rate, gyro_sample_rate)
-
-            df = pd.merge_asof(
-                accel_df.sort_values('ns_since_reboot'),
-                gyro_df.sort_values('ns_since_reboot'),
-                on='ns_since_reboot',
-                tolerance=int(1e9 / sample_rate),
-                direction='nearest'
-            )
-
-            df = df.dropna()
+                df = df.dropna()
 
             gap_threshold_minutes = 30
             gap_threshold_ns = gap_threshold_minutes * 60 * 1_000_000_000
@@ -299,8 +283,9 @@ class SessionService:
                 print("no gaps!")
                 df = resample(df)
                 df[['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']].to_csv(accel_csv_path, index=False)
-                df[['ns_since_reboot', 'gyro_x', 'gyro_y', 'gyro_z']].to_csv(gyro_csv_path, index=False)
-                print(bouts_json)
+                if gyro:
+                    df[['ns_since_reboot', 'gyro_x', 'gyro_y', 'gyro_z']].to_csv(gyro_csv_path, index=False)
+                logger.debug(f"Resampled data for session {session_name}")
                 # Parse bouts data
                 try:
                     parent_bouts = json.loads(bouts_json or '[]')
@@ -400,7 +385,8 @@ class SessionService:
                 # Create directory and save CSV
                 os.makedirs(new_dir, exist_ok=True)
                 segment[['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']].to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
-                segment[['ns_since_reboot', 'gyro_x', 'gyro_y', 'gyro_z']].to_csv(os.path.join(new_dir, 'gyroscope_data.csv'), index=False)
+                if gyro:
+                    segment[['ns_since_reboot', 'gyro_x', 'gyro_y', 'gyro_z']].to_csv(os.path.join(new_dir, 'gyroscope_data.csv'), index=False)
                 
                 # Copy log file if it exists
                 log_path = os.path.join(project_path, session_name, 'log.csv')
