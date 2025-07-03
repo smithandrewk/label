@@ -8,13 +8,13 @@
     <!-- Navigation -->
     <ul class="nav nav-pills flex-column mb-auto">
         <li class="nav-item mb-1">
-            <a href="/projects" class="nav-link d-flex align-items-center {{ 'active' if active_view == 'projects' else 'link-body-emphasis' }}">
+            <a href="/" class="nav-link d-flex align-items-center {{ 'active' if active_view == 'projects' else 'link-body-emphasis' }}">
                 <i class="fa-solid fa-diagram-project me-3" style="width: 18px;"></i>
                 <span>Projects</span>
             </a>
         </li>
         <li class="nav-item mb-1">
-            <a href="/" class="nav-link d-flex align-items-center {{ 'active' if active_view == 'sessions' else 'link-body-emphasis' }}">
+            <a href="/sessions" class="nav-link d-flex align-items-center {{ 'active' if active_view == 'sessions' else 'link-body-emphasis' }}">
                 <i class="fa-solid fa-chart-gantt me-3" style="width: 18px;"></i>
                 <span>Sessions</span>
             </a>
@@ -69,9 +69,4 @@
     </ul>
     
     <hr class="my-3">
-    <!-- Current Project Display -->
-    <div id="current-project-name" class="alert alert-info py-2 px-3 mb-0 border-0" style="display: none; background-color: #e3f2fd; border-radius: 8px;">
-        <small class="text-muted d-block mb-1">Current Project:</small>
-        <span class="fw-semibold text-dark"></span>
-    </div>
 </div>
