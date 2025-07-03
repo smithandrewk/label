@@ -24,6 +24,8 @@ help:
 	@echo "  restore-backup: List and restore from available backups (auto-backs up first)"
 	@echo "  show-tables   : Show all tables in the database"
 	@echo "  reset-db      : Drop and recreate the database with initial schema (auto-backs up first)"
+	@echo "  clean-data    : DESTRUCTIVE: Remove all project data files (prompts for confirmation)"
+	@echo "  clean         : DESTRUCTIVE: Remove all data files AND reset database (prompts for confirmation)"
 
 # Start the Flask application
 .PHONY: run
@@ -80,3 +82,45 @@ reset-db: backup $(SCRIPTS_DIR)/schema.sql
 	@$(MYSQL) -e "CREATE DATABASE $(DB_NAME);"
 	@$(MYSQL) $(DB_NAME) < $(SCRIPTS_DIR)/schema.sql
 	@echo "Database reset completed!"
+
+# Remove all project data files (DESTRUCTIVE OPERATION)
+.PHONY: clean-data
+clean-data:
+	@DATA_DIR_EXPANDED=$$(python3 -c "import os; print(os.path.expanduser('$(DATA_DIR)'))") && \
+	echo "⚠️  WARNING: DESTRUCTIVE OPERATION ⚠️" && \
+	echo "" && \
+	echo "This will permanently delete ALL project data files in:" && \
+	echo "  $$DATA_DIR_EXPANDED" && \
+	echo "" && \
+	if [ -d "$$DATA_DIR_EXPANDED" ]; then \
+		echo "Directory contents to be deleted:" && \
+		ls -la "$$DATA_DIR_EXPANDED" 2>/dev/null || echo "  (directory exists but is empty or inaccessible)" && \
+		echo ""; \
+	else \
+		echo "Directory does not exist: $$DATA_DIR_EXPANDED" && \
+		echo "Nothing to delete." && \
+		exit 0; \
+	fi && \
+	echo "This action CANNOT be undone!" && \
+	echo "" && \
+	echo -n "Type 'DELETE ALL DATA' to confirm (or press Ctrl+C to cancel): " && \
+	read confirmation && \
+	if [ "$$confirmation" = "DELETE ALL DATA" ]; then \
+		echo "Deleting all project data..." && \
+		rm -rf "$$DATA_DIR_EXPANDED" && \
+		echo "✅ All project data has been deleted from $$DATA_DIR_EXPANDED" && \
+		echo "📝 Note: Database records still exist. Use 'make reset-db' to clear the database as well."; \
+	else \
+		echo "❌ Confirmation text did not match. Operation cancelled." && \
+		exit 1; \
+	fi
+
+# Complete destructive reset: remove all data files and reset database
+.PHONY: clean
+clean: clean-data reset-db
+	@echo ""
+	@echo "🧹 Complete cleanup finished!"
+	@echo "   ✅ All project data files deleted"
+	@echo "   ✅ Database reset to initial state"
+	@echo ""
+	@echo "The application is now in a clean state."
