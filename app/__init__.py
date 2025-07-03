@@ -3,8 +3,21 @@ from flask_cors import CORS
 import os
 from dotenv import load_dotenv
 
+# Import and configure logging early
+from app.logging_config import setup_logging, get_logger
+
 def create_app():
     load_dotenv()
+    
+    # Set up centralized logging for the entire application
+    # You can customize this based on environment variables or config
+    log_level = os.getenv('LOG_LEVEL', 'INFO')
+    setup_logging(level=log_level, use_colors=True)
+    
+    # Get logger for this module
+    logger = get_logger(__name__)
+    logger.info("Starting Flask application...")
+    
     app = Flask(__name__)
     
     # Configuration

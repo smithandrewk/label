@@ -2,9 +2,13 @@ from app.exceptions import DatabaseError
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.participant_repository import ParticipantRepository
 from app.repositories.session_repository import SessionRepository
+from app.logging_config import get_logger
 import os
 import shutil
 from datetime import datetime
+
+# Get logger for this module
+logger = get_logger(__name__)
 
 class ProjectService:
     def __init__(self, project_repository=None, session_repository=None, participant_repository=None):
@@ -154,7 +158,7 @@ class ProjectService:
 
     def update_labelings(self, project_id, label):
         """Update labelings for a specific project by appending a new label"""
-        print(f'Updating labelings for project {project_id} with label: {label}')
+        logger.info(f'Updating labelings for project {project_id} with label: {label}')
         return self.project_repo.update_labelings(project_id, label)
         
     def update_labeling_color(self, project_id, labeling_name, color):
@@ -168,7 +172,7 @@ class ProjectService:
         Returns:
             dict: Status and message indicating success or failure
         """
-        print(f'Updating color for labeling "{labeling_name}" to {color} in project {project_id}')
+        logger.info(f'Updating color for labeling "{labeling_name}" to {color} in project {project_id}')
         return self.project_repo.update_labeling_color(project_id, labeling_name, color)
 
     def discover_project_sessions(self, project_path):
@@ -206,9 +210,9 @@ class ProjectService:
                     gz_file = os.path.join(item_path, 'gyroscope_data.gz')
 
                     if os.path.exists(gyro_data):
-                        print('Found gyroscope data:', gyro_data)
+                        logger.debug('Found gyroscope data:', gyro_data)
                     else:
-                        print('No gyroscope data found in:', item_path)
+                        logger.debug('No gyroscope data found in:', item_path)
                         if os.path.exists(gz_file):
                             # Use sed on macOS to remove last line, head on other systems
                             if platform.system() == 'Darwin':  # macOS
