@@ -2,7 +2,6 @@ import time
 import os
 import shutil
 import json
-import logging
 import traceback
 from app.services.utils import timeit, resample
 import pandas as pd

@@ -122,14 +122,14 @@ def init_controller(project_service, session_service):
     global controller
     controller = MainController(project_service, session_service)
 
-@main_bp.route('/')
-def serve_index():
-    return render_template('index.html', active_view='sessions')
-
 # Serve projects page
-@main_bp.route('/projects')
+@main_bp.route('/')
 def serve_projects():
     return render_template('projects.html', active_view='projects')
+
+@main_bp.route('/sessions')
+def serve_index():
+    return render_template('sessions.html', active_view='sessions')
 
 # Serve participants page
 @main_bp.route('/participants')
