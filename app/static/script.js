@@ -727,10 +727,16 @@ function pixelToData(pixelX, xAxis) {
     return xAxis.range[0] + (pixelX - xAxis._offset) * (xAxis.range[1] - xAxis.range[0]) / xAxis._length;
 }
 // When opening the modal
-document.getElementById('labelingModal').addEventListener('show.bs.modal', function() {
-    console.log('Labeling modal opened');
-    fetchAndDisplayLabelings(currentProjectId);
-});
+const labelingModal = document.getElementById('labelingModal');
+if (labelingModal) {
+    labelingModal.addEventListener('shown.bs.modal', function() {
+        console.log('Labeling modal opened');
+        // Fetch and display labelings when the modal is opened
+        fetchAndDisplayLabelings(currentProjectId);
+    });
+} else {
+    console.error('Labeling modal not found');
+}
 
 async function createNewLabeling() {
     // Show a prompt to get the new labeling name
