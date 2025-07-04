@@ -19,6 +19,22 @@
         </table>
     </div>
 
+    <style>
+        /* Fix dropdown z-index issues in tables */
+        .table .dropdown-menu {
+            z-index: 1050;
+        }
+        
+        /* Ensure table doesn't clip dropdowns */
+        #table-view {
+            overflow: visible;
+        }
+        
+        .table {
+            overflow: visible;
+        }
+    </style>
+
     <!-- Rename Project Modal -->
     <div class="modal fade" id="renameProjectModal" tabindex="-1" aria-labelledby="renameProjectModalLabel" aria-hidden="true">
         <div class="modal-dialog">

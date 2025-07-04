@@ -37,124 +37,71 @@ async function loadParticipants() {
 
 // Render participants grid
 function renderParticipants() {
-    const grid = document.getElementById('participants-grid');
+    const tableBody = document.getElementById('participants-table-body');
     
     if (participants.length === 0) {
-        grid.innerHTML = `
-            <div class="col-12">
-                <div class="text-center py-5">
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center py-5">
                     <i class="fa-solid fa-users fa-3x text-muted mb-3"></i>
                     <h4 class="text-muted">No Participants Found</h4>
                     <p class="text-muted">Add your first participant to get started.</p>
                     <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createParticipantModal">
                         <i class="fa-solid fa-user-plus me-2"></i>Add First Participant
                     </button>
-                </div>
-            </div>
+                </td>
+            </tr>
         `;
         return;
     }
     
-    grid.innerHTML = participants.map(participant => `
-        <div class="col-xl-4 col-lg-6 col-md-6 mb-4">
-            <div class="card h-100 shadow-sm" data-participant-id="${participant.participant_id}">
-                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">
-                        <i class="fa-solid fa-user me-2"></i>
-                        ${participant.participant_code}
-                    </h5>
-                    <div class="dropdown">
-                        <button class="btn btn-sm btn-outline-light" type="button" data-bs-toggle="dropdown">
-                            <i class="fa-solid fa-ellipsis-vertical"></i>
-                        </button>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="#" onclick="editParticipant(${participant.participant_id})">
-                                <i class="fa-solid fa-edit me-2"></i>Edit
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-danger" href="#" onclick="deleteParticipant(${participant.participant_id}, '${participant.participant_code}')">
-                                <i class="fa-solid fa-trash me-2"></i>Delete
-                            </a></li>
-                        </ul>
-                    </div>
+    tableBody.innerHTML = participants.map(participant => `
+        <tr data-participant-id="${participant.participant_id}">
+            <td>
+                <strong>${participant.participant_code}</strong>
+                ${participant.notes ? `<br><small class="text-muted">${participant.notes}</small>` : ''}
+            </td>
+            <td>
+                ${[participant.first_name, participant.last_name].filter(Boolean).join(' ') || '<span class="text-muted">Not specified</span>'}
+            </td>
+            <td>
+                ${participant.email ? `<a href="mailto:${participant.email}">${participant.email}</a>` : '<span class="text-muted">Not specified</span>'}
+            </td>
+            <td>
+                <span class="badge bg-primary">${participant.project_count || 0}</span>
+                ${participant.project_count > 0 ? `
+                    <br><small class="text-muted">${participant.project_names.split(', ').slice(0, 2).join(', ')}${participant.project_count > 2 ? '...' : ''}</small>
+                ` : ''}
+            </td>
+            <td>
+                <span class="badge bg-success">${participant.total_sessions || 0}</span>
+            </td>
+            <td>
+                <small>${new Date(participant.created_at).toLocaleDateString()}</small>
+            </td>
+            <td>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-three-dots-vertical"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="editParticipant(${participant.participant_id}); return false;">
+                            <i class="bi bi-pencil me-2"></i>Edit
+                        </a></li>
+                        <li><a class="dropdown-item" href="/?participant=${participant.participant_code}">
+                            <i class="bi bi-chart-gantt me-2"></i>View Sessions
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="createProjectForParticipant('${participant.participant_code}'); return false;">
+                            <i class="bi bi-plus me-2"></i>Add Project
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" href="#" onclick="deleteParticipant(${participant.participant_id}, '${participant.participant_code}'); return false;">
+                            <i class="bi bi-trash me-2"></i>Delete
+                        </a></li>
+                    </ul>
                 </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        ${participant.first_name || participant.last_name ? `
-                            <p class="mb-1">
-                                <strong>Name:</strong> 
-                                ${[participant.first_name, participant.last_name].filter(Boolean).join(' ') || 'Not specified'}
-                            </p>
-                        ` : ''}
-                        
-                        ${participant.email ? `
-                            <p class="mb-1">
-                                <strong>Email:</strong> 
-                                <a href="mailto:${participant.email}">${participant.email}</a>
-                            </p>
-                        ` : ''}
-                        
-                        <p class="mb-1">
-                            <strong>Created:</strong> 
-                            ${new Date(participant.created_at).toLocaleDateString()}
-                        </p>
-                        
-                        ${participant.notes ? `
-                            <p class="mb-1">
-                                <strong>Notes:</strong> 
-                                ${participant.notes}
-                            </p>
-                        ` : ''}
-                    </div>
-                    
-                    <div class="row text-center mb-3">
-                        <div class="col-6">
-                            <div class="bg-light p-2 rounded">
-                                <h5 class="mb-0 text-primary">${participant.project_count || 0}</h5>
-                                <small class="text-muted">Projects</small>
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="bg-light p-2 rounded">
-                                <h5 class="mb-0 text-success">${participant.total_sessions || 0}</h5>
-                                <small class="text-muted">Sessions</small>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    ${participant.project_count > 0 ? `
-                        <div class="mb-3">
-                            <h6 class="mb-2">Projects:</h6>
-                            <div class="d-flex flex-wrap gap-1">
-                                ${participant.project_names.split(', ').map((name, index) => `
-                                    <span class="badge bg-secondary" style="cursor: pointer;" 
-                                          onclick="viewProject(${participant.project_ids[index]}, '${name.replace(/'/g, "\\'")}')">
-                                        ${name}
-                                    </span>
-                                `).join('')}
-                            </div>
-                        </div>
-                    ` : `
-                        <div class="text-center text-muted">
-                            <i class="fa-solid fa-folder-open fa-2x mb-2"></i>
-                            <p class="mb-0">No projects yet</p>
-                        </div>
-                    `}
-                </div>
-                <div class="card-footer bg-transparent">
-                    <div class="d-flex justify-content-between">
-                        <a href="/?participant=${participant.participant_code}" class="btn btn-outline-primary btn-sm">
-                            <i class="fa-solid fa-chart-gantt me-1"></i>
-                            View Sessions
-                        </a>
-                        <button type="button" class="btn btn-primary btn-sm" onclick="createProjectForParticipant('${participant.participant_code}')">
-                            <i class="fa-solid fa-plus me-1"></i>
-                            Add Project
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+            </td>
+        </tr>
     `).join('');
 }
 
