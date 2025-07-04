@@ -3,10 +3,41 @@
 {% block title %}Participants and Projects - Accelerometer Data{% endblock %}
 
 {% block content %}
-    <!-- Participants Grid -->
-    <div class="row" id="participants-grid">
-        <!-- Will be populated by JavaScript -->
+    <!-- Table View -->
+    <div id="table-view">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Participant Code</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Projects</th>
+                    <th>Sessions</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="participants-table-body">
+                <!-- Populated by JavaScript -->
+            </tbody>
+        </table>
     </div>
+
+    <style>
+        /* Fix dropdown z-index issues in tables */
+        .table .dropdown-menu {
+            z-index: 1050;
+        }
+        
+        /* Ensure table doesn't clip dropdowns */
+        #table-view {
+            overflow: visible;
+        }
+        
+        .table {
+            overflow: visible;
+        }
+    </style>
 {% endblock %}
 
 {% block modals %}
