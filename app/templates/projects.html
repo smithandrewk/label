@@ -3,11 +3,20 @@
 {% block title %}Participants and Projects - Accelerometer Data{% endblock %}
 
 {% block content %}
-    <!-- Participants Grid -->
-    <div class="row" id="projects-grid">
-        <div class="d-flex flex-column align-items-stretch flex-shrink-0 bg-body-tertiary" style="width: 100%;"> 
-            <span class="fs-5 fw-semibold">Projects</span>
-        </div>
+    <!-- Table View -->
+    <div id="table-view">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Project Name</th>
+                    <th>Participant Code</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="projects-table-body">
+                <!-- Populated by JavaScript -->
+            </tbody>
+        </table>
     </div>
 
     <!-- Rename Project Modal -->

@@ -17,49 +17,57 @@ async function loadProjects() {
         renderProjects(projects);
     } catch (error) {
         console.error('Error fetching projects:', error);
-        const grid = document.getElementById('projects-grid');
-        grid.innerHTML = '<p class="text-danger">Failed to load projects. Please try again later.</p>';
+        const tableBody = document.getElementById('projects-table-body');
+        if (tableBody) {
+            tableBody.innerHTML = '<tr><td colspan="3" class="text-danger text-center">Failed to load projects. Please try again later.</td></tr>';
+        }
     }
 }
 
 function renderProjects(projects) {
     console.log('Rendering projects:', projects);
-    const grid = document.getElementById('projects-grid');
+    const tableBody = document.getElementById('projects-table-body');
     
-    // Clear existing content except the title
-    const titleElement = grid.querySelector('.fs-5.fw-semibold');
-    grid.innerHTML = '';
-    if (titleElement) {
-        grid.appendChild(titleElement.parentElement);
-    } else {
-        grid.innerHTML = '<div class="d-flex flex-column align-items-stretch flex-shrink-0 bg-body-tertiary" style="width: 100%;"><span class="fs-5 fw-semibold">Projects</span></div>';
+    if (!tableBody) {
+        console.error('Table body not found');
+        return;
+    }
+    
+    // Clear existing content
+    tableBody.innerHTML = '';
+    
+    if (projects.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No projects found</td></tr>';
+        return;
     }
     
     projects.forEach(project => {
         console.log(project);
-        grid.innerHTML += `
-            <div class="list-group list-group-flush border-bottom scrollarea"> 
-                <div class="list-group-item list-group-item-action py-3 lh-sm" aria-current="true">
-                    <div class="d-flex w-100 align-items-center justify-content-between">
-                        <div class="flex-grow-1" onclick="onClickProject('${project.project_name}'); return false;" style="cursor: pointer;">
-                            <strong class="mb-1 project-name" data-project-id="${project.project_id}">${project.project_name}</strong>
-                            <div class="col-10 mb-1 small">${project.participant_code}</div>
-                        </div>
-                        <div class="dropdown">
-                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-three-dots-vertical"></i>
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="#" onclick="showRenameModal(${project.project_id}, '${project.project_name}'); return false;">
-                                    <i class="bi bi-pencil me-2"></i>Rename
-                                </a></li>
-                            </ul>
-                        </div>
-                    </div>
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <strong class="project-name" data-project-id="${project.project_id}" 
+                        onclick="onClickProject('${project.project_name}'); return false;" 
+                        style="cursor: pointer;">
+                    ${project.project_name}
+                </strong>
+            </td>
+            <td>${project.participant_code}</td>
+            <td>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-three-dots-vertical"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="showRenameModal(${project.project_id}, '${project.project_name}'); return false;">
+                            <i class="bi bi-pencil me-2"></i>Rename
+                        </a></li>
+                    </ul>
                 </div>
-            </div>
+            </td>
         `;
-    })
+        tableBody.appendChild(row);
+    });
 }
 
 // Update current project pill in sidebar
