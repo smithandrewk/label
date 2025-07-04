@@ -90,12 +90,10 @@ class ProjectController:
         
     def delete_project(self, project_id):
         try:
-            try:
-                project_info = self.project_service.get_project_with_participant(project_id)
-                if not project_info:
-                    return jsonify({'error': 'Project not found'}), 404
-            except DatabaseError as e:
-                return jsonify({'error': str(e)}), 500
+            # Get project info before deletion for response
+            project_info = self.project_service.get_project_with_participant(project_id)
+            if not project_info:
+                return jsonify({'error': 'Project not found'}), 404
             
             project_path = project_info['path']
             participant_id = project_info['participant_id']
@@ -144,6 +142,35 @@ class ProjectController:
         except Exception as e:
             logger.error(f"Error deleting project: {e}")
             return jsonify({'error': f'Failed to delete project: {str(e)}'}), 500
+
+    def rename_project(self, project_id):
+        try:
+            data = request.get_json()
+            if not data or 'name' not in data:
+                return jsonify({'error': 'Missing required field: name'}), 400
+            
+            new_name = data['name']
+            
+            # Rename the project
+            self.project_service.rename_project(project_id, new_name)
+            
+            # Get updated project info for response
+            project_info = self.project_service.get_project_with_participant(project_id)
+            
+            return jsonify({
+                'message': 'Project renamed successfully',
+                'project_id': project_id,
+                'project_name': project_info['project_name'],
+                'participant_code': project_info['participant_code']
+            })
+            
+        except DatabaseError as e:
+            if 'Project not found' in str(e):
+                return jsonify({'error': str(e)}), 404
+            return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            logger.error(f"Error renaming project: {e}")
+            return jsonify({'error': f'Failed to rename project: {str(e)}'}), 500
 
     def list_participants(self):
         try:
@@ -289,6 +316,10 @@ def list_projects():
 @projects_bp.route('/api/project/<int:project_id>', methods=['DELETE'])
 def delete_project(project_id):
     return controller.delete_project(project_id)
+
+@projects_bp.route('/api/project/<int:project_id>/rename', methods=['PUT'])
+def rename_project(project_id):
+    return controller.rename_project(project_id)
 
 @projects_bp.route('/api/participants')
 def list_participants():

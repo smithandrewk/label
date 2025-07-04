@@ -65,6 +65,16 @@ class ProjectRepository(BaseRepository):
         
         return True
 
+    def update_name(self, project_id, new_name):
+        """Update a project's name"""
+        query = "UPDATE projects SET project_name = %s WHERE project_id = %s"
+        rows_affected = self._execute_query(query, (new_name, project_id), commit=True)
+        
+        if rows_affected == 0:
+            raise DatabaseError('Project not found')
+        
+        return True
+
     def get_labelings(self, project_id):
         """Get labelings for a specific project"""
         query = """

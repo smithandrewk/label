@@ -53,8 +53,19 @@ class ProjectService:
         return False
 
     def delete_project(self, project_id):
-        """Delete a project by ID"""
+        """Delete a project"""
         return self.project_repo.delete(project_id)
+
+    def rename_project(self, project_id, new_name):
+        """Rename a project"""
+        if not new_name or not new_name.strip():
+            raise DatabaseError('Project name cannot be empty')
+        
+        # Trim whitespace from the new name
+        new_name = new_name.strip()
+        
+        # Update the project name in the database
+        return self.project_repo.update_name(project_id, new_name)
 
     def get_all_participants_with_stats(self):
         """Get all participants with their project and session statistics"""
