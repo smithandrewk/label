@@ -434,20 +434,134 @@ body {
     transform: translateY(-1px);
 }
 
-/* Table improvements */
+/* GitHub-style table improvements */
 .table {
     border-collapse: separate;
     border-spacing: 0;
+    border: 1px solid #d1d9e0;
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: #ffffff;
+    font-size: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .table th {
-    background-color: #f8f9fa;
-    border-bottom: 2px solid #dee2e6;
+    background-color: #f6f8fa;
+    border-bottom: 1px solid #d1d9e0;
+    border-right: 1px solid #d1d9e0;
     font-weight: 600;
+    color: #24292f;
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.table-striped tbody tr:nth-of-type(odd) td {
-    background-color: rgba(0,0,0,.02);
+.table th:last-child {
+    border-right: none;
+}
+
+.table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #d1d9e0;
+    border-right: 1px solid #d1d9e0;
+    color: #24292f;
+    vertical-align: middle;
+}
+
+.table td:last-child {
+    border-right: none;
+}
+
+.table tbody tr {
+    background-color: #ffffff;
+    transition: background-color 0.15s ease;
+}
+
+.table tbody tr:hover {
+    background-color: #f6f8fa;
+}
+
+.table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Status badges */
+.badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge.bg-success {
+    background-color: #1f883d !important;
+    color: white;
+}
+
+.badge.bg-warning {
+    background-color: #fb8500 !important;
+    color: white;
+}
+
+.badge.bg-danger {
+    background-color: #d1242f !important;
+    color: white;
+}
+
+.badge.bg-secondary {
+    background-color: #656d76 !important;
+    color: white;
+}
+
+/* Action buttons in table */
+.table .btn {
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.table .btn-primary {
+    background-color: #0969da;
+    border-color: #0969da;
+    color: white;
+}
+
+.table .btn-primary:hover {
+    background-color: #0860ca;
+    border-color: #0860ca;
+}
+
+.table .btn-outline-secondary {
+    color: #656d76;
+    border-color: #d1d9e0;
+    background-color: transparent;
+}
+
+.table .btn-outline-secondary:hover {
+    background-color: #f6f8fa;
+    border-color: #d1d9e0;
+    color: #24292f;
+}
+
+/* GitHub-style table container */
+#table-view {
+    background-color: #ffffff;
+    border: 1px solid #d1d9e0;
+    border-radius: 8px;
+    margin: 20px;
+    overflow: hidden;
+}
+
+#table-view .table {
+    margin-bottom: 0;
+    border: none;
 }
 
 /* Responsive improvements */
@@ -476,6 +590,21 @@ body {
     
     .project-controls .d-none {
         display: none !important;
+    }
+    
+    #table-view {
+        margin: 10px;
+    }
+    
+    .table th,
+    .table td {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+    
+    .table .btn {
+        font-size: 11px;
+        padding: 4px 8px;
     }
 }
 

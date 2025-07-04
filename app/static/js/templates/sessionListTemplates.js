@@ -9,14 +9,9 @@ export const SessionListTemplates = {
      * @param {string} sessionId - The session ID
      */
     tableTrashButton: (sessionId) => `
-        <div style="position: relative; display: inline-block; width: 32px; height: 32px;">
-            <span id="cancel-btn-overlay-${sessionId}" style="position: absolute; right: 100%; display: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; cursor: pointer;">
-                <i id="cancel-btn-${sessionId}" class="fa-solid fa-xmark" style="font-size: 20px;"></i>
-            </span>
-            <span id="trash-btn-overlay-${sessionId}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer;">
-                <i id="trash-btn-${sessionId}" class="fa-solid fa-trash"></i>
-            </span>
-        </div>
+        <button class="btn btn-sm btn-outline-secondary ms-2" id="trash-btn-${sessionId}" title="Delete Session">
+            <i class="fa-solid fa-trash"></i>
+        </button>
     `,
 
     /**
@@ -25,9 +20,11 @@ export const SessionListTemplates = {
      * @param {boolean} isVerified - Whether the session is verified
      */
     tableVerifiedButton: (sessionId, isVerified = false) => `
-        <span id="verified-btn-overlay-${sessionId}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer;">
-            <i id="verified-btn-${sessionId}" class="fa-solid fa-check" style="color: ${isVerified ? '#28a745' : '#dee2e6'}; font-size: 18px;"></i>
-        </span>
+        <button class="btn btn-sm ${isVerified ? 'btn-success' : 'btn-outline-secondary'}" 
+                id="verified-btn-${sessionId}" 
+                title="${isVerified ? 'Verified' : 'Mark as Verified'}">
+            <i class="fa-solid fa-check"></i>
+        </button>
     `,
 
     /**
@@ -36,21 +33,40 @@ export const SessionListTemplates = {
      */
     tableRow: (session) => {
         const { session_id: sessionId, session_name, project_name, status, label, keep, verified } = session;
-        const statusText = `${status}${label ? ': ' + label : ''}${keep === 0 ? ' (Discarded)' : ''}`;
+        
+        // Create status badge based on status
+        let statusBadge = '';
+        if (status === 'completed') {
+            statusBadge = `<span class="badge bg-success">${status}</span>`;
+        } else if (status === 'in_progress') {
+            statusBadge = `<span class="badge bg-warning">In Progress</span>`;
+        } else if (status === 'error') {
+            statusBadge = `<span class="badge bg-danger">Error</span>`;
+        } else {
+            statusBadge = `<span class="badge bg-secondary">${status || 'Unknown'}</span>`;
+        }
+        
+        if (label) {
+            statusBadge += ` <small class="text-muted">: ${label}</small>`;
+        }
+        
+        if (keep === 0) {
+            statusBadge += ` <span class="badge bg-secondary">Discarded</span>`;
+        }
         
         return `
-            <td>${session_name}</td>
-            <td>${project_name || ''}</td>
-            <td>${statusText}</td>
+            <td><strong>${session_name}</strong></td>
+            <td class="text-muted">${project_name || '-'}</td>
+            <td>${statusBadge}</td>
             <td>${SessionListTemplates.tableVerifiedButton(sessionId, verified)}</td>
             <td>
                 <div class="btn-group" role="group">
-                    <button class="btn btn-sm btn-primary" onclick="visualizeSession('${sessionId}')">
-                        <i class="fa-solid fa-eye"></i>
+                    <button class="btn btn-sm btn-primary" onclick="visualizeSession('${sessionId}')" title="View Session">
+                        <i class="fa-solid fa-eye me-1"></i>View
                     </button>
+                    ${SessionListTemplates.tableTrashButton(sessionId)}
                 </div>
             </td>
-            <td>${SessionListTemplates.tableTrashButton(sessionId)}</td>
         `;
     },
 
@@ -69,7 +85,10 @@ export const SessionListTemplates = {
      */
     emptyState: () => `
         <tr>
-            <td colspan="4" class="text-center">No sessions available for this project</td>
+            <td colspan="5" class="text-center text-muted py-4">
+                <i class="fa-solid fa-inbox fa-2x mb-2 d-block"></i>
+                No sessions available for this project
+            </td>
         </tr>
     `
 };
@@ -84,66 +103,25 @@ export const SessionListHandlers = {
      * @param {Function} onDelete - Delete callback function
      */
     setupTableTrashButton: (sessionId, onDelete) => {
-        const trash_btn_overlay = document.getElementById(`trash-btn-overlay-${sessionId}`);
         const trash_btn = document.getElementById(`trash-btn-${sessionId}`);
-        const cancel_btn_overlay = document.getElementById(`cancel-btn-overlay-${sessionId}`);
 
-        if (!trash_btn_overlay || !trash_btn || !cancel_btn_overlay) return;
-
-        // Initialize armed state
-        trash_btn_overlay.dataset.armed = "false";
-        
-        // Hover effects
-        trash_btn_overlay.addEventListener('mouseenter', () => {
-            trash_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-        });
-        
-        trash_btn_overlay.addEventListener('mouseleave', () => {
-            trash_btn_overlay.style.background = 'rgba(224,224,224,0)';
-        });
+        if (!trash_btn) return;
         
         // Click handling with confirmation
-        trash_btn_overlay.addEventListener('click', () => {
-            const isArmed = trash_btn_overlay.dataset.armed === "true";
-            if (!isArmed) {
-                // Arm the button
-                trash_btn_overlay.dataset.armed = "true";
-                trash_btn.style.color = '#dc3545';
-                cancel_btn_overlay.style.display = 'inline-flex';
-            } else {
-                // Execute delete
+        trash_btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (confirm('Are you sure you want to delete this session?')) {
                 if (onDelete) onDelete(sessionId, false);
-                SessionListHandlers.resetTableTrashButton(sessionId);
             }
-        });
-        
-        // Cancel button handling
-        cancel_btn_overlay.addEventListener('mouseenter', () => {
-            cancel_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-        });
-        
-        cancel_btn_overlay.addEventListener('mouseleave', () => {
-            cancel_btn_overlay.style.background = 'rgba(224,224,224,0)';
-        });
-        
-        cancel_btn_overlay.addEventListener('click', (e) => {
-            e.stopPropagation();
-            SessionListHandlers.resetTableTrashButton(sessionId);
         });
     },
 
     /**
-     * Reset table trash button to unarmed state
+     * Reset table trash button to unarmed state (no longer needed with simplified approach)
      * @param {string} sessionId - The session ID
      */
     resetTableTrashButton: (sessionId) => {
-        const trash_btn_overlay = document.getElementById(`trash-btn-overlay-${sessionId}`);
-        const trash_btn = document.getElementById(`trash-btn-${sessionId}`);
-        const cancel_btn_overlay = document.getElementById(`cancel-btn-overlay-${sessionId}`);
-
-        if (trash_btn_overlay) trash_btn_overlay.dataset.armed = "false";
-        if (trash_btn) trash_btn.style.color = '';
-        if (cancel_btn_overlay) cancel_btn_overlay.style.display = 'none';
+        // No longer needed with simplified button approach
     },
 
     /**
@@ -152,22 +130,14 @@ export const SessionListHandlers = {
      * @param {Function} onVerify - Verify callback function
      */
     setupTableVerifiedButton: (sessionId, onVerify) => {
-        const verified_btn_overlay = document.getElementById(`verified-btn-overlay-${sessionId}`);
+        const verified_btn = document.getElementById(`verified-btn-${sessionId}`);
 
-        if (!verified_btn_overlay) return;
-
-        // Hover effects
-        verified_btn_overlay.addEventListener('mouseenter', () => {
-            verified_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-        });
-        
-        verified_btn_overlay.addEventListener('mouseleave', () => {
-            verified_btn_overlay.style.background = 'rgba(224,224,224,0)';
-        });
+        if (!verified_btn) return;
         
         // Click handling
-        verified_btn_overlay.addEventListener('click', () => {
-            if (onVerify) onVerify();
+        verified_btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (onVerify) onVerify(sessionId);
         });
     },
 
