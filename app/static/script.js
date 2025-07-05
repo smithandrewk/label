@@ -24,6 +24,8 @@ function checkUrlParameters() {
     if (projectId) {
         // Set the current project and fetch its sessions
         currentProjectId = parseInt(projectId);
+        // Store in sessionStorage for persistence across page navigation
+        sessionStorage.setItem('currentProjectId', currentProjectId.toString());
         setTimeout(async () => {
             try {
                 // Fetch project details to get the name
@@ -78,18 +80,9 @@ async function initializeProjects() {
             nameSpan.onclick = function(e) {
                 e.preventDefault();
                 currentProjectId = project.project_id; // Store selected project ID
-                fetchProjectSessions(project.project_id);
                 
-                // Update current project pill
-                updateCurrentProjectPill(project.project_name);
-                
-                // Update active state
-                document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
-                    item.classList.remove('active');
-                    item.removeAttribute('aria-current');
-                });
-                a.classList.add('active');
-                a.setAttribute('aria-current', 'page');
+                // Navigate to sessions page with the selected project
+                window.location.href = `/sessions?project_id=${project.project_id}`;
             };
             
             // Create delete button
@@ -143,9 +136,21 @@ async function initializeProjects() {
             allLi.appendChild(allA);
             dropdownMenu.appendChild(allLi);
         }
+
+        console.log('Current currentProjectId:', currentProjectId);
         
-        // Select first project by default
+        // Check sessionStorage for preserved project selection if currentProjectId is not set
+        if (!currentProjectId) {
+            const storedProjectId = sessionStorage.getItem('currentProjectId');
+            if (storedProjectId) {
+                currentProjectId = parseInt(storedProjectId);
+                console.log('Restored currentProjectId from sessionStorage:', currentProjectId);
+            }
+        }
+        
+        // Select first project by default ONLY if no project is currently selected
         if (projects.length > 0 && !currentProjectId) {
+            console.log('No current project ID set, selecting first project');
             const firstProject = dropdownMenu.querySelector('.dropdown-item');
             firstProject.classList.add('active');
             firstProject.setAttribute('aria-current', 'page');
@@ -157,7 +162,6 @@ async function initializeProjects() {
             fetchProjectSessions(projects[0].project_id);
         } else if (currentProjectId) {
             // If we have a current project, make sure it's marked as active in the dropdown
-
             const currentProjectItem = dropdownMenu.querySelector(`[data-project-id="${currentProjectId}"]`);
             if (currentProjectItem) {
                 currentProjectItem.classList.add('active');
@@ -167,9 +171,12 @@ async function initializeProjects() {
                 const currentProject = projects.find(p => p.project_id === currentProjectId);
                 if (currentProject) {
                     updateCurrentProjectPill(currentProject.project_name);
+                    
+                    // Fetch sessions for the restored project
+                    fetchProjectSessions(currentProjectId);
                 }
             }
-            console.log('Current project ID set from URL:', currentProjectId);
+            console.log('Current project ID set:', currentProjectId);
         }
     } catch (error) {
         console.error('Error initializing projects:', error);

@@ -5,7 +5,35 @@ let participants = [];
 document.addEventListener('DOMContentLoaded', function() {
     loadParticipants();
     setupEventListeners();
+    checkAndPreserveProjectSelection();
 });
+
+// Check URL parameters and preserve project selection
+function checkAndPreserveProjectSelection() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const projectId = urlParams.get('project_id');
+    
+    if (projectId) {
+        // If there's a project_id in URL, use it
+        window.currentProjectId = parseInt(projectId);
+        console.log(`Setting current project from URL: ${window.currentProjectId}`);
+    } else if (window.currentProjectId) {
+        // If we have a current project from a previous page, keep it
+        console.log(`Preserving current project selection: ${window.currentProjectId}`);
+    } else {
+        // Check if there's a stored project selection (e.g., in sessionStorage)
+        const storedProjectId = sessionStorage.getItem('currentProjectId');
+        if (storedProjectId) {
+            window.currentProjectId = parseInt(storedProjectId);
+            console.log(`Restored project from storage: ${window.currentProjectId}`);
+        }
+    }
+    
+    // Store the current project for future page loads
+    if (window.currentProjectId) {
+        sessionStorage.setItem('currentProjectId', window.currentProjectId.toString());
+    }
+}
 
 // Setup event listeners
 function setupEventListeners() {
@@ -284,8 +312,12 @@ async function viewProject(projectId, projectName) {
 
 // Create project for participant (redirect to main page with participant pre-filled)
 function createProjectForParticipant(participantCode) {
-    // Redirect to main page with participant code as URL parameter
-    window.location.href = `/?participant=${participantCode}&create_project=true`;
+    // Build URL with participant code and preserve current project if it exists
+    let url = `/?participant=${participantCode}&create_project=true`;
+    if (window.currentProjectId) {
+        url += `&project_id=${window.currentProjectId}`;
+    }
+    window.location.href = url;
 }
 
 // Utility functions for showing messages
