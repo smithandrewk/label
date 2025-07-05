@@ -30,7 +30,8 @@ class SessionRepository(BaseRepository):
     def get_bouts_by_session(self, session_id):
         """Get smoking bouts for a session"""
         query = "SELECT bouts FROM sessions WHERE session_id = %s"
-        return self._execute_query(query, (session_id,), fetch_one=True)
+        result = self._execute_query(query, (session_id,), fetch_one=True)
+        return result['bouts'] if result else None
     
     def set_bouts_by_session(self, session_id, bouts):
         """Set smoking bouts for a session"""

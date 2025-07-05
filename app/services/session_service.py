@@ -857,3 +857,80 @@ class SessionService:
             raise DatabaseError(f'Failed to split session: {str(e)}')
         finally:
             conn.close()
+
+    def duplicate_session_bouts_for_labeling(self, project_id, original_name, new_name):
+        """Duplicate all session bouts from one labeling to create bouts for a new labeling
+        
+        Args:
+            project_id: ID of the project containing the sessions
+            original_name: Name of the original labeling to copy bouts from
+            new_name: Name of the new labeling to create duplicate bouts for
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor(dictionary=True)
+        try:
+            # Get all sessions for this project that have bouts
+            cursor.execute("""
+                SELECT session_id, bouts 
+                FROM sessions 
+                WHERE project_id = %s AND bouts IS NOT NULL AND bouts != '[]'
+            """, (project_id,))
+            
+            sessions_to_update = cursor.fetchall()
+            updated_count = 0
+            total_bouts_duplicated = 0
+            
+            for session_row in sessions_to_update:
+                session_id = session_row['session_id']
+                bouts_json = session_row['bouts']
+                
+                if not bouts_json:
+                    continue
+                    
+                try:
+                    # Parse the bouts JSON
+                    bouts = json.loads(bouts_json)
+                    if not isinstance(bouts, list):
+                        continue
+                    
+                    # Find bouts that match the original labeling name and duplicate them
+                    new_bouts = []
+                    for bout in bouts:
+                        if isinstance(bout, dict) and bout.get('label') == original_name:
+                            # Create a duplicate bout with the new labeling name
+                            duplicate_bout = bout.copy()
+                            duplicate_bout['label'] = new_name
+                            new_bouts.append(duplicate_bout)
+                            total_bouts_duplicated += 1
+                    
+                    # If we found bouts to duplicate, add them to the session
+                    if new_bouts:
+                        # Add the new bouts to the existing bouts list
+                        bouts.extend(new_bouts)
+                        updated_bouts_json = json.dumps(bouts)
+                        
+                        cursor.execute("""
+                            UPDATE sessions 
+                            SET bouts = %s 
+                            WHERE session_id = %s
+                        """, (updated_bouts_json, session_id))
+                        updated_count += 1
+                        
+                except json.JSONDecodeError:
+                    # Skip sessions with invalid JSON
+                    logger.warning(f'Invalid bouts JSON for session {session_id}, skipping')
+                    continue
+            
+            conn.commit()
+            logger.info(f'Duplicated {total_bouts_duplicated} bouts from labeling "{original_name}" to "{new_name}" across {updated_count} sessions')
+            
+        except Exception as e:
+            conn.rollback()
+            logger.error(f'Error duplicating session bouts for labeling: {str(e)}')
+            raise DatabaseError(f'Failed to duplicate session bouts: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
