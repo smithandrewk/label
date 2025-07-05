@@ -65,9 +65,6 @@ function renderParticipants() {
                 ${[participant.first_name, participant.last_name].filter(Boolean).join(' ') || '<span class="text-muted">Not specified</span>'}
             </td>
             <td>
-                ${participant.email ? `<a href="mailto:${participant.email}">${participant.email}</a>` : '<span class="text-muted">Not specified</span>'}
-            </td>
-            <td>
                 <div class="dropdown"> 
                     <a href="#" class="d-block link-body-emphasis text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"> 
                         <span class="badge bg-primary">${participant.project_count || 0}</span>
@@ -77,8 +74,8 @@ function renderParticipants() {
                             participant.project_names.split(', ').map((projectName, index) => {
                                 const projectId = participant.project_ids ? participant.project_ids[index] : null;
                                 return `
-                                    <li class="d-flex align-items-center px-2 py-1">
-                                        <span class="flex-grow-1">${projectName}</span>
+                                    <li class="d-flex align-items-center px-2 py-1 dropdown-item">
+                                        <span class="flex-grow-1" onclick="viewProject(${projectId}, '${projectName}'); return false;" style="cursor: pointer;">${projectName}</span>
                                         <button class="btn btn-sm btn-outline-danger ms-2" onclick="deleteProject(${projectId}, '${projectName}'); return false;" title="Delete project">
                                             <i class="fa-solid fa-trash"></i>
                                         </button>
@@ -106,12 +103,11 @@ function renderParticipants() {
                         <i class="bi bi-three-dots-vertical"></i>
                     </button>
                     <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="#" onclick="editParticipant(${participant.participant_id}); return false;">
+                        <li>
+                            <a class="dropdown-item" href="#" onclick="editParticipant(${participant.participant_id}); return false;">
                             <i class="bi bi-pencil me-2"></i>Edit
-                        </a></li>
-                        <li><a class="dropdown-item" href="/?participant=${participant.participant_code}">
-                            <i class="bi bi-chart-gantt me-2"></i>View Sessions
-                        </a></li>
+                            </a>
+                        </li>
                         <li><a class="dropdown-item" href="#" onclick="createProjectForParticipant('${participant.participant_code}'); return false;">
                             <i class="bi bi-plus me-2"></i>Add Project
                         </a></li>
@@ -273,52 +269,12 @@ async function deleteParticipant(participantId, participantCode) {
     }
 }
 
-// View project details
+// View project details - navigate to sessions page
 async function viewProject(projectId, projectName) {
+    console.log(`Viewing project: ${projectName} (ID: ${projectId})`);
     try {
-        // For now, we'll show basic project info and link to sessions
-        // In the future, this could fetch detailed project information
-        const project = participants.flatMap(p => 
-            p.project_ids.map((id, index) => ({
-                id: id,
-                name: p.project_names.split(', ')[index],
-                participant_code: p.participant_code
-            }))
-        ).find(p => p.id === projectId);
-        
-        if (!project) throw new Error('Project not found');
-        
-        const content = document.getElementById('project-details-content');
-        content.innerHTML = `
-            <div class="mb-3">
-                <h6>Project Information</h6>
-                <table class="table table-sm">
-                    <tr>
-                        <th width="30%">Project Name:</th>
-                        <td>${project.name}</td>
-                    </tr>
-                    <tr>
-                        <th>Participant:</th>
-                        <td>${project.participant_code}</td>
-                    </tr>
-                    <tr>
-                        <th>Project ID:</th>
-                        <td>${project.id}</td>
-                    </tr>
-                </table>
-            </div>
-            <div class="alert alert-info">
-                <i class="fa-solid fa-info-circle me-2"></i>
-                Click "View Sessions" below to see all sessions for this project.
-            </div>
-        `;
-        
-        // Update the view sessions button to filter by this project
-        document.getElementById('view-sessions-btn').href = `/?project_id=${projectId}`;
-        
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('projectDetailsModal'));
-        modal.show();
+        // Navigate to sessions page with project selected
+        window.location.href = `/sessions?project_id=${projectId}`;
         
     } catch (error) {
         console.error('Error viewing project:', error);

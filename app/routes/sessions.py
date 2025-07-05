@@ -19,7 +19,8 @@ class SessionController:
     def list_sessions(self):
         try:
             project_id = request.args.get('project_id')
-            show_split = request.args.get('show_split', '0') == '1'  # Optional parameter to show split sessions
+            show_split = request.args.get('show_split', '0') == '1'
+            print(f"Listing sessions for project_id={project_id}, show_split={show_split}")
             try:
                 sessions = self.session_service.get_sessions(project_id=project_id, show_split=show_split)
                 return jsonify(sessions), 200

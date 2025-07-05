@@ -122,19 +122,14 @@ def init_controller(project_service, session_service):
     global controller
     controller = MainController(project_service, session_service)
 
-# Serve projects page
 @main_bp.route('/')
-def serve_projects():
-    return render_template('projects.html', active_view='projects')
+def serve_participants():
+    return render_template('participants.html', active_view='participants')
 
 @main_bp.route('/sessions')
 def serve_index():
+    print("Serving index page for sessions")
     return render_template('sessions.html', active_view='sessions')
-
-# Serve participants page
-@main_bp.route('/participants')
-def serve_participants():
-    return render_template('participants.html', active_view='participants')
 
 # Export labels for all projects and sessions
 @main_bp.route('/api/export/labels')
