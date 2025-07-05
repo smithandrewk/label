@@ -81,6 +81,17 @@ export function addEventListeners() {
             uploadButton.style.background = 'rgba(0, 0, 0, 0)';
         });
     }
+
+    const bulkUploadButton = document.getElementById('bulk-upload-btn');
+    if (bulkUploadButton) {
+        bulkUploadButton.addEventListener('click', showBulkUploadForm);
+        bulkUploadButton.addEventListener('mouseenter', () => {
+            bulkUploadButton.style.background = 'rgba(0, 0, 0, 0.1)';
+        });
+        bulkUploadButton.addEventListener('mouseleave', () => {
+            bulkUploadButton.style.background = 'rgba(0, 0, 0, 0)';
+        });
+    }
     // Add this to your script.js file
     document.addEventListener('DOMContentLoaded', function() {
         // Get the form element
