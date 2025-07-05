@@ -7,8 +7,10 @@ class ParticipantRepository(BaseRepository):
     def find_by_code(self, participant_code):
         """Find participant by their code"""
         query = "SELECT participant_id FROM participants WHERE participant_code = %s"
-        return self._execute_query(query, (participant_code,), fetch_one=True)
-    
+        participant = self._execute_query(query, (participant_code,), fetch_one=True)
+        participant['participant_code'] = participant_code if participant else None
+        return participant
+
     def create(self, participant_code):
         """Create a new participant with just the code"""
         query = "INSERT INTO participants (participant_code) VALUES (%s)"

@@ -35,6 +35,7 @@ class ProjectService:
     def create_participant_with_details(self, participant_code, first_name, last_name, email, notes):
         """Create a new participant with detailed information"""
         result = self.participant_repo.create_with_details(participant_code, first_name, last_name, email, notes)
+        print(result)
         return {
             'participant_id': result['participant_id'],
             'participant_code': result['participant_code']

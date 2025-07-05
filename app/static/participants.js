@@ -186,7 +186,7 @@ async function handleCreateParticipant(event) {
         // Reload participants
         await loadParticipants();
         
-        showSuccess('Participant created successfully!');
+        // showSuccess('Participant created successfully!');
         
     } catch (error) {
         console.error('Error creating participant:', error);

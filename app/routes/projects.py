@@ -202,7 +202,7 @@ class ProjectController:
             last_name = data.get('last_name', '')
             email = data.get('email', '')
             notes = data.get('notes', '')
-            
+
             if not participant_code:
                 return jsonify({'error': 'Participant code is required'}), 400
             
