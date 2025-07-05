@@ -126,24 +126,16 @@ function renderParticipants() {
                 <small>${new Date(participant.created_at).toLocaleDateString()}</small>
             </td>
             <td>
-                <div class="dropdown">
-                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-three-dots-vertical"></i>
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-outline-primary" onclick="editParticipant(${participant.participant_id}); return false;" title="Edit Participant">
+                        <i class="bi bi-pencil"></i>
                     </button>
-                    <ul class="dropdown-menu">
-                        <li>
-                            <a class="dropdown-item" href="#" onclick="editParticipant(${participant.participant_id}); return false;">
-                            <i class="bi bi-pencil me-2"></i>Edit
-                            </a>
-                        </li>
-                        <li><a class="dropdown-item" href="#" onclick="createProjectForParticipant('${participant.participant_code}'); return false;">
-                            <i class="bi bi-plus me-2"></i>Add Project
-                        </a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-danger" href="#" onclick="deleteParticipant(${participant.participant_id}, '${participant.participant_code}'); return false;">
-                            <i class="bi bi-trash me-2"></i>Delete
-                        </a></li>
-                    </ul>
+                    <button class="btn btn-sm btn-outline-success" onclick="createProjectForParticipant('${participant.participant_code}'); return false;" title="Add Project">
+                        <i class="bi bi-plus"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteParticipant(${participant.participant_id}, '${participant.participant_code}'); return false;" title="Delete Participant">
+                        <i class="bi bi-trash"></i>
+                    </button>
                 </div>
             </td>
         </tr>
@@ -186,7 +178,7 @@ async function handleCreateParticipant(event) {
         // Reload participants
         await loadParticipants();
         
-        // showSuccess('Participant created successfully!');
+        showSuccess('Participant created successfully!');
         
     } catch (error) {
         console.error('Error creating participant:', error);
