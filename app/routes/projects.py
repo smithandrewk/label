@@ -333,19 +333,137 @@ class ProjectController:
             logger.error(f"Error updating project participant: {e}")
             return jsonify({'error': str(e)}), 500
 
-controller = None
+    def bulk_upload_projects(self):
+        """Upload multiple projects from a parent directory structure"""
+        try:
+            # Handle multipart form data for file uploads
+            if 'files' not in request.files:
+                return jsonify({'error': 'No files uploaded'}), 400
+            
+            # Get uploaded files
+            uploaded_files = request.files.getlist('files')
+            if not uploaded_files:
+                return jsonify({'error': 'No files uploaded'}), 400
 
-def init_controller(session_service, project_service):
-    global controller
-    controller = ProjectController(session_service=session_service, project_service=project_service)
+            # Debug: Log some file information
+            logger.info(f"Received {len(uploaded_files)} files for bulk upload")
+            for i, file in enumerate(uploaded_files[:5]):  # Log first 5 files
+                logger.info(f"File {i}: filename='{file.filename}', name='{file.name}'")
 
-@projects_bp.route('/api/project/upload', methods=['POST'])
-def upload_new_project():
-    return controller.upload_new_project()
+            # First, ensure a "Bulk Upload" participant exists
+            bulk_participant_code = "BULK_UPLOAD"
+            try:
+                bulk_participant = self.project_service.get_participant_by_code(bulk_participant_code)
+                if not bulk_participant:
+                    # Create the bulk upload participant
+                    bulk_participant = self.project_service.create_participant_with_details(
+                        bulk_participant_code, 
+                        "Bulk", 
+                        "Upload", 
+                        "", 
+                        "Automatically created participant for bulk uploads"
+                    )
+                participant_id = bulk_participant['participant_id']
+                participant_code = bulk_participant['participant_code']
+            except DatabaseError as e:
+                logger.error(f"Error handling bulk upload participant: {e}")
+                return jsonify({'error': f'Failed to create bulk upload participant: {str(e)}'}), 500
+
+            # Group files by project directories
+            project_groups = {}
+            for file in uploaded_files:
+                # Use filename which contains the relative path from directory upload
+                relative_path = file.filename
+                if relative_path:
+                    path_parts = relative_path.split('/')
+                    if len(path_parts) >= 2:
+                        # First level is the main folder, second level is project folder
+                        project_name = path_parts[1]
+                        if project_name not in project_groups:
+                            project_groups[project_name] = []
+                        project_groups[project_name].append(file)
+
+            if not project_groups:
+                return jsonify({'error': 'No valid project directories found'}), 400
+
+            # Debug: Log project groups found
+            logger.info(f"Found {len(project_groups)} project groups:")
+            for project_name, files in project_groups.items():
+                logger.info(f"  Project '{project_name}': {len(files)} files")
+                for file in files[:3]:  # Log first 3 files per project
+                    logger.info(f"    - {file.filename}")
+
+            # Start uploading each project
+            upload_results = []
+            upload_ids = []
+            
+            for project_name, project_files in project_groups.items():
+                try:
+                    # Create project with uploaded files using the bulk-specific service method
+                    project_result = self.project_service.create_project_with_bulk_files(
+                        project_name, participant_code, project_files, DATA_DIR
+                    )
+                    project_id = project_result['project_id']
+                    new_project_path = project_result['project_path']
+
+                    # Discover sessions in the uploaded project using service layer
+                    sessions = self.project_service.discover_project_sessions(new_project_path)
+
+                    # Generate unique upload ID for progress tracking
+                    upload_id = str(uuid.uuid4())
+                    upload_ids.append(upload_id)
+                    
+                    # Start async processing in a separate thread
+                    if sessions:
+                        processing_thread = threading.Thread(
+                            target=self.session_service.process_sessions_async,
+                            args=(upload_id, sessions, new_project_path, project_id)
+                        )
+                        processing_thread.daemon = True
+                        processing_thread.start()
+                    
+                    upload_results.append({
+                        'project_name': project_name,
+                        'project_id': project_id,
+                        'upload_id': upload_id,
+                        'sessions_found': len(sessions),
+                        'files_uploaded': project_result['files_processed'],
+                        'status': 'success'
+                    })
+                    
+                except Exception as e:
+                    logger.error(f"Error uploading project {project_name}: {e}")
+                    upload_results.append({
+                        'project_name': project_name,
+                        'project_id': None,
+                        'upload_id': None,
+                        'sessions_found': 0,
+                        'files_uploaded': 0,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+                        
+            return jsonify({
+                'message': 'Bulk upload started',
+                'participant_id': participant_id,
+                'participant_code': participant_code,
+                'projects_processed': len(project_groups),
+                'upload_results': upload_results,
+                'upload_ids': upload_ids
+            })
+            
+        except Exception as e:
+            logger.error(f"Error in bulk_upload_projects: {str(e)}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': f'Bulk upload failed: {str(e)}'}), 500
 
 @projects_bp.route('/api/projects')
 def list_projects():
     return controller.list_projects()
+
+@projects_bp.route('/api/project/upload', methods=['POST'])
+def upload_new_project():
+    return controller.upload_new_project()
 
 @projects_bp.route('/api/project/<int:project_id>', methods=['DELETE'])
 def delete_project(project_id):
@@ -363,14 +481,24 @@ def list_participants():
 def create_participant():
     return controller.create_participant()
 
-@projects_bp.route('/api/participants/<int:participant_id>', methods=['DELETE'])
-def delete_participant(participant_id):
-    return controller.delete_participant(participant_id)
-
 @projects_bp.route('/api/participants/<int:participant_id>', methods=['PUT'])
 def update_participant(participant_id):
     return controller.update_participant(participant_id)
 
+@projects_bp.route('/api/participants/<int:participant_id>', methods=['DELETE'])
+def delete_participant(participant_id):
+    return controller.delete_participant(participant_id)
+
 @projects_bp.route('/api/project/<int:project_id>/participant', methods=['PUT'])
 def update_project_participant(project_id):
     return controller.update_project_participant(project_id)
+
+@projects_bp.route('/api/projects/bulk-upload', methods=['POST'])
+def bulk_upload_projects():
+    return controller.bulk_upload_projects()
+
+controller = None
+
+def init_controller(session_service, project_service):
+    global controller
+    controller = ProjectController(session_service=session_service, project_service=project_service)

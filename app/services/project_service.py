@@ -165,6 +165,83 @@ class ProjectService:
                 shutil.rmtree(new_project_path)
             raise DatabaseError(f'Failed to create project with files: {str(e)}')
 
+    def create_project_with_bulk_files(self, project_name, participant_code, uploaded_files, data_dir):
+        """
+        Create a new project with uploaded files from bulk upload, handling the specific path structure
+        
+        Args:
+            project_name: Name of the project
+            participant_code: Code for the participant
+            uploaded_files: List of uploaded file objects (already filtered for this project)
+            data_dir: Base directory for storing project data
+            
+        Returns:
+            dict: Project creation result with project_id, participant_id, and project_path
+        """
+        # Get or create participant
+        participant = self.get_participant_by_code(participant_code)
+        if participant:
+            participant_id = participant['participant_id']
+        else:
+            created_participant = self.create_participant(participant_code)
+            participant_id = created_participant['participant_id']
+
+        # Create project directory
+        central_data_dir = os.path.expanduser(data_dir)
+        os.makedirs(central_data_dir, exist_ok=True)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        project_dir_name = f"{project_name}_{participant_code}_{timestamp}"
+        new_project_path = os.path.join(central_data_dir, project_dir_name)
+        
+        try:
+            # Create project directory and save files
+            os.makedirs(new_project_path, exist_ok=True)
+            
+            # Process uploaded files and recreate directory structure
+            # For bulk uploads, the file paths are: parent_folder/project_folder/session_folder/file.csv
+            # We need to extract everything after the project_folder part
+            for file in uploaded_files:
+                if file.filename and file.filename != '':
+                    # Get relative path within the selected folder
+                    relative_path = file.filename
+                    path_parts = relative_path.split('/')
+                    
+                    # For bulk upload: skip parent_folder and project_folder to get session structure
+                    if len(path_parts) > 2:
+                        # Skip first two parts (parent_folder and project_folder)
+                        session_relative_path = '/'.join(path_parts[2:])
+                    else:
+                        # File is in project root
+                        session_relative_path = path_parts[-1]
+                    
+                    # Create full file path in the new project directory
+                    file_path = os.path.join(new_project_path, session_relative_path)
+                    
+                    # Create directories if they don't exist
+                    file_dir = os.path.dirname(file_path)
+                    if file_dir != new_project_path:  # Only create subdirs, not the project dir itself
+                        os.makedirs(file_dir, exist_ok=True)
+                    
+                    # Save the file
+                    file.save(file_path)
+            
+            # Create project record in database
+            created_project = self.insert_project(project_name, participant_id, new_project_path)
+            
+            return {
+                'project_id': created_project['project_id'],
+                'participant_id': participant_id,
+                'project_path': new_project_path,
+                'files_processed': len([f for f in uploaded_files if f.filename and f.filename != ''])
+            }
+            
+        except Exception as e:
+            # Clean up on error
+            if os.path.exists(new_project_path):
+                shutil.rmtree(new_project_path)
+            raise DatabaseError(f'Failed to create project with bulk files: {str(e)}')
+
     def get_labelings(self, project_id=None):
         """Get labelings for a project, filtering out deleted ones by default"""
         import json
