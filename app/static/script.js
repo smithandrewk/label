@@ -884,26 +884,29 @@ async function fetchAndDisplayLabelings(projectId) {
                 console.log(typeof(labeling))
                 console.log('Labeling item:', labeling.name);
                 const currentColor = labeling.color || generateDefaultColor(index);
-                labeling = labeling.name;
+                const labelingName = labeling.name;
                 const labelingItem = document.createElement('div');
                 labelingItem.className = 'labeling-item d-flex justify-content-between align-items-center py-1';
 
                 labelingItem.innerHTML = `
                     <div class="d-flex align-items-center">
                         <div class="color-picker-container me-2" style="position: relative;">
-                            <div class="color-circle" style="width: 20px; height: 20px; border-radius: 50%; background-color: ${currentColor}; border: 1px solid #ccc; cursor: pointer;" onclick="openColorPicker('${labeling}', this)"></div>
-                            <input type="color" class="color-picker" value="${currentColor}" style="position: absolute; opacity: 0; width: 20px; height: 20px; cursor: pointer;" onchange="updateLabelingColor('${labeling}', this.value, this)">
+                            <div class="color-circle" style="width: 20px; height: 20px; border-radius: 50%; background-color: ${currentColor}; border: 1px solid #ccc; cursor: pointer;" onclick="openColorPicker('${labelingName.replace(/'/g, "\\'")}', this)"></div>
+                            <input type="color" class="color-picker" value="${currentColor}" style="position: absolute; opacity: 0; width: 20px; height: 20px; cursor: pointer;" onchange="updateLabelingColor('${labelingName.replace(/'/g, "\\'")}', this.value, this)">
                         </div>
-                        <span>${labeling}</span>
+                        <span>${labelingName}</span>
                     </div>
                     <div class="labeling-actions d-flex gap-1">
-                        <button class="btn btn-sm btn-outline-secondary" onclick="editLabeling('${labeling}')" title="Edit Labeling">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="editLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Edit Labeling">
                             <i class="bi bi-pencil"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline-info" onclick="duplicateLabeling('${labeling}')" title="Duplicate Labeling">
+                        <button class="btn btn-sm btn-outline-info" onclick="duplicateLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Duplicate Labeling">
                             <i class="bi bi-files"></i>
                         </button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="selectLabeling('${labeling}')">
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Delete Labeling">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="selectLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;">
                             Select
                         </button>
                     </div>
@@ -1930,7 +1933,50 @@ async function duplicateLabeling(labelingName) {
         alert('New name must be different from the original name.');
     }
 }
-
+// Function to delete a labeling
+async function deleteLabeling(labelingName) {
+    // Show confirmation dialog
+    const confirmed = confirm(`Are you sure you want to delete the labeling "${labelingName}"? This action will mark it as deleted but can be recovered by an administrator.`);
+    if (!confirmed) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/labelings/${currentProjectId}/delete`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: labelingName
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to delete labeling');
+        }
+        
+        const result = await response.json();
+        console.log('Labeling deleted successfully:', result);
+        
+        // If the deleted labeling was currently selected, switch to "No Labeling"
+        if (currentLabelingName === labelingName) {
+            currentLabelingName = 'No Labeling';
+            currentLabelingJSON = null;
+            updateCurrentLabelingHeader('No Labeling');
+        }
+        
+        // Refresh the labelings list to remove the deleted labeling
+        await fetchAndDisplayLabelings(currentProjectId);
+        
+        alert(`Labeling "${labelingName}" deleted successfully!`);
+        
+    } catch (error) {
+        console.error('Error deleting labeling:', error);
+        alert('Failed to delete labeling: ' + error.message);
+    }
+}
 // Global drag context
 const dragContext = {
     currentSession: null  // Will store the session being modified
@@ -1960,6 +2006,7 @@ window.visualizeSession = visualizeSession;
 window.openColorPicker = openColorPicker;
 window.updateLabelingColor = updateLabelingColor;
 window.editLabeling = editLabeling;
+window.deleteLabeling = deleteLabeling;
 window.duplicateLabeling = duplicateLabeling;
 window.selectLabeling = selectLabeling;
 window.scoreSession = scoreSession;

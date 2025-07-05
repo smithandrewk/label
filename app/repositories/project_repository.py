@@ -281,3 +281,71 @@ class ProjectRepository(BaseRepository):
             'old_name': old_name,
             'new_name': new_name
         }
+
+    def delete_labeling(self, project_id, labeling_name):
+        """
+        Mark a labeling as deleted in a project
+        
+        Args:
+            project_id: ID of the project containing the labeling
+            labeling_name: Name of the labeling to mark as deleted
+            
+        Returns:
+            dict: Status and message indicating success or failure
+        """
+        import json
+        
+        # First, get the current labelings
+        query = """
+            SELECT labelings
+            FROM projects
+            WHERE project_id = %s
+        """
+        result = self._execute_query(query, (project_id,), fetch_one=True)
+        
+        if not result or not result.get('labelings'):
+            raise DatabaseError('Project not found or no labelings exist')
+            
+        # Parse the labelings JSON
+        labelings = json.loads(result['labelings'])
+        found = False
+        
+        # Find and mark the matching labeling as deleted
+        for i, labeling in enumerate(labelings):
+            if isinstance(labeling, str) and labeling == labeling_name:
+                # Convert string labeling to object and mark as deleted
+                labelings[i] = {"name": labeling_name, "color": None, "is_deleted": True}
+                found = True
+            elif isinstance(labeling, dict) and labeling.get('name') == labeling_name:
+                # Mark existing object labeling as deleted
+                labelings[i]['is_deleted'] = True
+                found = True
+            # Handle JSON string that's not yet parsed
+            elif isinstance(labeling, str) and labeling.startswith('{'):
+                try:
+                    labeling_obj = json.loads(labeling)
+                    if isinstance(labeling_obj, dict) and labeling_obj.get('name') == labeling_name:
+                        labeling_obj['is_deleted'] = True
+                        labelings[i] = labeling_obj
+                        found = True
+                except:
+                    pass
+
+        if not found:
+            raise DatabaseError(f'Labeling "{labeling_name}" not found in project')
+            
+        # Save the updated labelings back to the database
+        update_query = """
+            UPDATE projects
+            SET labelings = %s
+            WHERE project_id = %s
+        """
+        rows_affected = self._execute_query(update_query, (json.dumps(labelings), project_id), commit=True)
+        
+        if rows_affected == 0:
+            raise DatabaseError('Failed to mark labeling as deleted')
+            
+        return {
+            'status': 'success',
+            'labeling_name': labeling_name
+        }
