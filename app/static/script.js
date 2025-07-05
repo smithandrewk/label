@@ -900,6 +900,9 @@ async function fetchAndDisplayLabelings(projectId) {
                         <button class="btn btn-sm btn-outline-secondary" onclick="editLabeling('${labeling}')" title="Edit Labeling">
                             <i class="bi bi-pencil"></i>
                         </button>
+                        <button class="btn btn-sm btn-outline-info" onclick="duplicateLabeling('${labeling}')" title="Duplicate Labeling">
+                            <i class="bi bi-files"></i>
+                        </button>
                         <button class="btn btn-sm btn-outline-primary" onclick="selectLabeling('${labeling}')">
                             Select
                         </button>
@@ -1869,9 +1872,6 @@ async function editLabeling(labelingName) {
             // Refresh the labelings list to show the updated name
             await fetchAndDisplayLabelings(currentProjectId);
             
-            // Update all session bouts that had the old labeling name
-            await updateSessionBoutsLabelingName(labelingName, newName.trim());
-            
             alert(`Labeling renamed from "${labelingName}" to "${newName.trim()}" successfully!`);
             
         } catch (error) {
@@ -1883,41 +1883,51 @@ async function editLabeling(labelingName) {
     }
 }
 
-// Function to update session bouts with new labeling name
-async function updateSessionBoutsLabelingName(oldName, newName) {
-    try {
-        // Update any session bouts that reference the old labeling name
-        if (dragContext.currentSession && dragContext.currentSession.bouts) {
-            let boutsUpdated = false;
-            dragContext.currentSession.bouts.forEach(bout => {
-                if (bout.label === oldName) {
-                    bout.label = newName;
-                    boutsUpdated = true;
-                }
+// Function to duplicate a labeling with all its bouts
+async function duplicateLabeling(labelingName) {
+    // Show confirmation dialog and get new name
+    const confirmed = confirm(`Are you sure you want to duplicate the labeling "${labelingName}"?`);
+    if (!confirmed) {
+        return;
+    }
+    
+    const newName = prompt(`Enter a name for the duplicate labeling:`, `${labelingName} Copy`);
+    
+    if (newName && newName.trim() && newName.trim() !== labelingName) {
+        try {
+            const response = await fetch(`/api/labelings/${currentProjectId}/duplicate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    original_name: labelingName,
+                    new_name: newName.trim()
+                })
             });
             
-            // Save the updated session if any bouts were changed
-            if (boutsUpdated) {
-                await SessionAPI.updateSessionMetadata(dragContext.currentSession);
-                console.log(`Updated ${dragContext.currentSession.bouts.length} bouts with new labeling name`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to duplicate labeling');
             }
+            
+            const result = await response.json();
+            console.log('Labeling duplicated successfully:', result);
+            
+            // Refresh the labelings list to show the new duplicate
+            await fetchAndDisplayLabelings(currentProjectId);
+            
+            // Select the new labeling immediately
+            selectLabeling(newName.trim());
+            
+            alert(`Labeling "${labelingName}" duplicated as "${newName.trim()}" successfully! All bouts have been copied.`);
+            
+        } catch (error) {
+            console.error('Error duplicating labeling:', error);
+            alert('Failed to duplicate labeling: ' + error.message);
         }
-        
-        // Also update the global sessions array if it exists
-        if (typeof sessions !== 'undefined' && sessions) {
-            sessions.forEach(session => {
-                if (session.bouts) {
-                    session.bouts.forEach(bout => {
-                        if (bout.label === oldName) {
-                            bout.label = newName;
-                        }
-                    });
-                }
-            });
-        }
-        
-    } catch (error) {
-        console.error('Error updating session bouts with new labeling name:', error);
+    } else if (newName && newName.trim() === labelingName) {
+        alert('New name must be different from the original name.');
     }
 }
 
@@ -1950,6 +1960,7 @@ window.visualizeSession = visualizeSession;
 window.openColorPicker = openColorPicker;
 window.updateLabelingColor = updateLabelingColor;
 window.editLabeling = editLabeling;
+window.duplicateLabeling = duplicateLabeling;
 window.selectLabeling = selectLabeling;
 window.scoreSession = scoreSession;
 window.showTableView = showTableView;
