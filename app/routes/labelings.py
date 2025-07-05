@@ -30,7 +30,45 @@ class LabelController:
             logging.error(f"Unexpected error: {e}")
             traceback.print_exc()
             return jsonify({"error": "An unexpected error occurred"}), 500
-
+        
+    def rename_labeling(self, project_id):
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({"error": "Invalid input: No data provided"}), 400
+            
+            old_name = data.get('old_name', '').strip()
+            new_name = data.get('new_name', '').strip()
+            
+            if not old_name:
+                return jsonify({"error": "Old labeling name cannot be empty"}), 400
+                
+            if not new_name:
+                return jsonify({"error": "New labeling name cannot be empty"}), 400
+                
+            if old_name == new_name:
+                return jsonify({"error": "New name must be different from the old name"}), 400
+            
+            # Rename the labeling in the database
+            result = self.project_service.rename_labeling(project_id, old_name, new_name)
+            
+            # Also update all session bouts that use this labeling name
+            self.session_service.update_session_bouts_labeling_name(project_id, old_name, new_name)
+            
+            return jsonify({
+                "status": "success",
+                "message": f"Labeling renamed from '{old_name}' to '{new_name}' successfully",
+                "old_name": old_name,
+                "new_name": new_name
+            }), 200
+            
+        except DatabaseError as e:
+            logging.error(f"Database error: {str(e)}")
+            return jsonify({"error": f"Database error: {str(e)}"}), 500
+        except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}")
+            traceback.print_exc()
+            return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 controller = None
 
 def init_controller(project_service, session_service, model_service):
@@ -143,3 +181,8 @@ def update_labeling_color(project_id):
         logging.error(f"Unexpected error: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+
+# Rename labeling
+@labelings_bp.route('/api/labelings/<int:project_id>/rename', methods=['PUT'])
+def rename_labeling(project_id):
+    return controller.rename_labeling(project_id)

@@ -199,4 +199,85 @@ class ProjectRepository(BaseRepository):
         if rows_affected == 0:
             raise DatabaseError('Failed to update labeling color')
             
-        return {'status': 'success', 'message': f'Color updated for labeling "{labeling_name}"'}
+        return {
+            'status': 'success',
+            'labeling_name': labeling_name,
+            'color': color
+        }
+        
+    def rename_labeling(self, project_id, old_name, new_name):
+        """
+        Rename an existing labeling in a project
+        
+        Args:
+            project_id: ID of the project containing the labeling
+            old_name: Current name of the labeling  
+            new_name: New name for the labeling
+            
+        Returns:
+            dict: Status and message indicating success or failure
+        """
+        import json
+        
+        # First, get the current labelings
+        query = """
+            SELECT labelings
+            FROM projects
+            WHERE project_id = %s
+        """
+        result = self._execute_query(query, (project_id,), fetch_one=True)
+        
+        if not result or not result.get('labelings'):
+            raise DatabaseError('Project not found or no labelings exist')
+            
+        # Parse the labelings JSON
+        labelings = json.loads(result['labelings'])
+        found = False
+        print(labelings)
+        # Check if new name already exists
+        for labeling in labelings:
+            if isinstance(labeling, str) and labeling == new_name:
+                raise DatabaseError(f'Labeling with name "{new_name}" already exists')
+            elif isinstance(labeling, dict) and labeling.get('name') == new_name:
+                raise DatabaseError(f'Labeling with name "{new_name}" already exists')
+        
+        # Find and rename the matching labeling
+        for i, labeling in enumerate(labelings):
+            if isinstance(labeling, str) and labeling == old_name:
+                # Convert string labeling to object and rename
+                labelings[i] = {"name": new_name, "color": None}
+                found = True
+            elif isinstance(labeling, dict) and labeling.get('name') == old_name:
+                # Rename existing object labeling
+                labelings[i]['name'] = new_name
+                found = True
+            # Handle JSON string that's not yet parsed
+            elif isinstance(labeling, str) and labeling.startswith('{'):
+                try:
+                    labeling_obj = json.loads(labeling)
+                    if isinstance(labeling_obj, dict) and labeling_obj.get('name') == old_name:
+                        labeling_obj['name'] = new_name
+                        labelings[i] = labeling_obj
+                        found = True
+                except:
+                    pass
+
+        if not found:
+            raise DatabaseError(f'Labeling "{old_name}" not found in project')
+            
+        # Save the updated labelings back to the database
+        update_query = """
+            UPDATE projects
+            SET labelings = %s
+            WHERE project_id = %s
+        """
+        rows_affected = self._execute_query(update_query, (json.dumps(labelings), project_id), commit=True)
+        
+        if rows_affected == 0:
+            raise DatabaseError('Failed to rename labeling')
+            
+        return {
+            'status': 'success',
+            'old_name': old_name,
+            'new_name': new_name
+        }

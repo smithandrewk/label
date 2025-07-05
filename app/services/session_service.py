@@ -691,6 +691,76 @@ class SessionService:
             cursor.close()
             conn.close()
     
+    def update_session_bouts_labeling_name(self, project_id, old_name, new_name):
+        """Update all session bouts that use a specific labeling name to use a new name
+        
+        Args:
+            project_id: ID of the project containing the sessions
+            old_name: Current labeling name to replace
+            new_name: New labeling name to use
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor(dictionary=True)
+        try:
+            # Get all sessions for this project that have bouts
+            cursor.execute("""
+                SELECT session_id, bouts 
+                FROM sessions 
+                WHERE project_id = %s AND bouts IS NOT NULL AND bouts != '[]'
+            """, (project_id,))
+            
+            sessions_to_update = cursor.fetchall()
+            updated_count = 0
+            
+            for session_row in sessions_to_update:
+                session_id = session_row['session_id']
+                bouts_json = session_row['bouts']
+                
+                if not bouts_json:
+                    continue
+                    
+                try:
+                    # Parse the bouts JSON
+                    bouts = json.loads(bouts_json)
+                    if not isinstance(bouts, list):
+                        continue
+                    
+                    # Update any bouts that have the old labeling name
+                    bouts_modified = False
+                    for bout in bouts:
+                        if isinstance(bout, dict) and bout.get('label') == old_name:
+                            bout['label'] = new_name
+                            bouts_modified = True
+                    
+                    # If we modified any bouts, update the session
+                    if bouts_modified:
+                        updated_bouts_json = json.dumps(bouts)
+                        cursor.execute("""
+                            UPDATE sessions 
+                            SET bouts = %s 
+                            WHERE session_id = %s
+                        """, (updated_bouts_json, session_id))
+                        updated_count += 1
+                        
+                except json.JSONDecodeError:
+                    # Skip sessions with invalid JSON
+                    logger.warning(f'Invalid bouts JSON for session {session_id}, skipping')
+                    continue
+            
+            conn.commit()
+            logger.info(f'Updated labeling name from "{old_name}" to "{new_name}" in {updated_count} sessions')
+            return updated_count
+            
+        except Exception as e:
+            conn.rollback()
+            raise DatabaseError(f'Failed to update session bouts labeling names: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
+
     def delete_session_lineage_by_project(self, project_id):
         """Delete all session lineage records for sessions in a project"""
         conn = self.get_db_connection()
