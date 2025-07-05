@@ -896,7 +896,10 @@ async function fetchAndDisplayLabelings(projectId) {
                         </div>
                         <span>${labeling}</span>
                     </div>
-                    <div class="labeling-actions d-flex">
+                    <div class="labeling-actions d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="editLabeling('${labeling}')" title="Edit Labeling">
+                            <i class="bi bi-pencil"></i>
+                        </button>
                         <button class="btn btn-sm btn-outline-primary" onclick="selectLabeling('${labeling}')">
                             Select
                         </button>
@@ -1831,6 +1834,93 @@ async function updateLabelingColor(labelingName, newColor, colorPickerElement) {
         console.error('Error updating labeling color:', error);
     }
 }
+
+// Function to edit (rename) a labeling
+async function editLabeling(labelingName) {
+    const newName = prompt(`Enter a new name for labeling "${labelingName}":`, labelingName);
+    
+    if (newName && newName.trim() && newName.trim() !== labelingName) {
+        try {
+            const response = await fetch(`/api/labelings/${currentProjectId}/rename`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    old_name: labelingName,
+                    new_name: newName.trim()
+                })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to rename labeling');
+            }
+            
+            const result = await response.json();
+            console.log('Labeling renamed successfully:', result);
+            
+            // Update the current labeling name if it was the one being renamed
+            if (currentLabelingName === labelingName) {
+                currentLabelingName = newName.trim();
+                updateCurrentLabelingHeader(newName.trim());
+            }
+            
+            // Refresh the labelings list to show the updated name
+            await fetchAndDisplayLabelings(currentProjectId);
+            
+            // Update all session bouts that had the old labeling name
+            await updateSessionBoutsLabelingName(labelingName, newName.trim());
+            
+            alert(`Labeling renamed from "${labelingName}" to "${newName.trim()}" successfully!`);
+            
+        } catch (error) {
+            console.error('Error renaming labeling:', error);
+            alert('Failed to rename labeling: ' + error.message);
+        }
+    } else if (newName && newName.trim() === labelingName) {
+        alert('New name must be different from the current name.');
+    }
+}
+
+// Function to update session bouts with new labeling name
+async function updateSessionBoutsLabelingName(oldName, newName) {
+    try {
+        // Update any session bouts that reference the old labeling name
+        if (dragContext.currentSession && dragContext.currentSession.bouts) {
+            let boutsUpdated = false;
+            dragContext.currentSession.bouts.forEach(bout => {
+                if (bout.label === oldName) {
+                    bout.label = newName;
+                    boutsUpdated = true;
+                }
+            });
+            
+            // Save the updated session if any bouts were changed
+            if (boutsUpdated) {
+                await SessionAPI.updateSessionMetadata(dragContext.currentSession);
+                console.log(`Updated ${dragContext.currentSession.bouts.length} bouts with new labeling name`);
+            }
+        }
+        
+        // Also update the global sessions array if it exists
+        if (typeof sessions !== 'undefined' && sessions) {
+            sessions.forEach(session => {
+                if (session.bouts) {
+                    session.bouts.forEach(bout => {
+                        if (bout.label === oldName) {
+                            bout.label = newName;
+                        }
+                    });
+                }
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error updating session bouts with new labeling name:', error);
+    }
+}
+
 // Global drag context
 const dragContext = {
     currentSession: null  // Will store the session being modified
@@ -1859,6 +1949,7 @@ let maxTimestamp = null;
 window.visualizeSession = visualizeSession;
 window.openColorPicker = openColorPicker;
 window.updateLabelingColor = updateLabelingColor;
+window.editLabeling = editLabeling;
 window.selectLabeling = selectLabeling;
 window.scoreSession = scoreSession;
 window.showTableView = showTableView;

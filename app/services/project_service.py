@@ -186,6 +186,20 @@ class ProjectService:
         """
         logger.info(f'Updating color for labeling "{labeling_name}" to {color} in project {project_id}')
         return self.project_repo.update_labeling_color(project_id, labeling_name, color)
+        
+    def rename_labeling(self, project_id, old_name, new_name):
+        """Rename an existing labeling in a project
+        
+        Args:
+            project_id: ID of the project containing the labeling
+            old_name: Current name of the labeling
+            new_name: New name for the labeling
+            
+        Returns:
+            dict: Status and message indicating success or failure
+        """
+        logger.info(f'Renaming labeling from "{old_name}" to "{new_name}" in project {project_id}')
+        return self.project_repo.rename_labeling(project_id, old_name, new_name)
 
     def discover_project_sessions(self, project_path):
         """
