@@ -1815,6 +1815,7 @@ window.splitSession = splitSession;
 window.createNewBout = createNewBout;
 window.showCreateProjectForm = showCreateProjectForm;
 window.createNewProject = createNewProject;
+window.deleteProject = deleteProject;
 window.navigateToNextSession = navigateToNextSession;
 window.navigateToPreviousSession = navigateToPreviousSession;
 window.updateSidebarHighlighting = updateSidebarHighlighting;
