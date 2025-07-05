@@ -104,9 +104,14 @@ function renderParticipants() {
                                 return `
                                     <li class="d-flex align-items-center px-2 py-1 dropdown-item">
                                         <span class="flex-grow-1" onclick="viewProject(${projectId}, '${projectName}'); return false;" style="cursor: pointer;">${projectName}</span>
-                                        <button class="btn btn-sm btn-outline-danger ms-2" onclick="deleteProject(${projectId}, '${projectName}'); return false;" title="Delete project">
-                                            <i class="fa-solid fa-trash"></i>
-                                        </button>
+                                        <div class="btn-group ms-2" role="group">
+                                            <button class="btn btn-sm btn-outline-secondary" onclick="showChangeParticipantModal(${projectId}, '${projectName}', '${participant.participant_code}'); return false;" title="Change participant">
+                                                <i class="fa-solid fa-user"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteProject(${projectId}, '${projectName}'); return false;" title="Delete project">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </div>
                                     </li>
                                 `;
                             }).join('') : 
@@ -328,3 +333,184 @@ window.editParticipant = editParticipant;
 window.deleteParticipant = deleteParticipant;
 window.viewProject = viewProject;
 window.createProjectForParticipant = createProjectForParticipant;
+
+// Show change participant modal
+async function showChangeParticipantModal(projectId, projectName, currentParticipantCode) {
+    const modal = document.getElementById('changeParticipantModal');
+    const projectIdField = document.getElementById('changeParticipantProjectId');
+    const projectNameSpan = document.getElementById('changeParticipantProjectName');
+    const currentParticipantSpan = document.getElementById('currentParticipantCode');
+    
+    if (modal && projectIdField && projectNameSpan && currentParticipantSpan) {
+        projectIdField.value = projectId;
+        projectNameSpan.textContent = projectName;
+        currentParticipantSpan.textContent = currentParticipantCode;
+        
+        // Load participants into dropdown
+        await loadParticipantsForDropdown();
+        
+        // Show the modal
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+    }
+}
+
+// Load participants for the dropdown
+async function loadParticipantsForDropdown() {
+    try {
+        const response = await fetch('/api/participants');
+        if (!response.ok) {
+            throw new Error('Failed to fetch participants');
+        }
+        
+        const participants = await response.json();
+        const select = document.getElementById('participantSelect');
+        
+        if (select) {
+            // Clear existing options
+            select.innerHTML = '<option value="">Select a participant...</option>';
+            
+            // Add participants to dropdown
+            participants.forEach(participant => {
+                const option = document.createElement('option');
+                option.value = participant.participant_id;
+                option.textContent = `${participant.participant_code} - ${[participant.first_name, participant.last_name].filter(Boolean).join(' ') || 'No name'}`;
+                select.appendChild(option);
+            });
+            
+            // Add option to create new participant
+            const createOption = document.createElement('option');
+            createOption.value = 'create_new';
+            createOption.textContent = '+ Create New Participant';
+            select.appendChild(createOption);
+        }
+    } catch (error) {
+        console.error('Error loading participants:', error);
+        showChangeParticipantError('Failed to load participants');
+    }
+}
+
+// Handle participant selection change
+function onParticipantSelectChange() {
+    const select = document.getElementById('participantSelect');
+    const createParticipantDiv = document.getElementById('createParticipantDiv');
+    
+    if (select.value === 'create_new') {
+        createParticipantDiv.style.display = 'block';
+    } else {
+        createParticipantDiv.style.display = 'none';
+        clearNewParticipantFields();
+    }
+    
+    clearChangeParticipantError();
+}
+
+// Clear new participant fields
+function clearNewParticipantFields() {
+    document.getElementById('newParticipantCode').value = '';
+    document.getElementById('newParticipantFirstName').value = '';
+    document.getElementById('newParticipantLastName').value = '';
+}
+
+// Change project participant
+async function changeProjectParticipant() {
+    const projectId = document.getElementById('changeParticipantProjectId').value;
+    const select = document.getElementById('participantSelect');
+    let participantId = select.value;
+    
+    if (!participantId) {
+        showChangeParticipantError('Please select a participant');
+        return;
+    }
+    
+    try {
+        // If creating new participant, create it first
+        if (participantId === 'create_new') {
+            const newParticipantCode = document.getElementById('newParticipantCode').value.trim();
+            const newParticipantFirstName = document.getElementById('newParticipantFirstName').value.trim();
+            const newParticipantLastName = document.getElementById('newParticipantLastName').value.trim();
+            
+            if (!newParticipantCode) {
+                showChangeParticipantError('Participant code is required');
+                return;
+            }
+            
+            // Create new participant
+            const createResponse = await fetch('/api/participants', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    participant_code: newParticipantCode,
+                    first_name: newParticipantFirstName,
+                    last_name: newParticipantLastName,
+                    email: '',
+                    notes: ''
+                })
+            });
+            
+            if (!createResponse.ok) {
+                const errorData = await createResponse.json();
+                throw new Error(errorData.error || 'Failed to create participant');
+            }
+            
+            const createResult = await createResponse.json();
+            participantId = createResult.participant_id;
+        }
+        
+        // Update project participant
+        const response = await fetch(`/api/project/${projectId}/participant`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ participant_id: participantId })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to change project participant');
+        }
+        
+        const result = await response.json();
+        
+        // Hide the modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('changeParticipantModal'));
+        modal.hide();
+        
+        // Reload the participants list
+        await loadParticipants();
+        
+        // Show success message
+        showSuccess(`Project "${result.project_name}" has been moved to participant "${result.new_participant_code}"`);
+        
+    } catch (error) {
+        console.error('Error changing project participant:', error);
+        showChangeParticipantError(error.message);
+    }
+}
+
+// Show error in change participant modal
+function showChangeParticipantError(message) {
+    const errorDiv = document.getElementById('changeParticipantError');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
+}
+
+// Clear error in change participant modal
+function clearChangeParticipantError() {
+    const errorDiv = document.getElementById('changeParticipantError');
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+    }
+}
+
+// Make additional functions available globally
+window.showChangeParticipantModal = showChangeParticipantModal;
+window.changeProjectParticipant = changeProjectParticipant;
+window.onParticipantSelectChange = onParticipantSelectChange;
+window.clearChangeParticipantError = clearChangeParticipantError;

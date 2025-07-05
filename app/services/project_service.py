@@ -301,3 +301,30 @@ class ProjectService:
                 pass
         
         return sessions
+
+    def update_project_participant(self, project_id, new_participant_id):
+        """Update which participant a project is assigned to"""
+        # Verify the project exists
+        project = self.get_project_with_participant(project_id)
+        if not project:
+            raise DatabaseError('Project not found')
+        
+        # Verify the new participant exists
+        participant = self.participant_repo.find_by_id(new_participant_id)
+        if not participant:
+            raise DatabaseError('Participant not found')
+        
+        old_participant_id = project['participant_id']
+        
+        # Update the project assignment
+        self.project_repo.update_participant(project_id, new_participant_id)
+        
+        # Clean up old participant if they have no remaining projects
+        self.cleanup_participant_if_needed(old_participant_id)
+        
+        return {
+            'project_id': project_id,
+            'old_participant_id': old_participant_id,
+            'new_participant_id': new_participant_id,
+            'participant_cleaned_up': old_participant_id != new_participant_id
+        }
