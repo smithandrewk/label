@@ -166,7 +166,38 @@ class ProjectService:
             raise DatabaseError(f'Failed to create project with files: {str(e)}')
 
     def get_labelings(self, project_id=None):
-        return self.project_repo.get_labelings(project_id)
+        """Get labelings for a project, filtering out deleted ones by default"""
+        import json
+        
+        labelings_data = self.project_repo.get_labelings(project_id)
+        
+        # If no labelings data, return as is
+        if not labelings_data or not labelings_data[0].get('labelings'):
+            return labelings_data
+            
+        # Filter out deleted labelings
+        try:
+            labelings = json.loads(labelings_data[0]['labelings'])
+            if isinstance(labelings, list):
+                # Filter out labelings marked as deleted
+                active_labelings = []
+                for labeling in labelings:
+                    if isinstance(labeling, dict):
+                        # Only include if not deleted
+                        if not labeling.get('is_deleted', False):
+                            active_labelings.append(labeling)
+                    elif isinstance(labeling, str):
+                        # String labelings are considered active (old format)
+                        active_labelings.append(labeling)
+                
+                # Update the labelings data with filtered results
+                labelings_data[0]['labelings'] = json.dumps(active_labelings)
+                
+        except (json.JSONDecodeError, TypeError, KeyError):
+            # If there's an error parsing, return original data
+            pass
+            
+        return labelings_data
 
     def update_labelings(self, project_id, label):
         """Update labelings for a specific project by appending a new label"""
@@ -200,6 +231,19 @@ class ProjectService:
         """
         logger.info(f'Renaming labeling from "{old_name}" to "{new_name}" in project {project_id}')
         return self.project_repo.rename_labeling(project_id, old_name, new_name)
+
+    def delete_labeling(self, project_id, labeling_name):
+        """Mark a labeling as deleted in a project
+        
+        Args:
+            project_id: ID of the project containing the labeling
+            labeling_name: Name of the labeling to delete
+            
+        Returns:
+            dict: Status and message indicating success or failure
+        """
+        logger.info(f'Marking labeling "{labeling_name}" as deleted in project {project_id}')
+        return self.project_repo.delete_labeling(project_id, labeling_name)
 
     def discover_project_sessions(self, project_path):
         """

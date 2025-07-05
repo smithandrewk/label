@@ -146,6 +146,44 @@ class LabelController:
             logging.error(f"Unexpected error: {str(e)}")
             traceback.print_exc()
             return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+
+    def delete_labeling(self, project_id):
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({"error": "Invalid input: No data provided"}), 400
+            
+            labeling_name = data.get('name', '').strip()
+            
+            if not labeling_name:
+                return jsonify({"error": "Labeling name cannot be empty"}), 400
+            
+            # Check if the labeling exists and is not already deleted
+            existing_labelings = json.loads(self.project_service.get_labelings(project_id)[0]['labelings'])
+            
+            labeling_to_delete = next((l for l in existing_labelings if l.get('name') == labeling_name), None)
+            if not labeling_to_delete:
+                return jsonify({"error": f"Labeling '{labeling_name}' not found"}), 404
+                
+            if labeling_to_delete.get('is_deleted', False):
+                return jsonify({"error": f"Labeling '{labeling_name}' is already deleted"}), 400
+            
+            # Mark the labeling as deleted
+            result = self.project_service.delete_labeling(project_id, labeling_name)
+            
+            return jsonify({
+                "status": "success",
+                "message": f"Labeling '{labeling_name}' deleted successfully",
+                "labeling_name": labeling_name
+            }), 200
+            
+        except DatabaseError as e:
+            logging.error(f"Database error: {str(e)}")
+            return jsonify({"error": f"Database error: {str(e)}"}), 500
+        except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}")
+            traceback.print_exc()
+            return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 controller = None
 
 def init_controller(project_service, session_service, model_service):
@@ -268,3 +306,8 @@ def rename_labeling(project_id):
 @labelings_bp.route('/api/labelings/<int:project_id>/duplicate', methods=['POST'])
 def duplicate_labeling(project_id):
     return controller.duplicate_labeling(project_id)
+
+# Delete labeling
+@labelings_bp.route('/api/labelings/<int:project_id>/delete', methods=['DELETE'])
+def delete_labeling(project_id):
+    return controller.delete_labeling(project_id)
