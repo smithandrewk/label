@@ -11,6 +11,7 @@ function checkUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const participantCode = urlParams.get('participant');
     const createProject = urlParams.get('create_project');
+    const projectId = urlParams.get('project_id');
     
     if (participantCode && createProject === 'true') {
         // Pre-fill participant code and show create project modal
@@ -18,6 +19,39 @@ function checkUrlParameters() {
             document.getElementById('project-participant').value = participantCode;
             showCreateProjectForm();
         }, 500); // Small delay to ensure page is loaded
+    }
+    
+    if (projectId) {
+        // Set the current project and fetch its sessions
+        currentProjectId = parseInt(projectId);
+        setTimeout(async () => {
+            try {
+                // Fetch project details to get the name
+                const projects = await ProjectAPI.fetchProjects();
+                const project = projects.find(p => p.project_id === currentProjectId);
+                
+                if (project) {
+                    // Update UI to show this project is selected
+                    updateCurrentProjectPill(project.project_name);
+                    
+                    // Update active state in dropdown if it exists
+                    const dropdownItems = document.querySelectorAll('#project-dropdown-menu .dropdown-item');
+                    dropdownItems.forEach(item => {
+                        item.classList.remove('active');
+                        item.removeAttribute('aria-current');
+                        if (parseInt(item.dataset.projectId) === currentProjectId) {
+                            item.classList.add('active');
+                            item.setAttribute('aria-current', 'page');
+                        }
+                    });
+                    
+                    // Fetch and display sessions for this project
+                    await fetchProjectSessions(currentProjectId);
+                }
+            } catch (error) {
+                console.error('Error setting up project from URL:', error);
+            }
+        }, 500);
     }
 }
 
@@ -111,16 +145,31 @@ async function initializeProjects() {
         }
         
         // Select first project by default
-        if (projects.length > 0) {
+        if (projects.length > 0 && !currentProjectId) {
             const firstProject = dropdownMenu.querySelector('.dropdown-item');
             firstProject.classList.add('active');
             firstProject.setAttribute('aria-current', 'page');
-            currentProjectId = projects[0].project_id; // ADD THIS LINE to set current project ID
+            currentProjectId = projects[0].project_id;
             
             // Update current project pill
             updateCurrentProjectPill(projects[0].project_name);
             
             fetchProjectSessions(projects[0].project_id);
+        } else if (currentProjectId) {
+            // If we have a current project, make sure it's marked as active in the dropdown
+
+            const currentProjectItem = dropdownMenu.querySelector(`[data-project-id="${currentProjectId}"]`);
+            if (currentProjectItem) {
+                currentProjectItem.classList.add('active');
+                currentProjectItem.setAttribute('aria-current', 'page');
+                
+                // Find the project data to update the pill
+                const currentProject = projects.find(p => p.project_id === currentProjectId);
+                if (currentProject) {
+                    updateCurrentProjectPill(currentProject.project_name);
+                }
+            }
+            console.log('Current project ID set from URL:', currentProjectId);
         }
     } catch (error) {
         console.error('Error initializing projects:', error);
@@ -141,10 +190,8 @@ async function fetchProjectSessions(projectId) {
             currentLabelingJSON = null;
             currentLabelingName = "No Labeling";
         }
-        console.log(labelings)
         // Log session statistics
         const stats = SessionService.getSessionStats(sessions);
-        console.log(`Session statistics: ${stats.available} available, ${stats.discarded} discarded, ${stats.verified} verified (${stats.total} total)`);
         
         // Update the session table/list
         updateSessionsList();
