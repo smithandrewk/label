@@ -68,10 +68,31 @@ function renderParticipants() {
                 ${participant.email ? `<a href="mailto:${participant.email}">${participant.email}</a>` : '<span class="text-muted">Not specified</span>'}
             </td>
             <td>
-                <span class="badge bg-primary">${participant.project_count || 0}</span>
-                ${participant.project_count > 0 ? `
-                    <br><small class="text-muted">${participant.project_names.split(', ').slice(0, 2).join(', ')}${participant.project_count > 2 ? '...' : ''}</small>
-                ` : ''}
+                <div class="dropdown"> 
+                    <a href="#" class="d-block link-body-emphasis text-decoration-none dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"> 
+                        <span class="badge bg-primary">${participant.project_count || 0}</span>
+                    </a>
+                    <ul class="dropdown-menu text-small">
+                        ${participant.project_count > 0 ? 
+                            participant.project_names.split(', ').map((projectName, index) => {
+                                const projectId = participant.project_ids ? participant.project_ids[index] : null;
+                                return `
+                                    <li class="d-flex align-items-center px-2 py-1">
+                                        <span class="flex-grow-1">${projectName}</span>
+                                        <button class="btn btn-sm btn-outline-danger ms-2" onclick="deleteProject(${projectId}, '${projectName}'); return false;" title="Delete project">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </li>
+                                `;
+                            }).join('') : 
+                            '<li><span class="dropdown-item-text text-muted">No projects</span></li>'
+                        }
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" onclick="createProjectForParticipant('${participant.participant_code}'); return false;">
+                            <i class="fa-solid fa-plus me-2"></i>New project...
+                        </a></li>
+                    </ul> 
+                </div>
             </td>
             <td>
                 <span class="badge bg-success">${participant.total_sessions || 0}</span>

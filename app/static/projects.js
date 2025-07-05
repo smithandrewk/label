@@ -40,7 +40,7 @@ function renderProjects(projects) {
         tableBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No projects found</td></tr>';
         return;
     }
-    
+
     projects.forEach(project => {
         console.log(project);
         const row = document.createElement('tr');
@@ -61,6 +61,9 @@ function renderProjects(projects) {
                     <ul class="dropdown-menu">
                         <li><a class="dropdown-item" href="#" onclick="showRenameModal(${project.project_id}, '${project.project_name}'); return false;">
                             <i class="bi bi-pencil me-2"></i>Rename
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="deleteProject(${project.project_id}, '${project.project_name}'); return false;">
+                            <i class="bi bi-trash me-2"></i>Delete
                         </a></li>
                     </ul>
                 </div>
