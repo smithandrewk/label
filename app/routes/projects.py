@@ -299,6 +299,40 @@ class ProjectController:
             logger.error(f"Error deleting participant: {e}")
             return jsonify({'error': f'Failed to delete participant: {str(e)}'}), 500
 
+    def update_project_participant(self, project_id):
+        """Update which participant a project is assigned to"""
+        try:
+            data = request.get_json()
+            new_participant_id = data.get('participant_id')
+            
+            if not new_participant_id:
+                return jsonify({'error': 'Participant ID is required'}), 400
+            
+            try:
+                result = self.project_service.update_project_participant(project_id, new_participant_id)
+                
+                # Get updated project info for response
+                updated_project = self.project_service.get_project_with_participant(project_id)
+                
+                return jsonify({
+                    'message': 'Project participant updated successfully',
+                    'project_id': project_id,
+                    'project_name': updated_project['project_name'],
+                    'old_participant_id': result['old_participant_id'],
+                    'new_participant_id': result['new_participant_id'],
+                    'new_participant_code': updated_project['participant_code'],
+                    'participant_cleaned_up': result['participant_cleaned_up']
+                })
+                
+            except DatabaseError as e:
+                if 'not found' in str(e):
+                    return jsonify({'error': str(e)}), 404
+                return jsonify({'error': str(e)}), 500
+                
+        except Exception as e:
+            logger.error(f"Error updating project participant: {e}")
+            return jsonify({'error': str(e)}), 500
+
 controller = None
 
 def init_controller(session_service, project_service):
@@ -336,3 +370,7 @@ def delete_participant(participant_id):
 @projects_bp.route('/api/participants/<int:participant_id>', methods=['PUT'])
 def update_participant(participant_id):
     return controller.update_participant(participant_id)
+
+@projects_bp.route('/api/project/<int:project_id>/participant', methods=['PUT'])
+def update_project_participant(project_id):
+    return controller.update_project_participant(project_id)

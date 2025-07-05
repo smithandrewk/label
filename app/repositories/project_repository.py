@@ -349,3 +349,13 @@ class ProjectRepository(BaseRepository):
             'status': 'success',
             'labeling_name': labeling_name
         }
+    
+    def update_participant(self, project_id, new_participant_id):
+        """Update the participant assigned to a project"""
+        query = "UPDATE projects SET participant_id = %s WHERE project_id = %s"
+        rows_affected = self._execute_query(query, (new_participant_id, project_id), commit=True)
+        
+        if rows_affected == 0:
+            raise DatabaseError('Project not found')
+        
+        return True
