@@ -93,7 +93,7 @@ class LabelController:
 
             if any(labeling.get('name') == new_name for labeling in existing_labelings):
                 return jsonify({"error": f"A labeling with the name '{new_name}' already exists"}), 400
-            print(existing_labelings)
+
             # Get the original labeling to copy its color
             original_labeling = next((l for l in existing_labelings if l.get('name') == original_name), None)
             if not original_labeling:
@@ -122,7 +122,8 @@ class LabelController:
             # Create the duplicate labeling
             duplicate_labeling = {
                 "name": new_name,
-                "color": new_color
+                "color": new_color,
+                "is_deleted": False,
             }
             
             # Add the new labeling to the project
