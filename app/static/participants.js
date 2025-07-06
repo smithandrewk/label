@@ -101,14 +101,16 @@ function renderParticipants() {
                         ${participant.project_count > 0 ? 
                             participant.project_names.split(', ').map((projectName, index) => {
                                 const projectId = participant.project_ids ? participant.project_ids[index] : null;
+                                const escapedProjectName = projectName.replace(/'/g, '&apos;').replace(/"/g, '&quot;');
+                                const escapedParticipantCode = participant.participant_code.replace(/'/g, '&apos;').replace(/"/g, '&quot;');
                                 return `
                                     <li class="d-flex align-items-center px-2 py-1 dropdown-item">
-                                        <span class="flex-grow-1" onclick="viewProject(${projectId}, '${projectName}'); return false;" style="cursor: pointer;">${projectName}</span>
+                                        <span class="flex-grow-1" onclick="viewProject(${projectId}, '${escapedProjectName}'); return false;" style="cursor: pointer;">${projectName}</span>
                                         <div class="btn-group ms-2" role="group">
-                                            <button class="btn btn-sm btn-outline-secondary" onclick="showChangeParticipantModal(${projectId}, '${projectName}', '${participant.participant_code}'); return false;" title="Change participant">
+                                            <button class="btn btn-sm btn-outline-secondary" onclick="showChangeParticipantModal(${projectId}, '${escapedProjectName}', '${escapedParticipantCode}'); return false;" title="Change participant">
                                                 <i class="fa-solid fa-user"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteProject(${projectId}, '${projectName}'); return false;" title="Delete project">
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteProject(${projectId}, '${escapedProjectName}'); return false;" title="Delete project">
                                                 <i class="fa-solid fa-trash"></i>
                                             </button>
                                         </div>
@@ -118,7 +120,7 @@ function renderParticipants() {
                             '<li><span class="dropdown-item-text text-muted">No projects</span></li>'
                         }
                         <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="#" onclick="createProjectForParticipant('${participant.participant_code}'); return false;">
+                        <li><a class="dropdown-item" href="#" onclick="createProjectForParticipant('${participant.participant_code.replace(/'/g, '&apos;').replace(/"/g, '&quot;')}'); return false;">
                             <i class="fa-solid fa-plus me-2"></i>New project...
                         </a></li>
                     </ul> 
@@ -135,10 +137,10 @@ function renderParticipants() {
                     <button class="btn btn-sm btn-outline-primary" onclick="editParticipant(${participant.participant_id}); return false;" title="Edit Participant">
                         <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-success" onclick="createProjectForParticipant('${participant.participant_code}'); return false;" title="Add Project">
+                    <button class="btn btn-sm btn-outline-success" onclick="createProjectForParticipant('${participant.participant_code.replace(/'/g, '&apos;').replace(/"/g, '&quot;')}'); return false;" title="Add Project">
                         <i class="bi bi-plus"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteParticipant(${participant.participant_id}, '${participant.participant_code}'); return false;" title="Delete Participant">
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteParticipant(${participant.participant_id}, '${participant.participant_code.replace(/'/g, '&apos;').replace(/"/g, '&quot;')}'); return false;" title="Delete Participant">
                         <i class="bi bi-trash"></i>
                     </button>
                 </div>
