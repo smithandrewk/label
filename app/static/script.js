@@ -1,11 +1,56 @@
 import * as eventListeners from './eventListeners.js';
 import { ensureSessionBoutsIsArray } from './helpers.js'
 import ProjectAPI from './js/api/projectAPI.js';
+import ProjectService from './js/services/projectService.js';
+import { 
+    updateCurrentProjectPill, 
+    resetScoreButton, 
+    showCreateProjectForm, 
+    showTableView, 
+    showNotification,
+    showBulkUploadForm,
+    displayBulkPreview
+} from './js/ui/uiUtils.js';
 import SessionAPI from './js/api/sessionAPI.js';
 import SessionService from './js/services/sessionService.js';
 import { ActionButtonTemplates, ActionButtonHandlers } from './js/templates/actionButtonTemplates.js';
 import { SessionListTemplates, SessionListHandlers } from './js/templates/sessionListTemplates.js';
 
+// Fetch sessions for a specific project
+async function fetchProjectSessions(projectId) {
+    try {
+        const projectData = await ProjectService.fetchProjectSessionsAndLabelings(projectId);
+        
+        // Update global variables
+        sessions = projectData.sessions;
+        labelings = projectData.labelings;
+        currentLabelingJSON = projectData.currentLabelingJSON;
+        currentLabelingName = projectData.currentLabelingName;
+        
+        // Update the session table/list
+        updateSessionsList();
+    } catch (error) {
+        console.error('Error fetching project sessions:', error);
+    }
+}
+
+// Fetch all sessions or sessions for a specific project
+async function fetchSession(projectId) {
+    try {
+        sessions = await ProjectService.fetchSessions(projectId);
+        
+        // Update the session table/list
+        updateSessionsList();
+        
+        // Update unified sidebar if function is available
+        if (window.updateSessionsSidebarList) {
+            window.updateSessionsSidebarList(sessions, projectId);
+        }
+        
+    } catch (error) {
+        console.error('Error fetching sessions:', error);
+    }
+}
 // Check URL parameters on page load
 function checkUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -59,6 +104,7 @@ function checkUrlParameters() {
 
 // Add to your script.js
 async function initializeProjects() {
+    console.log('Initializing projects...');
     try {
         const projects = await ProjectAPI.fetchProjects();
 
@@ -102,55 +148,16 @@ async function initializeProjects() {
             dropdownMenu.appendChild(li);
         });
 
-        // Add divider and "All Projects" option
-        if (projects.length > 0) {
-            const divider = document.createElement('li');
-            divider.innerHTML = '<hr class="dropdown-divider">';
-            dropdownMenu.appendChild(divider);
-            
-            const allLi = document.createElement('li');
-            const allA = document.createElement('a');
-            allA.className = 'dropdown-item';
-            allA.href = '#';
-            allA.textContent = 'All Projects';
-            // In your initializeProjects function, update the "All Projects" click handler:
-            // Update the All Projects click handler
-            allA.onclick = function(e) {
-                e.preventDefault();
-                currentProjectId = null; // Clear the project ID
-                
-                // Hide current project pill
-                updateCurrentProjectPill(null);
-                
-                // Update active state
-                document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
-                    item.classList.remove('active');
-                    item.removeAttribute('aria-current');
-                });
-                this.classList.add('active');
-                this.setAttribute('aria-current', 'page');
-                
-                // Fetch all sessions
-                fetchSession();
-            };
-            allLi.appendChild(allA);
-            dropdownMenu.appendChild(allLi);
-        }
-
-        console.log('Current currentProjectId:', currentProjectId);
-        
         // Check sessionStorage for preserved project selection if currentProjectId is not set
         if (!currentProjectId) {
             const storedProjectId = sessionStorage.getItem('currentProjectId');
             if (storedProjectId) {
                 currentProjectId = parseInt(storedProjectId);
-                console.log('Restored currentProjectId from sessionStorage:', currentProjectId);
             }
         }
         
         // Select first project by default ONLY if no project is currently selected
         if (projects.length > 0 && !currentProjectId) {
-            console.log('No current project ID set, selecting first project');
             const firstProject = dropdownMenu.querySelector('.dropdown-item');
             firstProject.classList.add('active');
             firstProject.setAttribute('aria-current', 'page');
@@ -176,49 +183,15 @@ async function initializeProjects() {
                     fetchProjectSessions(currentProjectId);
                 }
             }
-            console.log('Current project ID set:', currentProjectId);
         }
     } catch (error) {
         console.error('Error initializing projects:', error);
     }
 }
+/*
+OTHER
+*/
 
-// Fetch sessions for a specific project
-async function fetchProjectSessions(projectId) {
-    try {
-        sessions = await ProjectAPI.fetchProjectSessions(projectId);
-        labelings = await ProjectAPI.fetchLabelings(projectId);
-
-        // Set currentLabeling to the first available labeling or "No Labeling"
-        if (labelings && labelings.length > 0) {
-            currentLabelingJSON = labelings[0];
-            currentLabelingName = currentLabelingJSON.name;
-        } else {
-            currentLabelingJSON = null;
-            currentLabelingName = "No Labeling";
-        }
-        // Log session statistics
-        const stats = SessionService.getSessionStats(sessions);
-        
-        // Update the session table/list
-        updateSessionsList();
-    } catch (error) {
-        console.error('Error fetching project sessions:', error);
-    }
-}
-
-// Update current project pill in sidebar
-function updateCurrentProjectPill(projectName) {
-    const pill = document.getElementById('current-project-pill');
-    const pillName = document.getElementById('current-project-pill-name');
-    
-    if (projectName && pill && pillName) {
-        pillName.textContent = projectName;
-        pill.style.display = 'block';
-    } else if (pill) {
-        pill.style.display = 'none';
-    }
-}
 
 // Update the sessions list in the UI
 function updateSessionsList() {
@@ -392,55 +365,7 @@ async function pollScoringStatus(scoringId, sessionId, sessionName) {
     }, 1000); // Poll every second
 }
 
-function resetScoreButton(sessionId) {
-    const scoreBtn = document.getElementById(`score-btn-overlay`);
-    if (scoreBtn) {
-        scoreBtn.innerHTML = '<i class="fa-solid fa-rocket"></i>';
-    }
-}
 
-function showNotification(message, type = 'info') {
-    // Simple notification - you can replace with a proper notification library
-    console.log(`${type.toUpperCase()}: ${message}`);
-    
-    // Or create a simple toast notification
-    const toast = document.createElement('div');
-    toast.className = `alert alert-${type === 'error' ? 'danger' : type} position-fixed`;
-    toast.style.top = '20px';
-    toast.style.right = '300px';
-    toast.style.zIndex = '9999';
-    toast.textContent = message;
-    
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        document.body.removeChild(toast);
-    }, 5000);
-}
-// Fetch session for each project
-async function fetchSession(projectId) {
-    try {
-        // Build URL with query parameter if projectId is provided
-        const url = projectId ? `/api/sessions?project_id=${projectId}` : '/api/sessions';
-        
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Failed to fetch sessions');
-        sessions = await response.json();
-        
-        console.log('Fetched sessions:', sessions);
-        
-        // Add this line to update the UI
-        updateSessionsList();
-        
-        // Update unified sidebar if function is available
-        if (window.updateSessionsSidebarList) {
-            window.updateSessionsSidebarList(sessions, projectId);
-        }
-        
-    } catch (error) {
-        console.error('Error fetching sessions:', error);
-    }
-}
 
 // Function to handle API call
 function createNewProject(formData) {
@@ -509,22 +434,8 @@ function createNewProject(formData) {
     });
 }
 
-// Show create project form
-function showCreateProjectForm() {
-    const modalElement = document.getElementById('createProjectModal');
-    if (modalElement) {
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
-    } else {
-        console.error('Create Project Modal not found');
-    }
-}
 
-// Show table view
-function showTableView() {
-    document.getElementById("table-view").style.display = "block";
-    document.getElementById("visualization-view").style.display = "none";
-}
+
 
 // Show visualization view
 async function visualizeSession(sessionId) {
@@ -546,8 +457,8 @@ async function visualizeSession(sessionId) {
     });
     activeHandlers.length = 0;
     
-    // Also clean up any stray elements
-    document.querySelectorAll('.drag-overlay, .left-overlay, .right-overlay').forEach(el => el.remove());
+    // Clean up overlays using overlay manager
+    window.OverlayManager.cleanupOverlays();
     
     // Find the session by ID
     const session = sessions.find(s => s.session_id == sessionId);
@@ -701,20 +612,8 @@ async function visualizeSession(sessionId) {
         ensureSessionBoutsIsArray(session);
 
         const overlays = session.bouts.map((bout, index) => createBoutOverlays(index, container));
-        // Update all overlay positions
-        function updateAllOverlayPositions() {
-            console.log('Updating overlay positions');
-            session.bouts.forEach((bout, index) => {
-                // Only show overlays for bouts that match the currently selected labeling
-                if (bout['label'] === currentLabelingName) {
-                    updateOverlayPositions(plotDiv, bout, index);
-                } else {
-                    // Hide overlays that don't match the current labeling
-                    hideOverlay(index);
-                }
-            });
-        }
-        updateAllOverlayPositions();
+        // Update all overlay positions using overlay manager
+        window.OverlayManager.updateOverlaysForLabelingChange(session, currentLabelingName);
 
         // Handle plot click for splitting
         plotDiv.on('plotly_click', function(data) {
@@ -747,16 +646,16 @@ async function visualizeSession(sessionId) {
         // Update overlays on plot relayout (pan, zoom, etc.)
         plotDiv.on('plotly_relayout', () => {
             console.log('Plotly relayout event');
-            updateAllOverlayPositions();
+            window.OverlayManager.updateOverlaysForLabelingChange(session, currentLabelingName);
         });
         // Update overlays during pan/zoom interaction
         plotDiv.on('plotly_relayouting', () => {
-            updateAllOverlayPositions();
+            window.OverlayManager.updateOverlaysForLabelingChange(session, currentLabelingName);
         });
         // Update overlays on window resize
         window.addEventListener('resize', () => {
             Plotly.Plots.resize(plotDiv).then(() => {
-                updateAllOverlayPositions();
+                window.OverlayManager.updateOverlaysForLabelingChange(session, currentLabelingName);
             });
         });
         // Handle double click for pan and zoom
@@ -780,6 +679,7 @@ async function visualizeSession(sessionId) {
 function pixelToData(pixelX, xAxis) {
     return xAxis.range[0] + (pixelX - xAxis._offset) * (xAxis.range[1] - xAxis.range[0]) / xAxis._length;
 }
+
 // When opening the modal
 const labelingModal = document.getElementById('labelingModal');
 if (labelingModal) {
@@ -798,24 +698,11 @@ async function createNewLabeling() {
     
     if (labelingName && labelingName.trim()) {
         try {
-            // Make API call to create new labeling
-            const response = await fetch(`/api/labelings/${currentProjectId}/update`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    name: labelingName.trim(),
-                    labels: {}  // Initialize with empty labels structure
-                })
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const result = await response.json();
+            const { result, updatedLabelings } = await ProjectService.createLabeling(currentProjectId, labelingName.trim());
             console.log('New labeling created:', result);
+            
+            // Update global labelings array
+            labelings = updatedLabelings;
             
             // Refresh the labelings list to show the new labeling
             await fetchAndDisplayLabelings(currentProjectId);
@@ -941,6 +828,7 @@ function getLabelingFromLabelingName(labelingName) {
 }
 
 function selectLabeling(labelingName) {
+    console.log(`Selecting labeling: ${labelingName}`);
     currentLabelingName = labelingName;
     currentLabelingJSON = getLabelingFromLabelingName(labelingName);
 
@@ -962,17 +850,11 @@ function selectLabeling(labelingName) {
     }
     
     // If we're in visualization view, update the overlays to show only bouts matching this labeling
+    console.log(dragContext.currentSession);
+    console.log(dragContext.currentSession.bouts);
+    console.log(currentLabelingName)
     if (dragContext.currentSession && dragContext.currentSession.bouts) {
-        const plotDiv = document.getElementById('timeSeriesPlot');
-        if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
-            dragContext.currentSession.bouts.forEach((bout, index) => {
-                if (bout['label'] === currentLabelingName) {
-                    updateOverlayPositions(plotDiv, bout, index);
-                } else {
-                    hideOverlay(index);
-                }
-            });
-        }
+        window.OverlayManager.updateOverlaysForLabelingChange(dragContext.currentSession, currentLabelingName);
     }
     
     // You can add more logic here for what happens when a labeling is selected
@@ -1266,10 +1148,12 @@ function updateOverlayPositions(plotDiv, bout, index) {
     const dragOverlay = document.getElementById(`drag-overlay-${index}`);
     const leftOverlay = document.getElementById(`left-overlay-${index}`);
     const rightOverlay = document.getElementById(`right-overlay-${index}`);
-    
+    console.log(`Updating overlays for bout ${index}: start=${bout_start}, end=${bout_end}, label=${bout_label}`);
+    console.log(dragOverlay, leftOverlay, rightOverlay);
     if (!dragOverlay || !leftOverlay || !rightOverlay) return;
 
     // Only show and position overlays for the currently selected labeling
+    console.log(`Checking bout label: ${bout_label} against current labeling: ${currentLabelingName}`);
     if (bout_label !== currentLabelingName) {
         hideOverlay(index);
         return;
@@ -1294,7 +1178,7 @@ function updateOverlayPositions(plotDiv, bout, index) {
     
     const currentLabeling = getLabelingFromLabelingName(currentLabelingName);
     const labelingColor = currentLabeling ? currentLabeling.color : generateDefaultColor(0);
-
+    console.log(currentLabeling)
     // Set main overlay position and size
     dragOverlay.style.position = 'absolute';
     dragOverlay.style.left = `${pixelX0}px`;
@@ -1733,38 +1617,23 @@ async function createOrUpdateModelLabeling(labelingName) {
     try {
         console.log(`Creating/updating labeling: ${labelingName} for project ${currentProjectId}`);
         
-        // Check if labeling already exists
-        const existingLabeling = labelings.find(l => l.name === labelingName);
+        const { created, labeling, updatedLabelings } = await ProjectService.createOrUpdateModelLabeling(
+            currentProjectId, 
+            labelingName, 
+            labelings
+        );
         
-        if (!existingLabeling) {
-            // Create new labeling with a distinct color for model results
-            const response = await fetch(`/api/labelings/${currentProjectId}/update`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    name: labelingName,
-                    labels: {}
-                })
-            });
+        if (created) {
+            console.log('New model labeling created:', labeling);
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const result = await response.json();
-            console.log('New model labeling created:', result);
-            
-            // Refresh labelings list to include the new one
-            labelings = await ProjectAPI.fetchLabelings(currentProjectId);
+            // Update global labelings array
+            labelings = updatedLabelings;
             
             // Update the labelings display if modal is open
             const labelingModal = document.getElementById('labelingModal');
             if (labelingModal && labelingModal.classList.contains('show')) {
                 await fetchAndDisplayLabelings(currentProjectId);
             }
-            
         } else {
             console.log(`Labeling ${labelingName} already exists, no need to create`);
         }
@@ -1795,41 +1664,27 @@ function openColorPicker(labelingName, circleElement) {
 // Function to update labeling color
 async function updateLabelingColor(labelingName, newColor, colorPickerElement) {
     try {
-        // Update the visual circle
+        // Update the visual circle immediately for better UX
         const colorCircle = colorPickerElement.parentElement.querySelector('.color-circle');
         if (colorCircle) {
             colorCircle.style.backgroundColor = newColor;
         }
         
-        // Here you could save the color preference to backend/localStorage
-        console.log(`Updated color for labeling "${labelingName}" to ${newColor}`);
+        // Update color via service layer
+        const { result, updatedLabelings } = await ProjectService.updateLabelingColor(currentProjectId, labelingName, newColor);
+        console.log(`Color updated for labeling "${labelingName}" to ${newColor}`);
         
-        // Update color in database
-        const response = await fetch(`/api/labelings/${currentProjectId}/color`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                color: newColor,
-                name: labelingName
-            })
-        });
-        console.log(`Response from server: ${response.status} ${response.statusText}`);
-        labelings = await ProjectAPI.fetchLabelings(currentProjectId);
+        // Update global labelings array
+        labelings = updatedLabelings;
+        
         // If we're in visualization view, update the overlays to show only bouts matching this labeling
         if (dragContext.currentSession && dragContext.currentSession.bouts) {
-            const plotDiv = document.getElementById('timeSeriesPlot');
-            if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
-                dragContext.currentSession.bouts.forEach((bout, index) => {
-                    if (bout['label'] === currentLabelingName) {
-                        updateOverlayPositions(plotDiv, bout, index);
-                    } else {
-                        hideOverlay(index);
-                    }
-                });
-            }
+            window.OverlayManager.updateOverlaysForLabelingChange(dragContext.currentSession, currentLabelingName);
         }
+        
+        // Update current labeling header color if this is the selected labeling
         const currentLabelingNameElement = document.getElementById('current-labeling-name');
-        if (labelingName == currentLabelingName) {
+        if (labelingName == currentLabelingName && currentLabelingNameElement) {
             currentLabelingNameElement.innerHTML = `
                 <div class="color-circle me-1" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${newColor}; border: 1px solid #ccc; display: inline-block;"></div>
                 ${labelingName}
@@ -1838,6 +1693,15 @@ async function updateLabelingColor(labelingName, newColor, colorPickerElement) {
 
     } catch (error) {
         console.error('Error updating labeling color:', error);
+        // Revert the visual change on error
+        const colorCircle = colorPickerElement.parentElement.querySelector('.color-circle');
+        if (colorCircle) {
+            // Try to find the original color from the labelings array
+            const originalLabeling = labelings.find(l => l.name === labelingName);
+            if (originalLabeling) {
+                colorCircle.style.backgroundColor = originalLabeling.color;
+            }
+        }
     }
 }
 
@@ -1847,29 +1711,18 @@ async function editLabeling(labelingName) {
     
     if (newName && newName.trim() && newName.trim() !== labelingName) {
         try {
-            const response = await fetch(`/api/labelings/${currentProjectId}/rename`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    old_name: labelingName,
-                    new_name: newName.trim()
-                })
-            });
+            const { result, shouldUpdateCurrentLabeling, newCurrentLabelingName, updatedLabelings } = 
+                await ProjectService.renameLabeling(currentProjectId, labelingName, newName.trim(), currentLabelingName);
             
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to rename labeling');
-            }
-            
-            const result = await response.json();
             console.log('Labeling renamed successfully:', result);
             
-            // Update the current labeling name if it was the one being renamed
-            if (currentLabelingName === labelingName) {
-                currentLabelingName = newName.trim();
-                updateCurrentLabelingHeader(newName.trim());
+            // Update global labelings array
+            labelings = updatedLabelings;
+            
+            // Update current labeling selection if needed
+            if (shouldUpdateCurrentLabeling) {
+                currentLabelingName = newCurrentLabelingName;
+                updateCurrentLabelingHeader(newCurrentLabelingName);
             }
             
             // Refresh the labelings list to show the updated name
@@ -1898,29 +1751,33 @@ async function duplicateLabeling(labelingName) {
     
     if (newName && newName.trim() && newName.trim() !== labelingName) {
         try {
-            const response = await fetch(`/api/labelings/${currentProjectId}/duplicate`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    original_name: labelingName,
-                    new_name: newName.trim()
-                })
-            });
+            // Use the service method that handles session refresh
+            const { result, updatedLabelings, refreshedSessionData } = await ProjectService.duplicateLabelingWithSessionRefresh(
+                currentProjectId, 
+                labelingName, 
+                newName.trim(), 
+                currentSessionId
+            );
             
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to duplicate labeling');
-            }
-            
-            const result = await response.json();
             console.log('Labeling duplicated successfully:', result);
+            
+            // Update global labelings array
+            labelings = updatedLabelings;
+            
+            // Use overlay manager to handle session data refresh
+            if (refreshedSessionData) {
+                window.OverlayManager.handleSessionDataRefresh({
+                    refreshedSessionData,
+                    dragContext,
+                    currentLabelingName,
+                    currentSessionId
+                });
+            }
             
             // Refresh the labelings list to show the new duplicate
             await fetchAndDisplayLabelings(currentProjectId);
             
-            // Select the new labeling immediately
+            // Select the new labeling immediately (this will now show the duplicated bouts)
             selectLabeling(newName.trim());
             
             alert(`Labeling "${labelingName}" duplicated as "${newName.trim()}" successfully! All bouts have been copied.`);
@@ -1940,38 +1797,19 @@ async function deleteLabeling(labelingName) {
     if (!confirmed) {
         return;
     }
-    
     try {
-        const response = await fetch(`/api/labelings/${currentProjectId}/delete`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                name: labelingName
-            })
-        });
+        const { result, shouldUpdateCurrentLabeling, newCurrentLabelingName, updatedLabelings } = 
+            await ProjectService.deleteLabeling(currentProjectId, labelingName, currentLabelingName);
         
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to delete labeling');
-        }
+        labelings = updatedLabelings;
         
-        const result = await response.json();
-        console.log('Labeling deleted successfully:', result);
-        
-        // If the deleted labeling was currently selected, switch to "No Labeling"
-        if (currentLabelingName === labelingName) {
-            currentLabelingName = 'No Labeling';
+        // Update current labeling selection if needed
+        if (shouldUpdateCurrentLabeling) {
+            currentLabelingName = newCurrentLabelingName;
             currentLabelingJSON = null;
-            updateCurrentLabelingHeader('No Labeling');
+            updateCurrentLabelingHeader(newCurrentLabelingName);
         }
-        
-        // Refresh the labelings list to remove the deleted labeling
         await fetchAndDisplayLabelings(currentProjectId);
-        
-        alert(`Labeling "${labelingName}" deleted successfully!`);
-        
     } catch (error) {
         console.error('Error deleting labeling:', error);
         alert('Failed to delete labeling: ' + error.message);
@@ -2003,14 +1841,10 @@ window.updateSidebarHighlighting = updateSidebarHighlighting;
 window.exportLabelsJSON = exportLabelsJSON;
 window.showBulkUploadForm = showBulkUploadForm;
 
-// Bulk upload functions
-function showBulkUploadForm() {
-    const modalElement = document.getElementById('bulkUploadModal');
-    if (modalElement) {
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
-    }
-}
+// Export overlay management functions for overlay manager
+window.updateOverlayPositions = updateOverlayPositions;
+window.hideOverlay = hideOverlay;
+window.createBoutOverlays = createBoutOverlays;
 
 function processBulkUploadFiles(files) {
     // Group files by project directories
@@ -2031,30 +1865,6 @@ function processBulkUploadFiles(files) {
     }
     
     return projectGroups;
-}
-
-function displayBulkPreview(projectGroups) {
-    const previewElement = document.getElementById('bulk-preview');
-    const projectListElement = document.getElementById('bulk-project-list');
-    
-    if (Object.keys(projectGroups).length === 0) {
-        previewElement.style.display = 'none';
-        return;
-    }
-    
-    let html = '';
-    Object.keys(projectGroups).forEach(projectName => {
-        const fileCount = projectGroups[projectName].length;
-        html += `
-            <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
-                <span><i class="fa-solid fa-folder me-2"></i>${projectName}</span>
-                <span class="badge bg-secondary">${fileCount} files</span>
-            </div>
-        `;
-    });
-    
-    projectListElement.innerHTML = html;
-    previewElement.style.display = 'block';
 }
 
 function createBulkUpload(files) {

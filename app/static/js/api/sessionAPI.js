@@ -43,10 +43,29 @@ export class SessionAPI {
         }
     }
     /**
-     * Fetch all sessions for a specific project
-     * @param {string} projectId - The ID of the project
+     * Fetch all sessions or sessions for a specific project
+     * @param {number|null} projectId - The project ID (optional)
      * @returns {Promise<Array>} List of sessions
      */
+    static async fetchSessions(projectId = null) {
+        try {
+            // Build URL with query parameter if projectId is provided
+            const url = projectId ? `/api/sessions?project_id=${projectId}` : '/api/sessions';
+            
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch sessions: ${response.status} ${response.statusText}`);
+            }
+            
+            const sessions = await response.json();
+            console.log(`Fetched ${sessions.length} sessions${projectId ? ` for project ${projectId}` : ''}`);
+            
+            return sessions;
+        } catch (error) {
+            console.error('Error fetching sessions:', error);
+            throw error;
+        }
+    }
 
     static async updateSessionMetadata(session) {
         try {
