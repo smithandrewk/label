@@ -392,6 +392,7 @@ class ProjectController:
             upload_ids = []
             
             for project_name, project_files in project_groups.items():
+                logger.info(f"Uploading project: {project_name} with {len(project_files)} files")
                 try:
                     # Create project with uploaded files using the bulk-specific service method
                     project_result = self.project_service.create_project_with_bulk_files(
@@ -407,14 +408,17 @@ class ProjectController:
                     upload_id = str(uuid.uuid4())
                     upload_ids.append(upload_id)
                     
-                    # Start async processing in a separate thread
-                    if sessions:
-                        processing_thread = threading.Thread(
-                            target=self.session_service.process_sessions_async,
-                            args=(upload_id, sessions, new_project_path, project_id)
+                    import json
+                    for session in sessions:
+                        logger.info(f"Processing session: {session['name']}")
+                        bouts = self.session_service.load_bouts_from_labels_json(new_project_path, session)
+                        bouts_json = json.dumps(bouts, indent=2)
+                        created_sessions = self.session_service.preprocess_and_split_session_on_upload(
+                            session_name=session['name'],
+                            project_path=new_project_path,
+                            project_id=project_id,
+                            bouts_json=bouts_json
                         )
-                        processing_thread.daemon = True
-                        processing_thread.start()
                     
                     upload_results.append({
                         'project_name': project_name,
