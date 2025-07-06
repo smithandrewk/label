@@ -1,4 +1,7 @@
 from .base_repository import BaseRepository
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class SessionRepository(BaseRepository):
     """Repository for session-related database operations"""
@@ -37,3 +40,49 @@ class SessionRepository(BaseRepository):
         """Set smoking bouts for a session"""
         query = "UPDATE sessions SET bouts = %s WHERE session_id = %s"
         return self._execute_query(query, (bouts, session_id), commit=True)
+
+    def insert_single_session(self, session_name, project_id, bouts_json):
+        """
+        Insert a single session into the database.
+        
+        Args:
+            session_name: Name of the session
+            project_id: ID of the project this session belongs to
+            bouts_json: JSON string of bouts data
+            
+        Returns:
+            list: List containing the session name if successful, empty list if failed
+        """
+        try:
+            query = """
+                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
+                VALUES (%s, %s, %s, %s, %s)
+            """
+            self._execute_query(query, (project_id, session_name, 'Initial', None, bouts_json), commit=True)
+            logger.debug(f"Successfully inserted single session '{session_name}' for project {project_id}")
+            return [session_name]
+        except Exception as e:
+            logger.error(
+                f"Error inserting session {session_name}: {e}", 
+                exc_info=True,
+                extra={
+                    'session_name': session_name,
+                    'project_id': project_id
+                }
+            )
+            return []
+
+    def count_sessions_by_name_and_project(self, session_name, project_id):
+        """
+        Count sessions with a specific name in a project.
+        
+        Args:
+            session_name: Name of the session to check
+            project_id: ID of the project
+            
+        Returns:
+            int: Number of sessions with that name in the project
+        """
+        query = "SELECT COUNT(*) as count FROM sessions WHERE session_name = %s AND project_id = %s"
+        result = self._execute_query(query, (session_name, project_id), fetch_one=True)
+        return result['count'] if result else 0
