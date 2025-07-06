@@ -32,47 +32,51 @@ class ProjectController:
     
     def upload_new_project(self):
         try:
-            # Handle multipart form data for file uploads
             if 'files' not in request.files:
                 return jsonify({'error': 'No files uploaded'}), 400
             
-            # Get form data
             project_name = request.form.get('name')
             participant_code = request.form.get('participant')
             folder_name = request.form.get('folderName')
             
             if not all([project_name, participant_code, folder_name]):
-                return jsonify({'error': 'Missing required fields: name, participant, or folderName'}), 400
+                return jsonify({'error': 'Missing required fields: name, participant, or folderName'}), 400 
             
-            # Get uploaded files
             uploaded_files = request.files.getlist('files')
 
             if not uploaded_files:
                 return jsonify({'error': 'No files uploaded'}), 400
+            
+            logger.info(f"Received {len(uploaded_files)} files for upload")
 
-            # Create project with uploaded files using service layer
             project_result = self.project_service.create_project_with_files(
                 project_name, participant_code, uploaded_files, DATA_DIR
             )
+            logger.info(f"Project upload result: {project_result}")
             project_id = project_result['project_id']
             participant_id = project_result['participant_id']
             new_project_path = project_result['project_path']
 
-            # Discover sessions in the uploaded project using service layer
             sessions = self.project_service.discover_project_sessions(new_project_path)
+            logger.info(f"Discovered {len(sessions)} sessions in project {project_name} at {new_project_path}")
 
-            # Generate unique upload ID for progress tracking
             upload_id = str(uuid.uuid4())
+            logger.info(f"Generated upload ID: {upload_id}")
             
-            # Start async processing in a separate thread
-            if sessions:
-                processing_thread = threading.Thread(
-                    target=self.session_service.process_sessions_async,
-                    args=(upload_id, sessions, new_project_path, project_id)
+            import json
+            skipped_sessions = self.session_service.validate_sessions(sessions, new_project_path)
+            sessions = [s for s in sessions if s['name'] not in skipped_sessions]
+            for session in sessions:
+                logger.info(f"Processing session: {session['name']}")
+                bouts = self.session_service.load_bouts_from_labels_json(new_project_path, session)
+                bouts_json = json.dumps(bouts, indent=2)
+                created_sessions = self.session_service.preprocess_and_split_session_on_upload(
+                    session_name=session['name'],
+                    project_path=new_project_path,
+                    project_id=project_id,
+                    bouts_json=bouts_json
                 )
-                processing_thread.daemon = True
-                processing_thread.start()
-                        
+
             return jsonify({
                 'message': 'Project upload started',
                 'project_id': project_id,

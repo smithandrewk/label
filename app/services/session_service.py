@@ -27,61 +27,6 @@ class SessionService:
         """Delete session lineage records for a project"""
         return self.session_repo.delete_lineage_by_project(project_id)
 
-    def process_sessions_async(self, upload_id, sessions, new_project_path, project_id):
-        try:
-            logger.info(f"Starting async processing for upload {upload_id} with {len(sessions)} sessions")
-            
-            # Get new database connection for this thread
-            conn = self.get_db_connection()
-            
-            all_created_sessions = []
-            
-            for i, session in enumerate(sessions):
-                try:
-                    logger.debug(f"Processing session {i+1}/{len(sessions)}: {session['name']}")
-                    
-                    # Extract session data
-                    session_name = session['name']
-                    project_path = new_project_path
-                    bouts_json = json.dumps(self.load_bouts_from_labels_json(new_project_path, session))
-
-                    # Auto-split session on time gaps larger than 30 minutes
-                    created_sessions = self.preprocess_and_split_session_on_upload(
-                        session_name=session_name,
-                        project_path=project_path,
-                        project_id=project_id,
-                        bouts_json=bouts_json
-                    )
-
-                    # Only add to all_created_sessions if sessions were actually created
-                    if created_sessions:
-                        all_created_sessions.extend(created_sessions)
-                    
-                    logger.debug(f"Completed processing {session['name']}, created {len(created_sessions)} sessions")
-                        
-                except Exception as e:
-                    logger.error(
-                        f"Error processing session {session['name']}: {e}", 
-                        exc_info=True,
-                        extra={
-                            'session_name': session['name'],
-                            'upload_id': upload_id,
-                            'project_id': project_id
-                        }
-                    )
-                    continue  # Skip this session and continue with others
-            
-            conn.commit()
-            conn.close()
-            
-        except Exception as e:
-            logger.error(f"Critical error in async processing for upload {upload_id}: {e}", exc_info=True)
-            if 'conn' in locals() and conn:
-                try:
-                    conn.close()
-                except:
-                    pass
-
     def load_bouts_from_labels_json(self, project_path, session) -> list:
         labels_json_path = os.path.join(project_path, session['name'], 'labels.json')
         
@@ -235,9 +180,8 @@ class SessionService:
                     parent_bouts = []
 
                 logger.debug(f"Parsed {len(parent_bouts)} bouts for single session {session_name}")
-                segment_bouts = [{'start':segment_bout[0],'end':segment_bout[1],'label':'smoking'} for segment_bout in parent_bouts]
                 
-                return self.session_repo.insert_single_session(session_name, project_id, json.dumps(segment_bouts))
+                return self.session_repo.insert_single_session(session_name, project_id, json.dumps(parent_bouts))
 
             split_points = []
             for idx in gap_indices:
@@ -284,31 +228,35 @@ class SessionService:
                 parent_bouts = []
             # Assign bouts to segments based on time ranges
             segment_bouts = [[] for _ in segments]
+            
             for bout in parent_bouts:
-                if len(bout) != 2:
+                if isinstance(bout, dict):
+                    bout_start = bout.get('start')
+                    bout_end = bout.get('end')
+                    bout_label = bout.get('label', 'smoking')
+                else:
+                    logger.warning(f"Invalid bout format in {bouts_json}: {bout}, expected dict or list")
                     continue
-                    
-                bout_start = bout[0]
-                bout_end = bout[1]
-                
+
                 for i, (segment_start, segment_end) in enumerate(segment_ranges):
                     # If bout is entirely within segment
                     if segment_start <= bout_start <= segment_end and segment_start <= bout_end <= segment_end:
-                        segment_bouts[i].append(bout)
+                        adjusted_bout = {'start': float(bout_start), 'end': float(bout_end), 'label': bout_label}
+                        segment_bouts[i].append(adjusted_bout)
                         break
                     # If bout overlaps with segment start
                     elif bout_start < segment_start and segment_start <= bout_end <= segment_end:
-                        adjusted_bout = [float(segment_start), float(bout_end)]
+                        adjusted_bout = {'start': float(segment_start), 'end': float(bout_end), 'label': bout_label}
                         segment_bouts[i].append(adjusted_bout)
                         break
                     # If bout overlaps with segment end
                     elif segment_start <= bout_start <= segment_end and bout_end > segment_end:
-                        adjusted_bout = [float(bout_start), float(segment_end)]
+                        adjusted_bout = {'start': float(bout_start), 'end': float(segment_end), 'label': bout_label}
                         segment_bouts[i].append(adjusted_bout)
                         break
                     # If bout spans entire segment
                     elif bout_start < segment_start and bout_end > segment_end:
-                        adjusted_bout = [float(segment_start), float(segment_end)]
+                        adjusted_bout = {'start': float(segment_start), 'end': float(segment_end), 'label': bout_label}
                         segment_bouts[i].append(adjusted_bout)
                         break
 
@@ -336,8 +284,6 @@ class SessionService:
                 labels_path = os.path.join(project_path, session_name, 'labels.json')
                 if os.path.exists(labels_path):
                     shutil.copy(labels_path, os.path.join(new_dir, 'labels.json'))
-                
-                segment_bouts[i] = [{'start':segment_bout[0],'end':segment_bout[1],'label':'smoking'} for segment_bout in segment_bouts[i]]
                 
                 # Insert session into database using repository
                 result = self.session_repo.insert_single_session(new_name, project_id, json.dumps(segment_bouts[i]))

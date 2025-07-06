@@ -8,7 +8,6 @@ class ParticipantRepository(BaseRepository):
         """Find participant by their code"""
         query = "SELECT participant_id FROM participants WHERE participant_code = %s"
         participant = self._execute_query(query, (participant_code,), fetch_one=True)
-        print(participant)
         if participant:
             participant['participant_code'] = participant_code
         return participant
