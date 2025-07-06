@@ -11,7 +11,7 @@ def create_app():
     
     # Set up centralized logging for the entire application
     # You can customize this based on environment variables or config
-    log_level = os.getenv('LOG_LEVEL', 'INFO')
+    log_level = os.getenv('LOG_LEVEL', 'DEBUG')
     setup_logging(level=log_level, use_colors=True)
     
     # Get logger for this module
