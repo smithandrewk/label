@@ -35,130 +35,22 @@ class SessionService:
             conn = self.get_db_connection()
             
             all_created_sessions = []
-            skipped_sessions = []
             
             for i, session in enumerate(sessions):
                 try:
                     logger.debug(f"Processing session {i+1}/{len(sessions)}: {session['name']}")
                     
-                    # First, validate the session data
-                    csv_path = os.path.join(new_project_path, session['name'], 'accelerometer_data.csv')
-                    
-                    if not self.validate_session_data(csv_path):
-                        logger.warning(f"Skipping session {session['name']} - no valid data")
-                        skipped_sessions.append(session['name'])
-                        
-                        # Remove the invalid session directory
-                        session_dir = os.path.join(new_project_path, session['name'])
-                        if os.path.exists(session_dir):
-                            shutil.rmtree(session_dir)
-                        
-                        continue  # Skip to next session
-                    
-                    # Look for labels.json first, then fall back to log.csv for bout extraction
-                    bouts_json = '{}'
-                    labels_json_path = os.path.join(new_project_path, session['name'], 'labels.json')
-                    log_csv_path = os.path.join(new_project_path, session['name'], 'log.csv')
-                    
-                    if os.path.exists(labels_json_path):
-                        try:
-                            with open(labels_json_path, 'r') as f:
-                                labels_data = json.load(f)
-                            
-                            # Extract bouts from labels.json
-                            # Expected format: array of objects with "start" and "end" properties
-                            bouts = []
-                            
-                            if isinstance(labels_data, list):
-                                # Direct array of bout objects or bout arrays
-                                bouts = labels_data
-                            elif isinstance(labels_data, dict):
-                                # Check for common keys that might contain bouts
-                                if 'bouts' in labels_data:
-                                    bouts = labels_data['bouts']
-                                elif 'labels' in labels_data:
-                                    bouts = labels_data['labels']
-                                elif 'smoking_bouts' in labels_data:
-                                    bouts = labels_data['smoking_bouts']
-                                else:
-                                    # If no recognized key, try to use the whole dict as bouts
-                                    bouts = labels_data
-                            
-                            # Validate and clean the bouts data
-                            valid_bouts = []
-                            for bout in bouts:
-                                if isinstance(bout, dict) and 'start' in bout and 'end' in bout:
-                                    # Handle object format: {"start": 123, "end": 456}
-                                    start_time = bout['start']
-                                    end_time = bout['end']
-                                    if isinstance(start_time, (int, float)) and isinstance(end_time, (int, float)):
-                                        # Convert to array format [start, end] for consistency with existing code
-                                        bout_array = [start_time, end_time]
-                                        # Add label and confidence if present
-                                        if 'label' in bout:
-                                            bout_array.append(bout['label'])
-                                        if 'confidence' in bout:
-                                            bout_array.append(bout['confidence'])
-                                        valid_bouts.append(bout_array)
-                                elif isinstance(bout, list) and len(bout) >= 2:
-                                    # Handle array format: [start, end] or [start, end, label, confidence]
-                                    if isinstance(bout[0], (int, float)) and isinstance(bout[1], (int, float)):
-                                        valid_bouts.append(bout)
-                            
-                            bouts_json = json.dumps(valid_bouts)
-                            logger.info(f"Loaded {len(valid_bouts)} valid bouts from labels.json for {session['name']}")
-                            
-                        except Exception as e:
-                            logger.error(f"Error processing labels.json file for bouts in session {session['name']}: {e}", exc_info=True)
-                            bouts_json = '[]'
-                    
-                    elif os.path.exists(log_csv_path):
-                        try:
-                            log = pd.read_csv(log_csv_path, skiprows=5)
-                            
-                            if 'message' in log.columns:
-                                log = log.rename(columns={'message': 'Message'})
-                                
-                            # Extract start and stop transitions
-                            start_transitions = log.loc[log['Message'] == 'Updating walking status from false to true'].reset_index(drop=True)['ns_since_reboot'].tolist()
-                            stop_transitions = log.loc[log['Message'] == 'Updating walking status from true to false'].reset_index(drop=True)['ns_since_reboot'].tolist()
-                            
-                            # Handle cases where session starts with "true to false" or ends with "false to true"
-                            bouts = []
-                            
-                            # If we have stop transitions but no start transitions, or first stop comes before first start
-                            if stop_transitions and (not start_transitions or stop_transitions[0] < start_transitions[0]):
-                                # Remove the first stop transition (session started in walking state)
-                                stop_transitions = stop_transitions[1:]
-                            
-                            # If we have start transitions but no stop transitions, or last start comes after last stop
-                            if start_transitions and (not stop_transitions or start_transitions[-1] > (stop_transitions[-1] if stop_transitions else 0)):
-                                # Remove the last start transition (session ended in walking state)
-                                start_transitions = start_transitions[:-1]
-                            
-                            # Now pair up the remaining transitions
-                            min_length = min(len(start_transitions), len(stop_transitions))
-                            for i in range(min_length):
-                                bouts.append([start_transitions[i], stop_transitions[i]])
-                            
-                            bouts_json = json.dumps(bouts)
-                            logger.info(f"Extracted {len(bouts)} valid bouts from log.csv for {session['name']}")
-                            
-                        except Exception as e:
-                            logger.error(f"Error processing log file for bouts in session {session['name']}: {e}", exc_info=True)
-                            bouts_json = '[]'
-                    
-                    # Preprocess data
-                    project_path = new_project_path
+                    # Extract session data
                     session_name = session['name']
+                    project_path = new_project_path
+                    bouts_json = json.dumps(self.load_bouts_from_labels_json(new_project_path, session))
 
                     # Auto-split session on time gaps larger than 30 minutes
                     created_sessions = self.preprocess_and_split_session_on_upload(
                         session_name=session_name,
                         project_path=project_path,
                         project_id=project_id,
-                        bouts_json=bouts_json,
-                        conn=conn
+                        bouts_json=bouts_json
                     )
 
                     # Only add to all_created_sessions if sessions were actually created
@@ -179,8 +71,6 @@ class SessionService:
                     )
                     continue  # Skip this session and continue with others
             
-            logger.info(f"Async processing complete for upload {upload_id}. Created {len(all_created_sessions)} sessions, skipped {len(skipped_sessions)} sessions")
-            
             conn.commit()
             conn.close()
             
@@ -191,6 +81,39 @@ class SessionService:
                     conn.close()
                 except:
                     pass
+
+    def load_bouts_from_labels_json(self, project_path, session) -> list:
+        labels_json_path = os.path.join(project_path, session['name'], 'labels.json')
+        
+        try:
+            with open(labels_json_path, 'r') as f:
+                labels_data = json.load(f)
+            
+            return labels_data
+        except FileNotFoundError:
+            logger.warning(f"labels.json not found for session {session['name']}, using empty bouts")
+            return []
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding JSON from labels.json for session {session['name']}: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error loading labels.json for session {session['name']}: {e}")
+            return []
+        
+    @timeit
+    def validate_sessions(self, sessions, project_path):
+        skipped_sessions = []
+        for session in sessions:
+            csv_path = os.path.join(project_path, session['name'], 'accelerometer_data.csv')
+            if not self.validate_session_data(csv_path):
+                logger.warning(f"Invalid session data for {session['name']}")
+                skipped_sessions.append(session['name'])
+                session_dir = os.path.join(project_path, session['name'])
+                if os.path.exists(session_dir):
+                    shutil.rmtree(session_dir)
+            else:
+                logger.info(f"Session {session['name']} data is valid")
+        return skipped_sessions
     
     @timeit
     def validate_session_data(self, csv_path, min_rows=10):
@@ -247,7 +170,8 @@ class SessionService:
             logger.error(f"Error validating data in {csv_path}: {e}", exc_info=True)
             return False
     
-    def preprocess_and_split_session_on_upload(self, session_name, project_path, project_id, bouts_json, conn, gyro=False):
+    @timeit
+    def preprocess_and_split_session_on_upload(self, session_name, project_path, project_id, bouts_json, gyro=False):
         """
         Automatically split a session based on time gaps during upload.
         
@@ -256,7 +180,6 @@ class SessionService:
             project_path: Path to the project directory
             project_id: Database project ID
             bouts_json: JSON string of bouts data
-            conn: Database connection
         
         Returns:
             List of session names that were created (empty list if session was invalid/skipped)
@@ -314,7 +237,7 @@ class SessionService:
                 logger.debug(f"Parsed {len(parent_bouts)} bouts for single session {session_name}")
                 segment_bouts = [{'start':segment_bout[0],'end':segment_bout[1],'label':'smoking'} for segment_bout in parent_bouts]
                 
-                return self._insert_single_session(session_name, project_id, json.dumps(segment_bouts), conn)
+                return self.session_repo.insert_single_session(session_name, project_id, json.dumps(segment_bouts))
 
             split_points = []
             for idx in gap_indices:
@@ -392,11 +315,10 @@ class SessionService:
 
             # Create new session names and directories
             new_sessions = []
-            cursor = conn.cursor()
             
             for i, segment in enumerate(segments):
                 # Generate unique name
-                new_name = self.generate_unique_session_name_upload(session_name, project_path, conn, project_id)
+                new_name = self.generate_unique_session_name_upload(session_name, project_path, project_id)
                 new_dir = os.path.join(project_path, new_name)
                 
                 # Create directory and save CSV
@@ -417,13 +339,10 @@ class SessionService:
                 
                 segment_bouts[i] = [{'start':segment_bout[0],'end':segment_bout[1],'label':'smoking'} for segment_bout in segment_bouts[i]]
                 
-                # Insert session into database
-                cursor.execute("""
-                    INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (project_id, new_name, 'Initial', None, json.dumps(segment_bouts[i])))
-                
-                new_sessions.append(new_name)
+                # Insert session into database using repository
+                result = self.session_repo.insert_single_session(new_name, project_id, json.dumps(segment_bouts[i]))
+                if result:  # Only add to new_sessions if insertion was successful
+                    new_sessions.append(new_name)
             
             # Remove the original session directory
             original_dir = os.path.join(project_path, session_name)
@@ -447,13 +366,7 @@ class SessionService:
             # Fallback: insert original session
             try:
                 logger.info(f"Attempting fallback: inserting original session '{session_name}' without splitting")
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (project_id, session_name, 'Initial', None, bouts_json))
-                logger.info(f"Successfully inserted fallback session '{session_name}'")
-                return [session_name]
+                return self.session_repo.insert_single_session(session_name, project_id, bouts_json)
             except Exception as fallback_error:
                 logger.error(
                     f"Fallback insertion also failed for session '{session_name}': {str(fallback_error)}", 
@@ -466,32 +379,8 @@ class SessionService:
                     }
                 )
                 return []
-    
-    def _insert_single_session(self, session_name, project_id, bouts_json, conn):
-        """
-        Insert a single session into the database.
-        """
-        try:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (project_id, session_name, 'Initial', None, bouts_json))
-            cursor.close()
-            logger.debug(f"Successfully inserted single session '{session_name}' for project {project_id}")
-            return [session_name]
-        except Exception as e:
-            logger.error(
-                f"Error inserting session {session_name}: {e}", 
-                exc_info=True,
-                extra={
-                    'session_name': session_name,
-                    'project_id': project_id
-                }
-            )
-            return []
 
-    def generate_unique_session_name_upload(self, original_name, project_path, conn, project_id):
+    def generate_unique_session_name_upload(self, original_name, project_path, project_id):
         """Generate a unique session name by adding numeric suffixes (for upload process)"""
         base_counter = 1
         while True:
@@ -502,14 +391,8 @@ class SessionService:
                 base_counter += 1
                 continue
                 
-            # Check database for collision
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT COUNT(*) FROM sessions 
-                WHERE session_name = %s AND project_id = %s
-            """, (candidate_name, project_id))
-            count = cursor.fetchone()[0]
-            cursor.close()
+            # Check database for collision using repository
+            count = self.session_repo.count_sessions_by_name_and_project(candidate_name, project_id)
             
             if count == 0:
                 return candidate_name
