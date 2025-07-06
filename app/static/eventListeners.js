@@ -92,28 +92,21 @@ export function addEventListeners() {
             bulkUploadButton.style.background = 'rgba(0, 0, 0, 0)';
         });
     }
-    // Add this to your script.js file
+
     document.addEventListener('DOMContentLoaded', function() {
-        // Get the form element
         const createProjectForm = document.getElementById('create-project-form');
-        
-        // Add submit event listener
         createProjectForm.addEventListener('submit', function(event) {
-            // Prevent the default form submission
             event.preventDefault();
             
-            // Get form values
             const projectName = document.getElementById('project-name').value;
             const participantCode = document.getElementById('project-participant').value;
             const projectPathInput = document.getElementById('project-path');
             
-            // Extract the folder path from the file input
             if (projectPathInput.files.length === 0) {
                 alert('Please select a project folder');
                 return;
             }
             
-            // Get the parent directory path from the first file
             const firstFile = projectPathInput.files[0];
             const relativePath = firstFile.webkitRelativePath;
             const folderName = relativePath.split('/')[0];

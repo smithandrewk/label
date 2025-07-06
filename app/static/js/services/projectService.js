@@ -267,6 +267,39 @@ export class ProjectService {
             throw error;
         }
     }
+
+    /**
+     * Create a new project with file upload
+     * @param {Object} formData - The form data containing name, participant, folderName, and files
+     * @returns {Promise<Object>} The upload result
+     */
+    static async createProject(formData) {
+        try {
+            // Create a FormData object to handle file uploads
+            const uploadData = new FormData();
+            uploadData.append('name', formData.name);
+            uploadData.append('participant', formData.participant);
+            uploadData.append('folderName', formData.folderName);
+            
+            // Add all files to the FormData
+            formData.files.forEach((file) => {
+                uploadData.append('files', file);
+            });
+            
+            // Call the API to upload the project
+            const result = await ProjectAPI.createProject(uploadData);
+            
+            // Log business-relevant information
+            console.log('Upload started:', result);
+            console.log('Upload ID:', result.upload_id);
+            console.log('Sessions found:', result.sessions_found);
+            
+            return result;
+        } catch (error) {
+            console.error('Error in ProjectService.createProject:', error);
+            throw error;
+        }
+    }
 }
 
 export default ProjectService;

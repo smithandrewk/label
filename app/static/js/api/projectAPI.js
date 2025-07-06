@@ -196,6 +196,32 @@ export class ProjectAPI {
         }
     }
 
+    /**
+     * Create a new project with file upload
+     * @param {FormData} uploadData - The FormData object ready for upload
+     * @returns {Promise<Object>} The upload result
+     */
+    static async createProject(uploadData) {
+        try {
+            // Use fetch API to send data to the backend
+            const response = await fetch('/api/project/upload', {
+                method: 'POST',
+                body: uploadData  // Don't set Content-Type header, let browser set it for FormData
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to create project');
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('Error in ProjectAPI.createProject:', error);
+            throw error;
+        }
+    }
+
 }
 
 export default ProjectAPI;

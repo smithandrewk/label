@@ -9,7 +9,9 @@ import {
     showTableView, 
     showNotification,
     showBulkUploadForm,
-    displayBulkPreview
+    displayBulkPreview,
+    hideModal,
+    resetForm
 } from './js/ui/uiUtils.js';
 import SessionAPI from './js/api/sessionAPI.js';
 import SessionService from './js/services/sessionService.js';
@@ -365,77 +367,29 @@ async function pollScoringStatus(scoringId, sessionId, sessionName) {
     }, 1000); // Poll every second
 }
 
-
-
-// Function to handle API call
-function createNewProject(formData) {
-    // Create a FormData object to handle file uploads
-    const uploadData = new FormData();
-    uploadData.append('name', formData.name);
-    uploadData.append('participant', formData.participant);
-    uploadData.append('folderName', formData.folderName);
-    
-    // Add all files to the FormData
-    formData.files.forEach((file, index) => {
-        uploadData.append('files', file);
-    });
-    
-    // Use fetch API to send data to your backend
-    fetch('/api/project/upload', {
-        method: 'POST',
-        body: uploadData  // Don't set Content-Type header, let browser set it for FormData
-    })
-    .then(response => response.json())
-    .then(data => {
-        // Handle successful response
-        console.log('Upload started:', data);
-        console.log('Upload ID:', data.upload_id);
-        console.log('Sessions found:', data.sessions_found);
+async function createNewProject(formData) {
+    try {
+        const result = await ProjectService.createProject(formData);
         
-        // Close the modal
-        const modalElement = document.getElementById('createProjectModal');
-        if (modalElement) {
-            const modal = bootstrap.Modal.getInstance(modalElement);
-            if (modal) {
-                modal.hide();
-            }
+        // Show success notification
+        showNotification(`Project "${formData.name}" created successfully! Found ${result.sessions_found} sessions.`, 'success');
+        
+        // Hide modal and reset form
+        hideModal('createProjectModal');
+        resetForm('create-project-form');
+        
+        // Refresh projects list if we're on the projects page
+        if (typeof initializeProjects === 'function') {
+            setTimeout(() => {
+                initializeProjects();
+            }, 1000);
         }
         
-        // Reset the form
-        const form = document.getElementById('create-project-form');
-        if (form) {
-            form.reset();
-        }
-        
-        // Refresh the project list
-        initializeProjects().then(() => {
-            // Navigate to the new project
-            currentProjectId = data.project_id;
-            console.log('Navigating to project:', data.project_id);
-            
-            // Update current project pill with the created project name
-            updateCurrentProjectPill(formData.name);
-            
-            // Update active state in dropdown
-            document.querySelectorAll('#project-dropdown-menu .dropdown-item').forEach(item => {
-                item.classList.remove('active');
-                item.removeAttribute('aria-current');
-                if (item.dataset.projectId == data.project_id) {
-                    item.classList.add('active');
-                    item.setAttribute('aria-current', 'page');
-                }
-            });
-        });
-    })
-    .catch(error => {
-        // Handle errors
-        console.error('Error:', error);
-        alert('Failed to create project. Please try again.');
-    });
+    } catch (error) {
+        console.error('Error creating project:', error);
+        showNotification(`Failed to create project: ${error.message}`, 'error');
+    }
 }
-
-
-
 
 // Show visualization view
 async function visualizeSession(sessionId) {
