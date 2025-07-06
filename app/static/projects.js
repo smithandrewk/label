@@ -47,7 +47,7 @@ function renderProjects(projects) {
         row.innerHTML = `
             <td>
                 <strong class="project-name" data-project-id="${project.project_id}" 
-                        onclick="onClickProject('${project.project_name}'); return false;" 
+                        onclick="onClickProject('${project.project_name.replace(/'/g, '&apos;').replace(/"/g, '&quot;')}'); return false;" 
                         style="cursor: pointer;">
                     ${project.project_name}
                 </strong>
@@ -59,13 +59,13 @@ function renderProjects(projects) {
                         <i class="bi bi-three-dots-vertical"></i>
                     </button>
                     <ul class="dropdown-menu">
-                        <li><a class="dropdown-item" href="#" onclick="showRenameModal(${project.project_id}, '${project.project_name}'); return false;">
+                        <li><a class="dropdown-item" href="#" onclick="showRenameModal(${project.project_id}, '${project.project_name.replace(/'/g, '&apos;').replace(/"/g, '&quot;')}'); return false;">
                             <i class="bi bi-pencil me-2"></i>Rename
                         </a></li>
-                        <li><a class="dropdown-item" href="#" onclick="showChangeParticipantModal(${project.project_id}, '${project.project_name}', '${project.participant_code}'); return false;">
+                        <li><a class="dropdown-item" href="#" onclick="showChangeParticipantModal(${project.project_id}, '${project.project_name.replace(/'/g, '&apos;').replace(/"/g, '&quot;')}', '${project.participant_code.replace(/'/g, '&apos;').replace(/"/g, '&quot;')}'); return false;">
                             <i class="bi bi-person me-2"></i>Change Participant
                         </a></li>
-                        <li><a class="dropdown-item" href="#" onclick="deleteProject(${project.project_id}, '${project.project_name}'); return false;">
+                        <li><a class="dropdown-item" href="#" onclick="deleteProject(${project.project_id}, '${project.project_name.replace(/'/g, '&apos;').replace(/"/g, '&quot;')}'); return false;">
                             <i class="bi bi-trash me-2"></i>Delete
                         </a></li>
                     </ul>

@@ -81,8 +81,8 @@ class ParticipantRepository(BaseRepository):
                 pt.notes,
                 pt.created_at,
                 COUNT(DISTINCT p.project_id) as project_count,
-                GROUP_CONCAT(DISTINCT p.project_name SEPARATOR ', ') as project_names,
-                GROUP_CONCAT(DISTINCT p.project_id SEPARATOR ',') as project_ids,
+                GROUP_CONCAT(DISTINCT p.project_name ORDER BY p.project_id SEPARATOR ', ') as project_names,
+                GROUP_CONCAT(DISTINCT p.project_id ORDER BY p.project_id SEPARATOR ',') as project_ids,
                 SUM(CASE WHEN s.keep != 0 OR s.keep IS NULL THEN 1 ELSE 0 END) as total_sessions
             FROM participants pt
             LEFT JOIN projects p ON pt.participant_id = p.participant_id
