@@ -377,3 +377,33 @@ class ProjectService:
             'new_participant_id': new_participant_id,
             'participant_cleaned_up': old_participant_id != new_participant_id
         }
+
+    def group_files_by_project_directories(self, uploaded_files):
+        """
+        Group uploaded files by project directories for bulk upload.
+        
+        Args:
+            uploaded_files: List of FileStorage objects from Flask request
+            
+        Returns:
+            dict: Dictionary where keys are project names and values are lists of files
+        """
+        project_groups = {}
+        
+        for file in uploaded_files:
+            # Use filename which contains the relative path from directory upload
+            relative_path = file.filename
+            if relative_path:
+                path_parts = relative_path.split('/')
+                if len(path_parts) >= 2:
+                    # First level is the main folder, second level is project folder
+                    project_name = path_parts[1]
+                    if project_name not in project_groups:
+                        project_groups[project_name] = []
+                    project_groups[project_name].append(file)
+        
+        logger.info(f"Grouped {len(uploaded_files)} files into {len(project_groups)} project directories")
+        for project_name, files in project_groups.items():
+            logger.debug(f"  Project '{project_name}': {len(files)} files")
+            
+        return project_groups

@@ -356,6 +356,7 @@ class ProjectController:
 
             # First, ensure a "Bulk Upload" participant exists
             bulk_participant_code = "BULK_UPLOAD"
+
             try:
                 bulk_participant = self.project_service.get_participant_by_code(bulk_participant_code)
                 if not bulk_participant:
@@ -373,19 +374,8 @@ class ProjectController:
                 logger.error(f"Error handling bulk upload participant: {e}")
                 return jsonify({'error': f'Failed to create bulk upload participant: {str(e)}'}), 500
 
-            # Group files by project directories
-            project_groups = {}
-            for file in uploaded_files:
-                # Use filename which contains the relative path from directory upload
-                relative_path = file.filename
-                if relative_path:
-                    path_parts = relative_path.split('/')
-                    if len(path_parts) >= 2:
-                        # First level is the main folder, second level is project folder
-                        project_name = path_parts[1]
-                        if project_name not in project_groups:
-                            project_groups[project_name] = []
-                        project_groups[project_name].append(file)
+            # Group files by project directories using service layer
+            project_groups = self.project_service.group_files_by_project_directories(uploaded_files)
 
             if not project_groups:
                 return jsonify({'error': 'No valid project directories found'}), 400
