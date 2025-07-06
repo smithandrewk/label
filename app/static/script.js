@@ -1977,29 +1977,6 @@ async function deleteLabeling(labelingName) {
         alert('Failed to delete labeling: ' + error.message);
     }
 }
-// Global drag context
-const dragContext = {
-    currentSession: null  // Will store the session being modified
-};
-// Add at the top of your file
-const activeHandlers = [];
-
-// Create global reference to these handlers so we can remove them
-let sessions = [];
-// Add this variable to track the current project
-let currentLabelingName = 'No Labeling';
-let currentLabelingJSON = null;
-let labelingsList = null; // Add this global variable
-
-let labelings = null;
-let currentProjectId = null;
-let currentSessionId = null;
-let currentActiveSession = null;
-let isSplitting = false;
-let activeUploadId = null; // Track active upload
-let splitPoints = [];
-let minTimestamp = null;
-let maxTimestamp = null;
 
 // Make functions available globally for inline event handlers
 window.visualizeSession = visualizeSession;
