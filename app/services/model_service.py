@@ -113,7 +113,7 @@ class ModelService:
             print(f"Generated {len(smoking_bouts)} bouts with label: {label}")
 
             bouts = self.session_repo.get_bouts_by_session(session_id)
-            json_bouts = json.loads(bouts['bouts']) if bouts and bouts['bouts'] else []
+            json_bouts = json.loads(bouts) if bouts else []
             print(json_bouts + smoking_bouts)
 
             self.session_repo.set_bouts_by_session(session_id, json.dumps(json_bouts + smoking_bouts))
