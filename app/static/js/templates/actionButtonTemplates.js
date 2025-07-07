@@ -33,6 +33,19 @@ currentLabeling: (labelingName, labelingColor) => `
         </span>
     `,
 
+    /** 
+     * Delete Bouts button with confirmation template
+    */
+    deleteBoutButton: () =>`
+    <div style="position: relative; display: inline-block; width: 32px; height: 32px;">
+            <span id="cancel-delete-btn-overlay" style="position: absolute; right: 100%; display: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; margin-right: 4px; cursor: pointer;">
+                <i id="cancel-delete-btn" class="fa-solid fa-xmark" style="font-size:20px;"></i>
+            </span>
+            <span id="delete-btn-overlay" style="display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; background:rgba(224,224,224,0); cursor:pointer;">
+                <i id="delete-btn" class="fa-solid fa-bomb"></i>
+            </span>
+        </div>
+    `,
     /**
      * Trash/Delete button with confirmation template
      */
@@ -68,6 +81,7 @@ currentLabeling: (labelingName, labelingColor) => `
             ActionButtonTemplates.currentLabeling(labelingName, labelingColor),
             ActionButtonTemplates.scoreButton(),
             ActionButtonTemplates.splitButton(isSplitting),
+            ActionButtonTemplates.deleteBoutButton(),
             ActionButtonTemplates.deleteButton(),
             ActionButtonTemplates.verifiedButton(isVerified)
         ].join('');
@@ -81,16 +95,20 @@ export const ActionButtonHandlers = {
     /**
      * Setup event listeners for visualization action buttons
      * @param {Object} options - Configuration options
+     * @param {Function} options.onDeleteBouts - Delete Bouts callback function
      * @param {Function} options.onDelete - Delete callback function
      * @param {Function} options.onVerify - Verify callback function
      * @param {Function} options.onSplit - Split toggle callback function
      * @param {Function} options.onScore - Score callback function
      * @param {boolean} options.isSplitting - Current splitting state
      */
-    setupVisualizationButtons: ({ onDelete, onVerify, onSplit, onScore, onLabeling, isSplitting = false } = {}) => {
+    setupVisualizationButtons: ({ onDeleteBouts, onDelete, onVerify, onSplit, onScore, onLabeling, isSplitting = false } = {}) => {
+        // Setup delete bout button with confirmation
+        ActionButtonHandlers.setupDeleteBoutButton(onDeleteBouts);
+
         // Setup delete button with confirmation
         ActionButtonHandlers.setupDeleteButton(onDelete);
-        
+
         // Setup verified button
         ActionButtonHandlers.setupVerifiedButton(onVerify);
         
@@ -104,6 +122,71 @@ export const ActionButtonHandlers = {
         ActionButtonHandlers.setupCurrentLabelingButton(onLabeling);
     },
 
+    /**
+     * Setup delete bouts button with confirmation behavior
+     * @param {Function} onDeleteBouts - Delete bouts callback function
+     */
+    setupDeleteBoutButton: (onDeleteBouts) => {
+
+        const delete_btn_overlay = document.getElementById('delete-btn-overlay');
+        const delete_btn = document.getElementById('delete-btn');
+        const cancel_delete_btn_overlay = document.getElementById('cancel-delete-btn-overlay');
+
+        if (!delete_btn_overlay || !delete_btn || !cancel_delete_btn_overlay) return;
+
+        delete_btn_overlay.dataset.armed = "false";
+
+        delete_btn_overlay.addEventListener('mouseenter', () => {
+            delete_btn_overlay.style.background = 'rgba(0, 0, 0, 0.1)';
+        });
+        delete_btn_overlay.addEventListener('mouseleave', () => {
+            delete_btn_overlay.style.background ='rgba(224, 224, 224, 0)';
+        });
+
+        // Click handling with confirmation
+        delete_btn_overlay.addEventListener('click', () => {
+            const isArmed = delete_btn_overlay.dataset.armed === "true";
+            if (!isArmed) {
+                // Arm the delete button
+                delete_btn_overlay.dataset.armed = "true";
+                delete_btn.style.color = '#dc3545'; // Bootstrap red
+                cancel_delete_btn_overlay.style.display = 'inline-flex';
+            } else {
+                
+                // Execute delete
+                if (onDeleteBouts) onDeleteBouts();
+                // Reset state
+                ActionButtonHandlers.resetDeleteBoutButton();
+            }
+        });
+
+        // Cancel button for delete btn handling with stopPropagation
+        cancel_delete_btn_overlay.addEventListener('click', (e) => {
+            // Cancel delete and prevent event from bubbling to parent
+            e.stopPropagation();
+            ActionButtonHandlers.resetDeleteBoutButton();
+        });
+        cancel_delete_btn_overlay.addEventListener('mouseenter', () => {
+            cancel_delete_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+        });
+        cancel_delete_btn_overlay.addEventListener('mouseleave', () => {
+            cancel_delete_btn_overlay.style.background = 'rgba(224,224,224,0)';
+        });
+    },
+
+    /**
+     * Reset delete button to unarmed state
+     */
+    resetDeleteBoutButton: () => {
+        const delete_btn_overlay = document.getElementById('delete-btn-overlay');
+        const delete_btn = document.getElementById('delete-btn');
+        const cancel_delete_btn_overlay = document.getElementById('cancel-delete-btn-overlay');
+
+        if (delete_btn_overlay) delete_btn_overlay.dataset.armed = "false";
+        if (delete_btn) delete_btn.style.color = '';
+        if (cancel_delete_btn_overlay) cancel_delete_btn_overlay.style.display = 'none';
+    },
+        
     /**
      * Setup delete button with confirmation behavior
      * @param {Function} onDelete - Delete callback function
