@@ -492,6 +492,7 @@ async function visualizeSession(sessionId) {
 
     // Setup event listeners using the template handlers
     ActionButtonHandlers.setupVisualizationButtons({
+        onDeleteBouts: () => deleteAllBouts(),
         onDelete: () => decideSession(currentSessionId, false),
         onVerify: () => toggleVerifiedStatus(),
         onSplit: () => toggleSplitMode(),
@@ -1223,6 +1224,34 @@ async function toggleVerifiedStatus() {
 
 function getCurrentSession() {
     return SessionService.findSessionById(sessions, currentSessionId);
+}
+
+ function deleteAllBouts(currentSessionId) {
+        if (dragContext.currentSession && dragContext.currentSession.bouts) {
+            // Get current zoom level before removing bout
+            const plotDiv = document.getElementById('timeSeriesPlot');
+            let viewState = null;
+            if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
+                viewState = {
+                    xrange: plotDiv._fullLayout.xaxis.range.slice(),
+                    yrange: plotDiv._fullLayout.yaxis.range.slice()
+                };
+            }
+            
+            dragContext.currentSession.bouts.splice(0);
+            console.log("Removed all bouts");
+            SessionAPI.updateSessionMetadata(dragContext.currentSession);
+            
+            // Refresh the plot and restore zoom level
+            visualizeSession(currentSessionId).then(() => {
+                if (viewState && plotDiv) {
+                    Plotly.relayout(plotDiv, {
+                        'xaxis.range': viewState.xrange,
+                        'yaxis.range': viewState.yrange
+                    });
+                }
+            });
+        }
 }
 
 async function decideSession(sessionId, keep) {
