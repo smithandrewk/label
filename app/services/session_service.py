@@ -116,7 +116,7 @@ class SessionService:
             return False
     
     @timeit
-    def preprocess_and_split_session_on_upload(self, session_name, project_path, project_id, bouts_json, gyro=False):
+    def preprocess_and_split_session_on_upload(self, session_name, project_path, project_id, parent_bouts, gyro=False):
         """
         Automatically split a session based on time gaps during upload.
         
@@ -171,15 +171,7 @@ class SessionService:
                 if gyro:
                     df[['ns_since_reboot', 'gyro_x', 'gyro_y', 'gyro_z']].to_csv(gyro_csv_path, index=False)
                 logger.debug(f"Resampled data for session {session_name}")
-                # Parse bouts data
-                try:
-                    parent_bouts = json.loads(bouts_json or '[]')
-                    if isinstance(parent_bouts, str):
-                        parent_bouts = json.loads(parent_bouts)
-                except json.JSONDecodeError:
-                    parent_bouts = []
-
-                logger.debug(f"Parsed {len(parent_bouts)} bouts for single session {session_name}")
+                logger.debug(f"Parsed {len(parent_bouts)} parent_bouts for single session {session_name}")
                 
                 return self.session_repo.insert_single_session(session_name, project_id, json.dumps(parent_bouts))
 
@@ -219,13 +211,6 @@ class SessionService:
                 end_time = segment['ns_since_reboot'].max()
                 segment_ranges.append((start_time, end_time))
             
-            # Parse bouts data
-            try:
-                parent_bouts = json.loads(bouts_json or '[]')
-                if isinstance(parent_bouts, str):
-                    parent_bouts = json.loads(parent_bouts)
-            except json.JSONDecodeError:
-                parent_bouts = []
             # Assign bouts to segments based on time ranges
             segment_bouts = [[] for _ in segments]
             
@@ -235,7 +220,7 @@ class SessionService:
                     bout_end = bout.get('end')
                     bout_label = bout.get('label', 'smoking')
                 else:
-                    logger.warning(f"Invalid bout format in {bouts_json}: {bout}, expected dict or list")
+                    logger.warning(f"Invalid bout format in {parent_bouts}: {bout}, expected dict or list")
                     continue
 
                 for i, (segment_start, segment_end) in enumerate(segment_ranges):
@@ -312,7 +297,7 @@ class SessionService:
             # Fallback: insert original session
             try:
                 logger.info(f"Attempting fallback: inserting original session '{session_name}' without splitting")
-                return self.session_repo.insert_single_session(session_name, project_id, bouts_json)
+                return self.session_repo.insert_single_session(session_name, project_id, json.dumps(parent_bouts, indent=2))
             except Exception as fallback_error:
                 logger.error(
                     f"Fallback insertion also failed for session '{session_name}': {str(fallback_error)}", 

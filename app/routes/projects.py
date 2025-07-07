@@ -59,7 +59,7 @@ class ProjectController:
 
             sessions = self.project_service.discover_project_sessions(new_project_path)
             logger.info(f"Discovered {len(sessions)} sessions in project {project_name} at {new_project_path}")
-
+            print(sessions)
             upload_id = str(uuid.uuid4())
             logger.info(f"Generated upload ID: {upload_id}")
             
@@ -69,12 +69,14 @@ class ProjectController:
             for session in sessions:
                 logger.info(f"Processing session: {session['name']}")
                 bouts = self.session_service.load_bouts_from_labels_json(new_project_path, session)
-                bouts_json = json.dumps(bouts, indent=2)
+                for bout in bouts:
+                    if 'label' not in bout:
+                        bout['label'] = 'smoking'
                 created_sessions = self.session_service.preprocess_and_split_session_on_upload(
                     session_name=session['name'],
                     project_path=new_project_path,
                     project_id=project_id,
-                    bouts_json=bouts_json
+                    parent_bouts=bouts
                 )
 
             return jsonify({
