@@ -18,7 +18,6 @@ import SessionService from './js/services/sessionService.js';
 import { ActionButtonTemplates, ActionButtonHandlers } from './js/templates/actionButtonTemplates.js';
 import { SessionListTemplates, SessionListHandlers } from './js/templates/sessionListTemplates.js';
 
-// Fetch sessions for a specific project
 async function fetchProjectSessions(projectId) {
     try {
         const projectData = await ProjectService.fetchProjectSessionsAndLabelings(projectId);
@@ -36,7 +35,6 @@ async function fetchProjectSessions(projectId) {
     }
 }
 
-// Fetch all sessions or sessions for a specific project
 async function fetchSession(projectId) {
     try {
         sessions = await ProjectService.fetchSessions(projectId);
@@ -53,7 +51,7 @@ async function fetchSession(projectId) {
         console.error('Error fetching sessions:', error);
     }
 }
-// Check URL parameters on page load
+
 function checkUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const participantCode = urlParams.get('participant');
@@ -257,30 +255,15 @@ async function scoreSession(sessionId, projectName, sessionName) {
     try {
         console.log(`Scoring session: ${sessionId} (${sessionName} from project ${projectName})`);
         
-        // Update button to show loading state
         const scoreBtn = document.getElementById(`score-btn-overlay`);
         if (scoreBtn) {
             scoreBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
         }
         
-        const response = await fetch('/score_session', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-                session_id: sessionId,
-                project_name: projectName,
-                session_name: sessionName
-            })
-        });
-        
-        const result = await response.json();
+        const result = SessionAPI.scoreSession(sessionId,projectName,sessionName);
         
         if (result.success) {
             showNotification(`Scoring started for ${sessionName}`, 'success');
-            
-            // Start polling for completion
             pollScoringStatus(result.scoring_id, sessionId, sessionName);
         } else {
             showNotification(`Scoring failed: ${result.error}`, 'error');
@@ -643,8 +626,6 @@ if (labelingModal) {
         // Fetch and display labelings when the modal is opened
         fetchAndDisplayLabelings(currentProjectId);
     });
-} else {
-    console.error('Labeling modal not found');
 }
 
 async function createNewLabeling() {

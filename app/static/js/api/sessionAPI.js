@@ -86,6 +86,27 @@ export class SessionAPI {
             console.error('Error updating metadata:', error);
         }
     }
+
+    static async scoreSession(session_id, project_name, session_name) {
+        try {
+            const response = await fetch('/score_session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    session_id: session_id,
+                    project_name: project_name,
+                    session_name: session_name
+                })
+            });
+            if (!response.ok) throw new Error('Failed to score session');
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            console.error('Error scoring session', error)
+        }
+    }
 }
 
 export default SessionAPI;
