@@ -43,10 +43,15 @@ test:
 .PHONY: backup
 backup:
 	@mkdir -p ./backups
-	@echo "Creating backup of $(DB_NAME)..."
-	@BACKUP_FILE="./backups/$(DB_NAME)_$(shell date +%Y%m%d_%H%M%S).sql" && \
-	mysqldump -u$(DB_USER) -p$(DB_PASSWORD) -h$(DB_HOST) -P $(DB_PORT) $(DB_NAME) > $$BACKUP_FILE && \
-	echo "Database backed up to $$BACKUP_FILE"
+	@echo "Checking if database $(DB_NAME) exists..."
+	@if $(MYSQL) -e "USE $(DB_NAME);" 2>/dev/null; then \
+		echo "Creating backup of $(DB_NAME)..."; \
+		BACKUP_FILE="./backups/$(DB_NAME)_$(shell date +%Y%m%d_%H%M%S).sql" && \
+		mysqldump -u$(DB_USER) -p$(DB_PASSWORD) -h$(DB_HOST) -P $(DB_PORT) $(DB_NAME) > $$BACKUP_FILE && \
+		echo "Database backed up to $$BACKUP_FILE"; \
+	else \
+		echo "Database $(DB_NAME) does not exist. Skipping backup."; \
+	fi
 
 # List and restore from available backups (with automatic backup first)
 .PHONY: restore-backup
