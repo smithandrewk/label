@@ -30,6 +30,8 @@ CREATE TABLE sessions (
     is_visible TINYINT(1) NOT NULL DEFAULT 1,
     bouts JSON,
     verified TINYINT(1) DEFAULT 0,
+    start_ns BIGINT NOT NULL,
+    stop_ns BIGINT NOT NULL,
     UNIQUE (project_id, session_name),
     FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE
 );
