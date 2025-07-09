@@ -348,24 +348,74 @@ export const ActionButtonHandlers = {
     /**
      * Load available models and populate the list
      */
-    loadAvailableModels: () => {
-        const modelsList = document.getElementById('available-models-list');
-        if (!modelsList) return;
-        
-        // for now just show placeholder content and log to console
-        console.log('loading available models from database/api');
-        
-        // simulate loading
-        setTimeout(() => {
+    loadAvailableModels: async () => {
+            const modelsList = document.getElementById('available-models-list');
+            if (!modelsList) return;
+            
+            // show loading state
             modelsList.innerHTML = `
-                <div class="text-center text-muted py-3">
-                    <i class="fa-solid fa-robot fa-2x mb-2 d-block"></i>
-                    <p class="mb-0">no models configured yet</p>
-                    <small>use the add model button to create your first model</small>
+                <div class="text-center text-muted">
+                    <i class="fa-solid fa-spinner fa-spin me-2"></i>
+                    loading models...
                 </div>
             `;
-        }, 500);
-    },
+            
+            try {
+                // import ModelAPI dynamically to avoid circular dependencies
+                const { default: ModelAPI } = await import('../api/modelAPI.js');
+                const models = await ModelAPI.fetchModels();
+                
+                if (models && models.length > 0) {
+                    // render models list
+                    let modelsHtml = '';
+                    models.forEach(model => {
+                        modelsHtml += `
+                            <div class="model-item d-flex justify-content-between align-items-start p-3 border rounded mb-2" data-model-id="${model.id}">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">${model.name}</h6>
+                                    <p class="text-muted small mb-1">${model.description || 'no description'}</p>
+                                    <div class="d-flex gap-3 text-muted" style="font-size: 11px;">
+                                        <span><i class="fa-solid fa-file-code me-1"></i>${model.py_filename}</span>
+                                        <span><i class="fa-solid fa-brain me-1"></i>${model.pt_filename}</span>
+                                        <span><i class="fa-solid fa-cube me-1"></i>${model.class_name}</span>
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="selectModelForScoring('${model.id}', '${model.name}')" title="use this model">
+                                        <i class="fa-solid fa-rocket"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="editModel('${model.id}')" title="edit model">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteModel('${model.id}', '${model.name}')" title="delete model">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    modelsList.innerHTML = modelsHtml;
+                } else {
+                    // no models available
+                    modelsList.innerHTML = `
+                        <div class="text-center text-muted py-3">
+                            <i class="fa-solid fa-robot fa-2x mb-2 d-block"></i>
+                            <p class="mb-0">no models configured yet</p>
+                            <small>use the add model button to create your first model</small>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('error loading models:', error);
+                modelsList.innerHTML = `
+                    <div class="text-center text-danger py-3">
+                        <i class="fa-solid fa-exclamation-triangle fa-2x mb-2 d-block"></i>
+                        <p class="mb-0">failed to load models</p>
+                        <small>${error.message}</small>
+                    </div>
+                `;
+            }
+        },
 
     /**
      * Setup current labeling button to open modal
@@ -417,38 +467,162 @@ export const ActionButtonHandlers = {
 window.showAddModelForm = function() {
     console.log('showing add model form');
     const form = document.getElementById('add-model-form');
+    const errorMsg = document.getElementById('model-error-message');
     if (form) {
         form.style.display = 'block';
+    }
+    if (errorMsg) {
+        errorMsg.style.display = 'none';
     }
 };
 
 window.hideAddModelForm = function() {
     console.log('hiding add model form');
     const form = document.getElementById('add-model-form');
+    const errorMsg = document.getElementById('model-error-message');
     if (form) {
         form.style.display = 'none';
         // reset form
         document.getElementById('new-model-form').reset();
     }
+    if (errorMsg) {
+        errorMsg.style.display = 'none';
+    }
 };
 
-window.handleAddModel = function(event) {
+window.handleAddModel = async function(event) {
     event.preventDefault();
     
-    const formData = {
-        name: document.getElementById('model-name').value,
-        description: document.getElementById('model-description').value,
-        pyFilename: document.getElementById('py-filename').value,
-        ptFilename: document.getElementById('pt-filename').value,
-        className: document.getElementById('model-class-name').value
-    };
+    const errorMsg = document.getElementById('model-error-message');
     
-    console.log('adding new model:', formData);
+    try {
+        const formData = {
+            name: document.getElementById('model-name').value.trim(),
+            description: document.getElementById('model-description').value.trim(),
+            py_filename: document.getElementById('py-filename').value.trim(),
+            pt_filename: document.getElementById('pt-filename').value.trim(),
+            class_name: document.getElementById('model-class-name').value.trim()
+        };
+        
+        console.log('adding new model:', formData);
+        
+        // validate required fields
+        if (!formData.name || !formData.py_filename || !formData.pt_filename || !formData.class_name) {
+            throw new Error('please fill in all required fields');
+        }
+        
+        // import ModelAPI and add model
+        const { default: ModelAPI } = await import('../api/modelAPI.js');
+        const result = await ModelAPI.addModel(formData);
+        
+        console.log('model added successfully:', result);
+        
+        // hide form and refresh models list
+        window.hideAddModelForm();
+        ActionButtonHandlers.loadAvailableModels();
+        
+        // show success message
+        alert('model added successfully');
+        
+    } catch (error) {
+        console.error('error adding model:', error);
+        if (errorMsg) {
+            errorMsg.textContent = error.message;
+            errorMsg.style.display = 'block';
+        }
+    }
+};
+
+window.selectModelForScoring = function(modelId, modelName) {
+    console.log('selected model for scoring:', { modelId, modelName });
     
-    // for now just log and hide form
-    // later this will call api to save model
-    alert('model would be saved (placeholder functionality)');
-    window.hideAddModelForm();
+    // get current session info from global variables
+    if (!window.currentSessionId) {
+        alert('no session selected');
+        return;
+    }
+    
+    // confirm scoring
+    const confirmed = confirm(`score current session using model: ${modelName}?`);
+    if (!confirmed) return;
+    
+    // close modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('modelSelectionModal'));
+    if (modal) modal.hide();
+    
+    // start scoring with selected model
+    window.scoreSessionWithModel(window.currentSessionId, modelId, modelName);
+};
+
+window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
+    try {
+        console.log('scoring session with specific model:', { sessionId, modelId, modelName });
+        
+        // get session details
+        const session = window.sessions?.find(s => s.session_id == sessionId);
+        if (!session) {
+            throw new Error('session not found');
+        }
+        
+        // update score button to show loading
+        const scoreBtn = document.getElementById('score-btn-overlay');
+        if (scoreBtn) {
+            scoreBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        }
+        
+        // import ModelAPI and start scoring
+        const { default: ModelAPI } = await import('../api/modelAPI.js');
+        const result = await ModelAPI.scoreSession(sessionId, modelId, session.project_name, session.session_name);
+        
+        if (result.success) {
+            console.log('scoring started successfully:', result);
+            
+            // start polling for results (reuse existing polling function)
+            if (typeof window.pollScoringStatus === 'function') {
+                window.pollScoringStatus(result.scoring_id, sessionId, session.session_name);
+            }
+        } else {
+            throw new Error(result.error || 'scoring failed to start');
+        }
+        
+    } catch (error) {
+        console.error('error scoring session with model:', error);
+        alert('failed to start scoring: ' + error.message);
+        
+        // reset score button
+        const scoreBtn = document.getElementById('score-btn-overlay');
+        if (scoreBtn) {
+            scoreBtn.innerHTML = '<i class="fa-solid fa-rocket"></i>';
+        }
+    }
+};
+
+window.editModel = function(modelId) {
+    console.log('editing model:', modelId);
+    alert('edit model functionality coming soon');
+};
+
+window.deleteModel = async function(modelId, modelName) {
+    const confirmed = confirm(`are you sure you want to delete model: ${modelName}?`);
+    if (!confirmed) return;
+    
+    try {
+        console.log('deleting model:', modelId);
+        
+        const { default: ModelAPI } = await import('../api/modelAPI.js');
+        await ModelAPI.deleteModel(modelId);
+        
+        console.log('model deleted successfully');
+        
+        // refresh models list
+        ActionButtonHandlers.loadAvailableModels();
+        
+        alert('model deleted successfully');
+        
+    } catch (error) {
+        console.error('error deleting model:', error);
+        alert('failed to delete model: ' + error.message);
+    }
 };
 
 export default ActionButtonTemplates;
