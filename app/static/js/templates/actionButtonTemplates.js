@@ -18,7 +18,7 @@ currentLabeling: (labelingName, labelingColor) => `
      * Score button template
      */
     scoreButton: () => `
-        <span id="score-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
+        <span id="score-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0); cursor: pointer;" title="Select Model & Score">
             <i class="fa-solid fa-rocket"></i>
         </span>
     `,
@@ -115,7 +115,7 @@ export const ActionButtonHandlers = {
         // Setup split button
         ActionButtonHandlers.setupSplitButton(onSplit, isSplitting);
         
-        // Setup score button
+        // Setup score button (now opens model selection)
         ActionButtonHandlers.setupScoreButton(onScore);
 
         // Setup current labeling button
@@ -303,8 +303,8 @@ export const ActionButtonHandlers = {
     },
 
     /**
-     * Setup score button
-     * @param {Function} onScore - Score callback function
+     * Setup score button - now opens model selection modal
+     * @param {Function} onScore - Score callback function (optional, for backward compatibility)
      */
     setupScoreButton: (onScore) => {
         const score_btn_overlay = document.getElementById('score-btn-overlay');
@@ -320,11 +320,53 @@ export const ActionButtonHandlers = {
             score_btn_overlay.style.background = 'rgba(224,224,224,0)';
         });
         
-        // Click handling
+        // Click handling - now opens model selection modal
         score_btn_overlay.addEventListener('click', () => {
-            if (onScore) onScore();
+            console.log('opening model selection modal');
+            ActionButtonHandlers.openModelSelection();
         });
     },
+
+    /**
+     * Open model selection modal
+     */
+    openModelSelection: () => {
+        const modalElement = document.getElementById('modelSelection');
+        if (modalElement && window.bootstrap) {
+            const modal = new bootstrap.Modal(modalElement);
+            modal.show();
+            
+            // load models when modal is opened
+            ActionButtonHandlers.loadAvailableModels();
+            
+            console.log('model selection modal opened');
+        } else {
+            console.error('model selection modal not found or bootstrap not available');
+        }
+    },
+
+    /**
+     * Load available models and populate the list
+     */
+    loadAvailableModels: () => {
+        const modelsList = document.getElementById('available-models-list');
+        if (!modelsList) return;
+        
+        // for now just show placeholder content and log to console
+        console.log('loading available models from database/api');
+        
+        // simulate loading
+        setTimeout(() => {
+            modelsList.innerHTML = `
+                <div class="text-center text-muted py-3">
+                    <i class="fa-solid fa-robot fa-2x mb-2 d-block"></i>
+                    <p class="mb-0">no models configured yet</p>
+                    <small>use the add model button to create your first model</small>
+                </div>
+            `;
+        }, 500);
+    },
+
     /**
      * Setup current labeling button to open modal
      * @param {Function} onLabeling - Callback to open labeling modal
@@ -369,6 +411,44 @@ export const ActionButtonHandlers = {
             }
         });
     }
+};
+
+// Global functions for model management (to be called from modal)
+window.showAddModelForm = function() {
+    console.log('showing add model form');
+    const form = document.getElementById('add-model-form');
+    if (form) {
+        form.style.display = 'block';
+    }
+};
+
+window.hideAddModelForm = function() {
+    console.log('hiding add model form');
+    const form = document.getElementById('add-model-form');
+    if (form) {
+        form.style.display = 'none';
+        // reset form
+        document.getElementById('new-model-form').reset();
+    }
+};
+
+window.handleAddModel = function(event) {
+    event.preventDefault();
+    
+    const formData = {
+        name: document.getElementById('model-name').value,
+        description: document.getElementById('model-description').value,
+        pyFilename: document.getElementById('py-filename').value,
+        ptFilename: document.getElementById('pt-filename').value,
+        className: document.getElementById('model-class-name').value
+    };
+    
+    console.log('adding new model:', formData);
+    
+    // for now just log and hide form
+    // later this will call api to save model
+    alert('model would be saved (placeholder functionality)');
+    window.hideAddModelForm();
 };
 
 export default ActionButtonTemplates;
