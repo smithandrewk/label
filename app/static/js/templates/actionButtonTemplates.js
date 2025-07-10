@@ -577,9 +577,11 @@ window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
         if (result.success) {
             console.log('scoring started successfully:', result);
             
-            // start polling for results (reuse existing polling function)
+            // Use the global function directly
             if (typeof window.pollScoringStatus === 'function') {
                 window.pollScoringStatus(result.scoring_id, sessionId, session.session_name);
+            } else {
+                throw new Error('pollScoringStatus function not available globally');
             }
         } else {
             throw new Error(result.error || 'scoring failed to start');
