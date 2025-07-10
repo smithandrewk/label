@@ -32,10 +32,12 @@ def create_app():
     from app.repositories.project_repository import ProjectRepository
     from app.repositories.session_repository import SessionRepository
     from app.repositories.participant_repository import ParticipantRepository
+    from app.repositories.model_repository import ModelRepository
     
     project_repository = ProjectRepository(get_db_connection=get_db_connection)
     session_repository = SessionRepository(get_db_connection=get_db_connection)
     participant_repository = ParticipantRepository(get_db_connection=get_db_connection)
+    model_repository = ModelRepository(get_db_connection=get_db_connection)
     
     # Initialize services with repositories
     from app.services.project_service import ProjectService
@@ -53,7 +55,8 @@ def create_app():
         participant_repository=participant_repository
     )
     model_service = ModelService(
-        session_repository=session_repository
+        session_repository=session_repository,
+        model_repository=model_repository  # Add this line
     )
 
     # Register blueprints
