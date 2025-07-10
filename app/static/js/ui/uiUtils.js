@@ -84,6 +84,10 @@ export function displayBulkPreview(projectGroups) {
 export function showTableView() {
     document.getElementById("table-view").style.display = "block";
     document.getElementById("visualization-view").style.display = "none";
+
+    // Remove dark mode if it is on
+    document.body.classList.remove('dark-mode');
+    localStorage.setItem('dark-mode', false);
 }
 
 /**

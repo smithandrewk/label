@@ -24,6 +24,15 @@ currentLabeling: (labelingName, labelingColor) => `
     `,
 
     /**
+     * darkmode button
+     */
+    darkModeButton: () => `
+        <span id="darkMode-btn-overlay" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background:rgba(224, 224, 224, 0);">
+            <i id="darkModeIcon" class="fa-solid fa-moon"></i>
+        </span>
+    `,
+
+    /**
      * Split button template
      * @param {boolean} isSplitting - Whether splitting mode is active
      */
@@ -79,6 +88,7 @@ currentLabeling: (labelingName, labelingColor) => `
     visualizationActionButtons: ({ isSplitting = false, isVerified = false, labelingName = "No Labeling", labelingColor = "#000000" } = {}) => {
         return [
             ActionButtonTemplates.currentLabeling(labelingName, labelingColor),
+            ActionButtonTemplates.darkModeButton(),
             ActionButtonTemplates.scoreButton(),
             ActionButtonTemplates.splitButton(isSplitting),
             ActionButtonTemplates.deleteBoutButton(),
@@ -100,9 +110,10 @@ export const ActionButtonHandlers = {
      * @param {Function} options.onVerify - Verify callback function
      * @param {Function} options.onSplit - Split toggle callback function
      * @param {Function} options.onScore - Score callback function
+     * @param {Function} options.onDarkMode - darkmode callback function
      * @param {boolean} options.isSplitting - Current splitting state
      */
-    setupVisualizationButtons: ({ onDeleteBouts, onDelete, onVerify, onSplit, onScore, onLabeling, isSplitting = false } = {}) => {
+    setupVisualizationButtons: ({ onDeleteBouts, onDelete, onVerify, onSplit, onScore, onDarkMode, onLabeling, isSplitting = false } = {}) => {
         // Setup delete bout button with confirmation
         ActionButtonHandlers.setupDeleteBoutButton(onDeleteBouts);
 
@@ -117,6 +128,9 @@ export const ActionButtonHandlers = {
         
         // Setup score button (now opens model selection)
         ActionButtonHandlers.setupScoreButton(onScore);
+
+        // Setup darkmode button
+        ActionButtonHandlers.setupDarkModeButton(onDarkMode); 
 
         // Setup current labeling button
         ActionButtonHandlers.setupCurrentLabelingButton(onLabeling);
@@ -506,6 +520,25 @@ export const ActionButtonHandlers = {
                     }, { once: true });
                 }
             }
+        });
+    },
+    setupDarkModeButton: (onDarkMode) => {
+        const darkMode_btn_overlay = document.getElementById('darkMode-btn-overlay');
+
+        if (!darkMode_btn_overlay) return;
+
+        // Hover effects
+        darkMode_btn_overlay.addEventListener('mouseenter', () => {
+            darkMode_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+        });
+        
+        darkMode_btn_overlay.addEventListener('mouseleave', () => {
+            darkMode_btn_overlay.style.background = 'rgba(224,224,224,0)';
+        });
+        
+        // Click handling
+        darkMode_btn_overlay.addEventListener('click', () => {
+            if (onDarkMode) onDarkMode();
         });
     }
 };
