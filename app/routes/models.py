@@ -6,8 +6,10 @@ import traceback
 models_bp = Blueprint('models', __name__)
 
 class ModelController:
-    def __init__(self, model_service):
+    def __init__(self, model_service, session_service):
         self.model_service = model_service
+        self.session_service = session_service
+        self.session_service = session_service
 
     def list_models(self):
         """Get all available models"""
@@ -129,13 +131,24 @@ class ModelController:
             
             logging.info(f"scoring session {session_id} with model {model_id}")
             
+            # Get full session info including project_path - THIS IS THE FIX
+            try:
+                session_info = self.session_service.get_session_details(session_id)
+                if not session_info:
+                    return jsonify({'error': 'session not found'}), 404
+            except DatabaseError as e:
+                return jsonify({'error': str(e)}), 500
+            
+            project_path = session_info['project_path']  # Get the full path
+            session_name = session_info['session_name']
+            
             # delegate to model service for scoring
             scoring_result = self.model_service.score_session_with_model(
-                session_id, model_id, project_name, session_name
+                session_id, model_id, project_path, session_name  # Use the full project_path
             )
-            
+
             logging.info(f"scoring started with id: {scoring_result.get('scoring_id')}")
-            
+        
             return jsonify({
                 'success': True,
                 'message': f'scoring session {session_name} with model',
@@ -162,9 +175,9 @@ class ModelController:
 
 controller = None
 
-def init_controller(model_service):
+def init_controller(model_service, session_service):
     global controller
-    controller = ModelController(model_service)
+    controller = ModelController(model_service, session_service)
 
 @models_bp.route('/api/models', methods=['GET'])
 def list_models():
