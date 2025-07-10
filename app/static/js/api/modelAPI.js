@@ -178,6 +178,66 @@ export class ModelAPI {
             throw error;
         }
     }
+
+
+
+        /**
+     * Score a session using a specific model on GPU
+     * @param {string|number} sessionId - ID of the session to score
+     * @param {string|number} modelId - ID of the model to use
+     * @param {string} projectName - Name of the project
+     * @param {string} sessionName - Name of the session
+     * @returns {Promise<Object>} Scoring result with scoring_id
+     */
+    static async scoreSessionGpu(sessionId, modelId, projectName, sessionName) {
+        try {
+            console.log('scoring session with model on GPU:', { sessionId, modelId, projectName, sessionName });
+            
+            const response = await fetch('/api/models/score_gpu', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    model_id: modelId,
+                    project_name: projectName,
+                    session_name: sessionName
+                })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'failed to start GPU scoring');
+            }
+            
+            const result = await response.json();
+            console.log('GPU scoring started:', result);
+            return result;
+        } catch (error) {
+            console.error('error scoring session on GPU:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check GPU availability status
+     * @returns {Promise<Object>} GPU status information
+     */
+    static async getGpuStatus() {
+        try {
+            const response = await fetch('/api/gpu_status');
+            if (!response.ok) {
+                throw new Error(`failed to get GPU status: ${response.status}`);
+            }
+            
+            const status = await response.json();
+            return status;
+        } catch (error) {
+            console.error('error getting GPU status:', error);
+            throw error;
+        }
+    }
 }
 
 export default ModelAPI;

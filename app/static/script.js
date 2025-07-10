@@ -264,7 +264,7 @@ async function scoreSession(sessionId, projectName, sessionName) {
         
         if (result.success) {
             showNotification(`Scoring started for ${sessionName}`, 'success');
-            pollScoringStatus(result.scoring_id, sessionId, sessionName);
+            pollScoringStatus(result.scoring_id, sessionId, sessionName, 'cpu');
         } else {
             showNotification(`Scoring failed: ${result.error}`, 'error');
             resetScoreButton(sessionId);
@@ -276,22 +276,33 @@ async function scoreSession(sessionId, projectName, sessionName) {
     }
 }
 
-async function pollScoringStatus(scoringId, sessionId, sessionName) {
+async function pollScoringStatus(scoringId, sessionId, sessionName, deviceType = 'cpu') {
     const maxPolls = 120; // 2 minutes max
     let pollCount = 0;
+    const deviceLabel = deviceType.toUpperCase();
+    
+    console.log(`Starting ${deviceLabel} scoring status polling for ${scoringId}`);
     
     const poll = setInterval(async () => {
         try {
-            console.log('Polling attempt', pollCount, 'for scoring_id:', scoringId); 
+            console.log(`Polling attempt ${pollCount} for ${deviceLabel} scoring_id:`, scoringId); 
             const response = await fetch(`/api/scoring_status/${scoringId}`);
-            console.log('Polling response status:', response.status); 
+            console.log(`${deviceLabel} polling response status:`, response.status); 
             const status = await response.json();
             
             pollCount++;
             
             if (status.status === 'completed') {
                 clearInterval(poll);
-                showNotification(`Scoring complete for ${sessionName}! Found ${status.bouts_count} bouts.`, 'success');
+                
+                // Create device-specific success message
+                const deviceInfo = status.device_used ? ` (${status.device_used})` : ` on ${deviceLabel}`;
+                const boutsMessage = status.bouts_count ? ` Found ${status.bouts_count} bouts.` : '';
+                
+                showNotification(
+                    `${deviceLabel} scoring complete for ${sessionName}${deviceInfo}!${boutsMessage}`, 
+                    'success'
+                );
                 resetScoreButton(sessionId);
                 
                 // Force refresh the session data from the server
@@ -317,7 +328,12 @@ async function pollScoringStatus(scoringId, sessionId, sessionName) {
                         
                         // Extract the labeling name from the new bouts and create/update labeling
                         if (bouts && bouts.length > 0) {
-                            const modelLabelingName = bouts[bouts.length - 1].label; // Get label from last bout (newest)
+                            // Get the newest bout's label (just the model name, no device info)
+                            const newestBout = bouts[bouts.length - 1];
+                            const modelLabelingName = newestBout.label;
+                            
+                            console.log(`Creating/updating labeling: ${modelLabelingName}`);
+                            
                             if (modelLabelingName && currentProjectId) {
                                 await createOrUpdateModelLabeling(modelLabelingName);
                                 // Automatically select the new model labeling to show the results
@@ -329,24 +345,31 @@ async function pollScoringStatus(scoringId, sessionId, sessionName) {
                 
                 // If this session is currently being visualized, refresh it
                 if (currentSessionId == sessionId) {
-                    console.log('Refreshing currently visualized session with new bouts');
+                    console.log(`Refreshing currently visualized session with new ${deviceLabel} bouts`);
                     visualizeSession(sessionId);
                 }
                 
             } else if (status.status === 'error') {
                 clearInterval(poll);
-                showNotification(`Scoring failed: ${status.error}`, 'error');
+                const errorMsg = status.error || 'Unknown error occurred';
+                showNotification(`${deviceLabel} scoring failed: ${errorMsg}`, 'error');
                 resetScoreButton(sessionId);
                 
             } else if (pollCount >= maxPolls) {
                 clearInterval(poll);
-                showNotification('Scoring is taking longer than expected', 'warning');
+                showNotification(`${deviceLabel} scoring is taking longer than expected`, 'warning');
                 resetScoreButton(sessionId);
+            } else {
+                // Update UI with current status if available
+                if (status.status === 'running' && deviceType === 'gpu') {
+                    console.log(`GPU scoring in progress... (${pollCount}/${maxPolls})`);
+                }
             }
             
         } catch (error) {
-            console.error('Error polling scoring status:', error);
+            console.error(`Error polling ${deviceLabel} scoring status:`, error);
             clearInterval(poll);
+            showNotification(`Failed to get ${deviceLabel} scoring status`, 'error');
             resetScoreButton(sessionId);
         }
     }, 1000); // Poll every second

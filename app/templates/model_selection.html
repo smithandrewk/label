@@ -18,6 +18,24 @@
                             <i class="fa-solid fa-plus me-1"></i>Add Model
                         </button>
                     </div>
+
+                    <div class="mb-4">
+                        <h6 class="text-muted mb-2">Select Device</h6>
+                        <div class="d-flex gap-2" id="device-selection">
+                            <button type="button" class="btn btn-outline-primary device-btn active" data-device="cpu" onclick="selectDevice('cpu')">
+                                <i class="fa-solid fa-rocket me-1"></i>
+                                CPU
+                            </button>
+                            <button type="button" class="btn btn-outline-danger device-btn" data-device="gpu" onclick="selectDevice('gpu')">
+                                <img src="/static/rocket-extra-fire.svg" width="16" height="16" class="me-1" alt="GPU">
+                                GPU
+                            </button>
+                        </div>
+                        <small class="text-muted d-block mt-1" id="device-status">
+                            CPU selected
+                        </small>
+                    </div>
+
                     <div id="available-models-list" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
                         <!-- populated by javascript -->
                         <div class="text-center text-muted">
