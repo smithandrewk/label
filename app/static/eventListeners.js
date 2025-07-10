@@ -13,6 +13,21 @@
 
 export function addEventListeners() {
     document.addEventListener('keydown', function(event) {
+        // ignore keydown events when user is typing in form inputs
+        const activeElement = document.activeElement;
+        const isInInput = activeElement && (
+            activeElement.tagName === 'INPUT' || 
+            activeElement.tagName === 'TEXTAREA' || 
+            activeElement.tagName === 'SELECT' ||
+            activeElement.contentEditable === 'true' ||
+            activeElement.closest('.modal') // ignore all keydowns when modal is open
+        );
+        
+        if (isInInput) {
+            console.log('ignoring keyboard shortcut - user is typing in form');
+            return;
+        }
+        
         // Check if visualization view is active
         const visualizationView = document.getElementById("visualization-view");
         const visualizationViewActive = visualizationView && visualizationView.style.display === "flex";

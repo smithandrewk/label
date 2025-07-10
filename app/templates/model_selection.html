@@ -1,0 +1,99 @@
+<!-- Model Selection Modal -->
+<div class="modal fade" id="modelSelection" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">
+                    <i class="fa-solid fa-rocket me-2"></i>
+                    Model Selection & Management
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Available Models Section -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="text-muted mb-0">Available Models</h6>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="showAddModelForm()">
+                            <i class="fa-solid fa-plus me-1"></i>Add Model
+                        </button>
+                    </div>
+                    <div id="available-models-list" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                        <!-- populated by javascript -->
+                        <div class="text-center text-muted">
+                            <i class="fa-solid fa-spinner fa-spin me-2"></i>
+                            Loading models...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Add Model Form (initially hidden) -->
+                <div id="add-model-form" class="border rounded p-3 bg-light" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">Add New Model</h6>
+                        <button type="button" class="btn-close" onclick="hideAddModelForm()" aria-label="Close"></button>
+                    </div>
+                    <form id="new-model-form" onsubmit="handleAddModel(event)">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="model-name" class="form-label">Model Name *</label>
+                                    <input type="text" class="form-control" id="model-name" required 
+                                           placeholder="e.g., SmokingCNN v2">
+                                    <div class="form-text">display name for the model</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="model-class-name" class="form-label">Model Class Name *</label>
+                                    <input type="text" class="form-control" id="model-class-name" required 
+                                           placeholder="e.g., SmokingCNN">
+                                    <div class="form-text">python class name in the file</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="py-filename" class="form-label">Python File Name *</label>
+                                    <input type="text" class="form-control" id="py-filename" required 
+                                           placeholder="e.g., smoking_cnn.py">
+                                    <div class="form-text">python file containing the model</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="pt-filename" class="form-label">Model Weights File *</label>
+                                    <input type="text" class="form-control" id="pt-filename" required 
+                                           placeholder="e.g., model.pth">
+                                    <div class="form-text">pytorch weights file</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="model-description" class="form-label">Description</label>
+                            <textarea class="form-control" id="model-description" rows="3" 
+                                      placeholder="brief description of the model and its purpose"></textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-plus me-1"></i>Add Model
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="hideAddModelForm()">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Error display -->
+                <div id="model-error-message" class="alert alert-danger mt-3" style="display: none;">
+                    <!-- error messages will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
