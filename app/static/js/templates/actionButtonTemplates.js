@@ -568,8 +568,15 @@ window.handleAddModel = async function(event) {
         window.hideAddModelForm();
         ActionButtonHandlers.loadAvailableModels();
         
-        // show success message
-        alert('model added successfully');
+        const successMessage = `Model "${formData.name}" added successfully!\n\n` +
+            `⚠️  IMPORTANT REMINDER:\n` +
+            `Please ensure these files are present in your MODEL_DIR:\n\n` +
+            `📁 Python file: ${formData.py_filename}\n` +
+            `📁 Weights file: ${formData.pt_filename}\n\n` +
+            `The model will not work until both files are in the correct directory.\n` +
+            `Check your .env file for the MODEL_DIR setting.`;
+        
+        alert(successMessage);
         
     } catch (error) {
         console.error('error adding model:', error);
