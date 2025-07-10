@@ -533,25 +533,29 @@ window.handleAddModel = async function(event) {
     }
 };
 
+// Update the existing selectModelForScoring function
 window.selectModelForScoring = function(modelId, modelName) {
     console.log('selected model for scoring:', { modelId, modelName });
     
-    // get current session info from global variables
     if (!window.currentSessionId) {
         alert('no session selected');
         return;
     }
     
-    // confirm scoring
-    const confirmed = confirm(`score current session using model: ${modelName}?`);
+    // get device type from modal
+    const modal = document.getElementById('modelSelectionModal');
+    const deviceType = modal ? modal.dataset.deviceType || 'cpu' : 'cpu';
+    
+    const deviceLabel = deviceType.toUpperCase();
+    const confirmed = confirm(`score current session using model: ${modelName} on ${deviceLabel}?`);
     if (!confirmed) return;
     
     // close modal
-    const modal = bootstrap.Modal.getInstance(document.getElementById('modelSelectionModal'));
-    if (modal) modal.hide();
+    const bsModal = bootstrap.Modal.getInstance(modal);
+    if (bsModal) bsModal.hide();
     
-    // start scoring with selected model
-    window.scoreSessionWithModel(window.currentSessionId, modelId, modelName);
+    // start scoring with selected model and device
+    window.scoreSessionWithModel(window.currentSessionId, modelId, modelName, deviceType);
 };
 
 window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
@@ -626,5 +630,36 @@ window.deleteModel = async function(modelId, modelName) {
         alert('failed to delete model: ' + error.message);
     }
 };
+
+window.selectDevice = function(deviceType) {
+    console.log('device selected:', deviceType);
+    
+    // update button states
+    document.querySelectorAll('.device-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.device === deviceType) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // update status message
+    const statusElement = document.getElementById('device-status');
+    if (statusElement) {
+        if (deviceType === 'gpu') {
+            statusElement.textContent = 'GPU selected';
+            statusElement.className = 'text d-block mt-1';
+        } else {
+            statusElement.textContent = 'CPU selected';
+            statusElement.className = 'text d-block mt-1';
+        }
+    }
+    
+    // store device type for later use
+    const modal = document.getElementById('modelSelectionModal');
+    if (modal) {
+        modal.dataset.deviceType = deviceType;
+    }
+};
+
 
 export default ActionButtonTemplates;
