@@ -345,77 +345,124 @@ export const ActionButtonHandlers = {
         }
     },
 
-    /**
-     * Load available models and populate the list
+/**
+     * Load available models and GPU status, then populate the list
      */
     loadAvailableModels: async () => {
-            const modelsList = document.getElementById('available-models-list');
-            if (!modelsList) return;
+        const modelsList = document.getElementById('available-models-list');
+        if (!modelsList) return;
+        
+        // show loading state
+        modelsList.innerHTML = `
+            <div class="text-center text-muted">
+                <i class="fa-solid fa-spinner fa-spin me-2"></i>
+                loading models and checking GPU...
+            </div>
+        `;
+        
+        try {
+            // import ModelAPI dynamically to avoid circular dependencies
+            const { default: ModelAPI } = await import('../api/modelAPI.js');
             
-            // show loading state
-            modelsList.innerHTML = `
-                <div class="text-center text-muted">
-                    <i class="fa-solid fa-spinner fa-spin me-2"></i>
-                    loading models...
-                </div>
-            `;
+            // Load models and GPU status concurrently
+            const [models, gpuStatus] = await Promise.all([
+                ModelAPI.fetchModels(),
+                ModelAPI.getGpuStatus()
+            ]);
             
-            try {
-                // import ModelAPI dynamically to avoid circular dependencies
-                const { default: ModelAPI } = await import('../api/modelAPI.js');
-                const models = await ModelAPI.fetchModels();
-                
-                if (models && models.length > 0) {
-                    // render models list
-                    let modelsHtml = '';
-                    models.forEach(model => {
-                        modelsHtml += `
-                            <div class="model-item d-flex justify-content-between align-items-start p-3 border rounded mb-2" data-model-id="${model.id}">
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-1">${model.name}</h6>
-                                    <p class="text-muted small mb-1">${model.description || 'no description'}</p>
-                                    <div class="d-flex gap-3 text-muted" style="font-size: 11px;">
-                                        <span><i class="fa-solid fa-file-code me-1"></i>${model.py_filename}</span>
-                                        <span><i class="fa-solid fa-brain me-1"></i>${model.pt_filename}</span>
-                                        <span><i class="fa-solid fa-cube me-1"></i>${model.class_name}</span>
-                                    </div>
-                                </div>
-                                <div class="d-flex gap-1">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="selectModelForScoring('${model.id}', '${model.name}')" title="use this model">
-                                        <i class="fa-solid fa-rocket"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-secondary" onclick="editModel('${model.id}')" title="edit model">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteModel('${model.id}', '${model.name}')" title="delete model">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
+            // Update GPU button state and status display
+            ActionButtonHandlers.updateGpuButtonState(gpuStatus);
+            
+            if (models && models.length > 0) {
+                // render models list
+                let modelsHtml = '';
+                models.forEach(model => {
+                    modelsHtml += `
+                        <div class="model-item d-flex justify-content-between align-items-start p-3 border rounded mb-2" data-model-id="${model.id}">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">${model.name}</h6>
+                                <p class="text-muted small mb-1">${model.description || 'no description'}</p>
+                                <div class="d-flex gap-3 text-muted" style="font-size: 11px;">
+                                    <span><i class="fa-solid fa-file-code me-1"></i>${model.py_filename}</span>
+                                    <span><i class="fa-solid fa-brain me-1"></i>${model.pt_filename}</span>
+                                    <span><i class="fa-solid fa-cube me-1"></i>${model.class_name}</span>
                                 </div>
                             </div>
-                        `;
-                    });
-                    modelsList.innerHTML = modelsHtml;
-                } else {
-                    // no models available
-                    modelsList.innerHTML = `
-                        <div class="text-center text-muted py-3">
-                            <i class="fa-solid fa-robot fa-2x mb-2 d-block"></i>
-                            <p class="mb-0">no models configured yet</p>
-                            <small>use the add model button to create your first model</small>
+                            <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-primary" onclick="selectModelForScoring('${model.id}', '${model.name}')" title="use this model">
+                                    <i class="fa-solid fa-rocket"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="editModel('${model.id}')" title="edit model">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteModel('${model.id}', '${model.name}')" title="delete model">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
                         </div>
                     `;
-                }
-            } catch (error) {
-                console.error('error loading models:', error);
+                });
+                modelsList.innerHTML = modelsHtml;
+            } else {
+                // no models available
                 modelsList.innerHTML = `
-                    <div class="text-center text-danger py-3">
-                        <i class="fa-solid fa-exclamation-triangle fa-2x mb-2 d-block"></i>
-                        <p class="mb-0">failed to load models</p>
-                        <small>${error.message}</small>
+                    <div class="text-center text-muted py-3">
+                        <i class="fa-solid fa-robot fa-2x mb-2 d-block"></i>
+                        <p class="mb-0">no models configured yet</p>
+                        <small>use the add model button to create your first model</small>
                     </div>
                 `;
             }
-        },
+        } catch (error) {
+            console.error('error loading models or GPU status:', error);
+            modelsList.innerHTML = `
+                <div class="text-center text-danger py-3">
+                    <i class="fa-solid fa-exclamation-triangle fa-2x mb-2 d-block"></i>
+                    <p class="mb-0">failed to load models</p>
+                    <small>${error.message}</small>
+                </div>
+            `;
+            
+            // If GPU status failed, disable GPU button
+            ActionButtonHandlers.updateGpuButtonState({ gpu_available: false, error: error.message });
+        }
+    },
+
+
+    /**
+     * Update GPU button state based on GPU availability
+     * @param {Object} gpuStatus - GPU status from the backend
+     */
+    updateGpuButtonState: (gpuStatus) => {
+        const gpuBtn = document.querySelector('.device-btn[data-device="gpu"]');
+        const statusElement = document.getElementById('device-status');
+        
+        if (!gpuBtn || !statusElement) return;
+        
+        if (gpuStatus.gpu_available) {
+            // GPU is available
+            gpuBtn.disabled = false;
+            gpuBtn.classList.remove('btn-outline-secondary');
+            gpuBtn.classList.add('btn-outline-danger');
+            gpuBtn.title = `GPU Available: ${gpuStatus.gpu_name || 'Unknown GPU'}`;
+            
+            console.log('GPU available:', gpuStatus);
+        } else {
+            // GPU is not available
+            gpuBtn.disabled = true;
+            gpuBtn.classList.remove('btn-outline-danger');
+            gpuBtn.classList.add('btn-outline-secondary');
+            gpuBtn.title = `GPU Not Available: ${gpuStatus.error || 'No GPU detected'}`;
+            
+            // Reset to CPU if GPU was selected
+            const modal = document.getElementById('modelSelection');
+            if (modal && modal.dataset.deviceType === 'gpu') {
+                window.selectDevice('cpu');
+            }
+            
+            console.log('GPU not available:', gpuStatus.error || 'No GPU detected');
+        }
+    },
 
     /**
      * Setup current labeling button to open modal
@@ -533,7 +580,6 @@ window.handleAddModel = async function(event) {
     }
 };
 
-// Update the existing selectModelForScoring function
 window.selectModelForScoring = function(modelId, modelName) {
     console.log('selected model for scoring:', { modelId, modelName });
     
@@ -543,8 +589,9 @@ window.selectModelForScoring = function(modelId, modelName) {
     }
     
     // get device type from modal
-    const modal = document.getElementById('modelSelectionModal');
+    const modal = document.getElementById('modelSelection');
     const deviceType = modal ? modal.dataset.deviceType || 'cpu' : 'cpu';
+    console.log('🔍 Device type detected:', deviceType);
     
     const deviceLabel = deviceType.toUpperCase();
     const confirmed = confirm(`score current session using model: ${modelName} on ${deviceLabel}?`);
@@ -555,12 +602,16 @@ window.selectModelForScoring = function(modelId, modelName) {
     if (bsModal) bsModal.hide();
     
     // start scoring with selected model and device
-    window.scoreSessionWithModel(window.currentSessionId, modelId, modelName, deviceType);
+    if (deviceType === 'gpu') {
+        window.scoreSessionWithModelGpu(window.currentSessionId, modelId, modelName);
+    } else {
+        window.scoreSessionWithModel(window.currentSessionId, modelId, modelName);
+    }
 };
 
 window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
     try {
-        console.log('scoring session with specific model:', { sessionId, modelId, modelName });
+        console.log('scoring session with CPU model:', { sessionId, modelId, modelName });
         
         // get session details
         const session = window.sessions?.find(s => s.session_id == sessionId);
@@ -583,7 +634,7 @@ window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
             
             // Use the global function directly
             if (typeof window.pollScoringStatus === 'function') {
-                window.pollScoringStatus(result.scoring_id, sessionId, session.session_name);
+                window.pollScoringStatus(result.scoring_id, sessionId, session.session_name, 'cpu');
             } else {
                 throw new Error('pollScoringStatus function not available globally');
             }
@@ -594,6 +645,52 @@ window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
     } catch (error) {
         console.error('error scoring session with model:', error);
         alert('failed to start scoring: ' + error.message);
+        
+        // reset score button
+        const scoreBtn = document.getElementById('score-btn-overlay');
+        if (scoreBtn) {
+            scoreBtn.innerHTML = '<i class="fa-solid fa-rocket"></i>';
+        }
+    }
+};
+
+
+window.scoreSessionWithModelGpu = async function(sessionId, modelId, modelName) {
+    try {
+        console.log('scoring session with GPU model:', { sessionId, modelId, modelName });
+        
+        // get session details
+        const session = window.sessions?.find(s => s.session_id == sessionId);
+        if (!session) {
+            throw new Error('session not found');
+        }
+        
+        // update score button to show loading
+        const scoreBtn = document.getElementById('score-btn-overlay');
+        if (scoreBtn) {
+            scoreBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        }
+        
+        // import ModelAPI and start GPU scoring
+        const { default: ModelAPI } = await import('../api/modelAPI.js');
+        const result = await ModelAPI.scoreSessionGpu(sessionId, modelId, session.project_name, session.session_name);
+        
+        if (result.success) {
+            console.log('GPU scoring started successfully:', result);
+            
+            // Use the global polling function with GPU indicator
+            if (typeof window.pollScoringStatus === 'function') {
+                window.pollScoringStatus(result.scoring_id, sessionId, session.session_name, 'gpu');
+            } else {
+                throw new Error('pollScoringStatus function not available globally');
+            }
+        } else {
+            throw new Error(result.error || 'GPU scoring failed to start');
+        }
+        
+    } catch (error) {
+        console.error('error scoring session with GPU model:', error);
+        alert('failed to start GPU scoring: ' + error.message);
         
         // reset score button
         const scoreBtn = document.getElementById('score-btn-overlay');
@@ -655,7 +752,7 @@ window.selectDevice = function(deviceType) {
     }
     
     // store device type for later use
-    const modal = document.getElementById('modelSelectionModal');
+    const modal = document.getElementById('modelSelection');
     if (modal) {
         modal.dataset.deviceType = deviceType;
     }

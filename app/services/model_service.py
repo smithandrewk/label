@@ -507,8 +507,8 @@ class ModelService:
                         smoking_bouts.append(current_bout)
                         current_bout = None
 
-            # format results with GPU indicator in label
-            label = f"{model_config['name']} (GPU)"
+         
+            label = f"{model_config['name']}"
             
             smoking_bouts = [
                 {
