@@ -108,6 +108,28 @@ body {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
+body.dark-mode .sidebar {
+    background-color: var(--bs-dark) !important;
+    color: var(--bs-light);
+}
+body.dark-mode .sidebar * {
+    color: white;
+}
+body.dark-mode .nav-item.dropdown > button.nav-link {
+    color: white !important;
+}
+body.dark-mode #project-dropdown-menu,
+body.dark-mode #project-dropdown-menu * {
+    color: black;
+} 
+body.dark-mode .visualization-container {
+    background-color: var(--bs-dark) !important;
+    color: var(--bs-light);
+}
+body.dark-mode .visualization-container * {
+    color: white;
+}
+
 /* Main content styling - offset by sidebar width */
 .main-content {
     margin-left: 280px;
