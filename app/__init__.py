@@ -71,7 +71,7 @@ def create_app():
     sessions.init_controller(session_service=session_service, project_service=project_service, model_service=model_service)
     app.register_blueprint(sessions.sessions_bp)
 
-    models.init_controller(model_service=model_service)
+    models.init_controller(model_service=model_service, session_service=session_service)
     app.register_blueprint(models.models_bp)
 
     labelings.init_controller(session_service=session_service, project_service=project_service, model_service=model_service)
