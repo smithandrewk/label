@@ -282,7 +282,9 @@ async function pollScoringStatus(scoringId, sessionId, sessionName) {
     
     const poll = setInterval(async () => {
         try {
+            console.log('Polling attempt', pollCount, 'for scoring_id:', scoringId); 
             const response = await fetch(`/api/scoring_status/${scoringId}`);
+            console.log('Polling response status:', response.status); 
             const status = await response.json();
             
             pollCount++;
@@ -1804,6 +1806,7 @@ window.navigateToPreviousSession = navigateToPreviousSession;
 window.updateSidebarHighlighting = updateSidebarHighlighting;
 window.exportLabelsJSON = exportLabelsJSON;
 window.showBulkUploadForm = showBulkUploadForm;
+window.pollScoringStatus = pollScoringStatus;
 
 // Export overlay management functions for overlay manager
 window.updateOverlayPositions = updateOverlayPositions;
