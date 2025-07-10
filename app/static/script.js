@@ -490,6 +490,40 @@ async function visualizeSession(sessionId) {
     const actionButtons = document.getElementById("action-buttons");
     actionButtons.innerHTML = "";
 
+    function toggleDarkMode(){
+        const plotDiv = document.getElementById('timeSeriesPlot');
+        if (!plotDiv) return;
+
+        Plotly.relayout(plotDiv, {
+            'xaxis.autorange': false,
+            'yaxis.autorange': false
+        });
+
+        // Get current zoom ranges before changing layout
+        const viewState = {
+            xrange: plotDiv.layout?.xaxis?.range?.slice() || plotDiv._fullLayout?.xaxis?.range?.slice(),
+            yrange: plotDiv.layout?.yaxis?.range?.slice() || plotDiv._fullLayout?.yaxis?.range?.slice(),
+        };
+
+        const body = document.body;
+        const isDark = body.classList.toggle('dark-mode');
+        localStorage.setItem('dark-mode', isDark);
+
+        // Switch the icon
+        const icon = document.getElementById('darkModeIcon');
+        if (icon) {
+            icon.classList.remove('fa-moon', 'fa-sun');
+            icon.classList.add(isDark ? 'fa-sun' : 'fa-moon');
+        }
+
+        const layout = isDark ? darkLayout : lightLayout;
+        if (viewState.xrange && viewState.yrange) {
+            layout.xaxis.range = viewState.xrange;
+            layout.yaxis.range = viewState.yrange;
+        }
+        Plotly.react('timeSeriesPlot', traces, layout, config);
+    }
+
     // Use template for action buttons
     actionButtons.innerHTML = ActionButtonTemplates.visualizationActionButtons({
         isSplitting: isSplitting,
@@ -497,7 +531,7 @@ async function visualizeSession(sessionId) {
         labelingName: currentLabelingName,
         labelingColor: currentLabelingJSON ? currentLabelingJSON.color : '#000000',
     });
-
+    
     // Setup event listeners using the template handlers
     ActionButtonHandlers.setupVisualizationButtons({
         onDeleteBouts: () => deleteAllBouts(),
@@ -505,8 +539,17 @@ async function visualizeSession(sessionId) {
         onVerify: () => toggleVerifiedStatus(),
         onSplit: () => toggleSplitMode(),
         onScore: () => scoreSession(currentSessionId, session.project_name, session.session_name),
+        onDarkMode: () => toggleDarkMode(),
         isSplitting: isSplitting
     });
+
+    // Show correct dark mode icon
+    const icon = document.getElementById('darkModeIcon');
+    const isDark = document.body.classList.contains('dark-mode');
+    if (icon) {
+    icon.classList.remove('fa-moon', 'fa-sun');
+    icon.classList.add(isDark ? 'fa-sun' : 'fa-moon');
+    }
 
     const dataToPlot = session.data;
     if (!dataToPlot || dataToPlot.length === 0) {
@@ -554,12 +597,36 @@ async function visualizeSession(sessionId) {
         });
     });
 
-    const layout = {
+    const darkLayout = {
         xaxis: { title: 'Timestamp', rangeslider: { visible: false } },
         yaxis: { title: 'Acceleration (m/s²)'},
         showlegend: true,
         shapes: shapes,
+
+        paper_bgcolor: '#4a4a4a',
+        plot_bgcolor: '#4a4a4a',
+        font: {
+            color: '#ffffff'
+        },
+        xaxis: {
+            color: '#ffffff',
+            gridcolor: '#444444',
+            zerolinecolor: '#666666'
+        },
+        yaxis: {
+            color: '#ffffff',
+            gridcolor: '#444444',
+            zerolinecolor: '#666666'
+        },
     };
+    const lightLayout = {
+        xaxis: { title: 'Timestamp', rangeslider: { visible: false } },
+        yaxis: { title: 'Acceleration (m/s²)'},
+        showlegend: true,
+        shapes: shapes, 
+    };
+    const isDarkMode = document.body.classList.contains('dark-mode');
+    const layout = isDarkMode ? darkLayout : lightLayout; 
 
     const container = document.querySelector('.plot-container');
     container.querySelectorAll('.drag-overlay').forEach(el => el.remove());
@@ -568,7 +635,7 @@ async function visualizeSession(sessionId) {
     const config = {
         doubleClick: false
     };
-
+    
     Plotly.newPlot('timeSeriesPlot', traces, layout, config).then(() => {
         const plotDiv = document.getElementById('timeSeriesPlot');
 
@@ -620,7 +687,7 @@ async function visualizeSession(sessionId) {
             Plotly.Plots.resize(plotDiv).then(() => {
                 window.OverlayManager.updateOverlaysForLabelingChange(session, currentLabelingName);
             });
-        });
+        });         
         // Handle double click for pan and zoom
         plotDiv.on('plotly_doubleclick', (eventData) => {
             const mouseMode = plotDiv._fullLayout.dragmode;
@@ -1813,6 +1880,7 @@ window.editLabeling = editLabeling;
 window.deleteLabeling = deleteLabeling;
 window.duplicateLabeling = duplicateLabeling;
 window.selectLabeling = selectLabeling;
+window.deleteAllBouts = deleteAllBouts;
 window.scoreSession = scoreSession;
 window.showTableView = showTableView;
 window.decideSession = decideSession;
