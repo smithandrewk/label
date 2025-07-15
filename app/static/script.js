@@ -375,28 +375,27 @@ async function pollScoringStatus(scoringId, sessionId, sessionName, deviceType =
     }, 1000); // Poll every second
 }
 
-async function createNewProject(formData) { // TODO: move to project service, or at least project controller
-    try {
-        const result = await ProjectService.createProject(formData);
+function createNewProject(formData) { // TODO: move to project service, or at least project controller
+    // Hide modal and reset form
+    hideModal('createProjectModal');
+
+    // Start project creation in background
+    ProjectService.createProject(formData)
+        .then(result => {
+            console.log("Project created:", result);
+        })
+        .catch(error => {
+            console.error('Error creating project:', error);
+        });
         
-        // Show success notification
-        showNotification(`Project "${formData.name}" created successfully! Found ${result.sessions_found} sessions.`, 'success');
-        
-        // Hide modal and reset form
-        hideModal('createProjectModal');
-        resetForm('create-project-form');
-        
-        // Refresh projects list if we're on the projects page
-        if (typeof initializeProjects === 'function') {
-            setTimeout(() => {
-                initializeProjects();
-            }, 1000);
-        }
-        
-    } catch (error) {
-        console.error('Error creating project:', error);
-        showNotification(`Failed to create project: ${error.message}`, 'error');
-    }
+    console.log('Project creation started in background:', formData);
+    // Refresh projects list if we're on the projects page
+    setTimeout(() => {
+        console.log('Refreshing projects list after creation');
+        initializeProjects();
+        location.reload(); // Refresh the page to show updated projects
+    }, 1000);
+    resetForm('create-project-form');
 }
 
 // Show visualization view
@@ -1911,12 +1910,6 @@ function createBulkUpload(bulkUploadFolderPath) {
     formElement.style.display = 'none';
     progressElement.style.display = 'block';
     
-    const statusText = document.getElementById('bulk-status-text');
-    const progressBar = document.getElementById('bulk-progress-bar');
-    const resultsElement = document.getElementById('bulk-results');
-    
-    statusText.textContent = 'Starting bulk upload...';
-    progressBar.style.width = '10%';
     
     // Use fetch API to send data to your backend
     const formData = new FormData();
@@ -1925,67 +1918,21 @@ function createBulkUpload(bulkUploadFolderPath) {
     fetch('/api/projects/bulk-upload', {
         method: 'POST',
         body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            throw new Error(data.error);
+    });
+    // Close the modal after starting the upload
+    const bulkUploadModal = document.getElementById('bulkUploadModal');
+    if (bulkUploadModal) {
+        const modal = bootstrap.Modal.getInstance(bulkUploadModal);
+        if (modal) {
+            modal.hide();
         }
-        
-        // Handle successful response
-        console.log('Bulk upload started:', data);
-        statusText.textContent = `Bulk upload completed! ${data.projects_processed} projects processed.`;
-        progressBar.style.width = '100%';
-        progressBar.classList.add('bg-success');
-        
-        // Display results
-        let resultsHtml = '<h6>Upload Results:</h6>';
-        data.upload_results.forEach(result => {
-            const statusIcon = result.status === 'success' 
-                ? '<i class="fa-solid fa-check-circle text-success"></i>' 
-                : '<i class="fa-solid fa-exclamation-triangle text-danger"></i>';
-            
-            resultsHtml += `
-                <div class="d-flex justify-content-between align-items-center mb-1 p-2 border rounded">
-                    <span>${statusIcon} ${result.project_name}</span>
-                    <span class="text-muted small">
-                        ${result.status === 'success' 
-                            ? `${result.sessions_found} sessions,  files` 
-                            : result.error}
-                    </span>
-                </div>
-            `;
-        });
-        
-        resultsHtml += `
-            <div class="mt-3 p-2 bg-light rounded">
-                <small class="text-muted">
-                    All projects have been assigned to participant: <strong>${data.participant_code}</strong><br>
-                    You can reassign projects to specific participants using the "Change Participant" feature.
-                </small>
-            </div>
-        `;
-        
-        resultsElement.innerHTML = resultsHtml;
-        
-        // Refresh the project list after a delay
-        setTimeout(() => {
-            initializeProjects();
-        }, 2000);
-        
-    })
-    .catch(error => {
-        console.error('Bulk upload error:', error);
-        statusText.textContent = `Bulk upload failed: ${error.message}`;
-        progressBar.classList.add('bg-danger');
-        progressBar.style.width = '100%';
-        
-        resultsElement.innerHTML = `
-            <div class="alert alert-danger">
-                <i class="fa-solid fa-exclamation-triangle me-2"></i>
-                ${error.message}
-            </div>
-        `;
+    }
+    // Reload the projects list to reflect the new uploads and refresh page
+    initializeProjects().then(() => {
+        location.reload(); // Refresh the page to show updated projects
+    }).catch(error => {
+        console.error('Error during bulk upload:', error);
+        alert('Failed to start bulk upload: ' + error.message);
     });
 }
 
@@ -2017,13 +1964,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (progress) progress.style.display = 'none';
             if (preview) preview.style.display = 'none';
             if (form) form.style.display = 'block';
-            
-            // Reset progress bar
-            const progressBar = document.getElementById('bulk-progress-bar');
-            if (progressBar) {
-                progressBar.style.width = '0%';
-                progressBar.classList.remove('bg-success', 'bg-danger');
-            }
         });
     }
 });
