@@ -343,21 +343,8 @@ class ProjectController:
     def bulk_upload_projects(self):
         """Upload multiple projects from a parent directory structure"""
         try:
-            # Handle multipart form data for file uploads
-            if 'files' not in request.files:
-                return jsonify({'error': 'No files uploaded'}), 400
-            
-            # Get uploaded files
-            uploaded_files = request.files.getlist('files')
-            if not uploaded_files:
-                return jsonify({'error': 'No files uploaded'}), 400
-
-            # Debug: Log some file information
-            logger.info(f"Received {len(uploaded_files)} files for bulk upload")
-            for i, file in enumerate(uploaded_files[:5]):  # Log first 5 files
-                logger.info(f"File {i}: filename='{file.filename}', name='{file.name}'")
-
-            # First, ensure a "Bulk Upload" participant exists
+            bulkUploadFolderPath = request.form.get('bulkUploadFolderPath')
+            logger.info(f"Received bulk upload request for folder: {bulkUploadFolderPath}")
             bulk_participant_code = "BULK_UPLOAD"
 
             try:
@@ -377,29 +364,20 @@ class ProjectController:
                 logger.error(f"Error handling bulk upload participant: {e}")
                 return jsonify({'error': f'Failed to create bulk upload participant: {str(e)}'}), 500
 
-            # Group files by project directories using service layer
-            project_groups = self.project_service.group_files_by_project_directories(uploaded_files)
-
-            if not project_groups:
-                return jsonify({'error': 'No valid project directories found'}), 400
-
-            # Debug: Log project groups found
-            logger.info(f"Found {len(project_groups)} project groups:")
-            for project_name, files in project_groups.items():
-                logger.info(f"  Project '{project_name}': {len(files)} files")
-                for file in files[:3]:  # Log first 3 files per project
-                    logger.info(f"    - {file.filename}")
-
             # Start uploading each project
             upload_results = []
             upload_ids = []
             
-            for project_name, project_files in project_groups.items():
-                logger.info(f"Uploading project: {project_name} with {len(project_files)} files")
+            projects = os.listdir(bulkUploadFolderPath)
+            logger.info(f"Found {len(projects)} projects to upload in {bulkUploadFolderPath}")
+            for project_name in projects:
+                logger.info(f"Uploading project: {project_name}")
                 try:
-                    # Create project with uploaded files using the bulk-specific service method
                     project_result = self.project_service.create_project_with_bulk_files(
-                        project_name, participant_code, project_files, DATA_DIR
+                        project_name=project_name,
+                        participant_code=participant_code,
+                        bulkUploadFolderPath=bulkUploadFolderPath,
+                        data_dir=DATA_DIR
                     )
                     project_id = project_result['project_id']
                     new_project_path = project_result['project_path']
@@ -411,7 +389,6 @@ class ProjectController:
                     upload_id = str(uuid.uuid4())
                     upload_ids.append(upload_id)
                     
-                    import json
                     for session in sessions:
                         logger.info(f"Processing session: {session['name']}")
                         bouts = self.session_service.load_bouts_from_labels_json(new_project_path, session)
@@ -430,7 +407,6 @@ class ProjectController:
                         'project_id': project_id,
                         'upload_id': upload_id,
                         'sessions_found': len(sessions),
-                        'files_uploaded': project_result['files_processed'],
                         'status': 'success'
                     })
                     
@@ -441,7 +417,6 @@ class ProjectController:
                         'project_id': None,
                         'upload_id': None,
                         'sessions_found': 0,
-                        'files_uploaded': 0,
                         'status': 'error',
                         'error': str(e)
                     })
@@ -450,7 +425,6 @@ class ProjectController:
                 'message': 'Bulk upload started',
                 'participant_id': participant_id,
                 'participant_code': participant_code,
-                'projects_processed': len(project_groups),
                 'upload_results': upload_results,
                 'upload_ids': upload_ids
             })
