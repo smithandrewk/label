@@ -2,6 +2,7 @@ import * as eventListeners from './eventListeners.js';
 import { ensureSessionBoutsIsArray } from './helpers.js'
 import ProjectAPI from './js/api/projectAPI.js';
 import ProjectService from './js/services/projectService.js';
+import ProjectController from './js/controllers/projectController.js';
 import { 
     updateCurrentProjectPill, 
     resetScoreButton, 
@@ -17,23 +18,6 @@ import SessionAPI from './js/api/sessionAPI.js';
 import SessionService from './js/services/sessionService.js';
 import { ActionButtonTemplates, ActionButtonHandlers } from './js/templates/actionButtonTemplates.js';
 import { SessionListTemplates, SessionListHandlers } from './js/templates/sessionListTemplates.js';
-
-async function fetchProjectSessions(projectId) {
-    try {
-        const projectData = await ProjectService.fetchProjectSessionsAndLabelings(projectId);
-        
-        // Update global variables
-        sessions = projectData.sessions;
-        labelings = projectData.labelings;
-        currentLabelingJSON = projectData.currentLabelingJSON;
-        currentLabelingName = projectData.currentLabelingName;
-        
-        // Update the session table/list
-        updateSessionsList();
-    } catch (error) {
-        console.error('Error fetching project sessions:', error);
-    }
-}
 
 async function fetchSession(projectId) {
     try {
@@ -93,7 +77,7 @@ function checkUrlParameters() {
                     });
                     
                     // Fetch and display sessions for this project
-                    await fetchProjectSessions(currentProjectId);
+                    await ProjectController.fetchProjectSessions(currentProjectId);
                 }
             } catch (error) {
                 console.error('Error setting up project from URL:', error);
@@ -166,7 +150,7 @@ async function initializeProjects() {
             // Update current project pill
             updateCurrentProjectPill(projects[0].project_name);
             
-            fetchProjectSessions(projects[0].project_id);
+            ProjectController.fetchProjectSessions(projects[0].project_id);
         } else if (currentProjectId) {
             // If we have a current project, make sure it's marked as active in the dropdown
             const currentProjectItem = dropdownMenu.querySelector(`[data-project-id="${currentProjectId}"]`);
@@ -180,7 +164,7 @@ async function initializeProjects() {
                     updateCurrentProjectPill(currentProject.project_name);
                     
                     // Fetch sessions for the restored project
-                    fetchProjectSessions(currentProjectId);
+                    ProjectController.fetchProjectSessions(currentProjectId);
                 }
             }
         }
@@ -1425,7 +1409,7 @@ async function splitSession() {
 
         // Fetch sessions based on current context
         if (currentProjectId) {
-            await fetchProjectSessions(currentProjectId);
+            await ProjectController.fetchProjectSessions(currentProjectId);
         } else {
             await fetchSession();
         }
@@ -1894,6 +1878,7 @@ window.deleteProject = deleteProject;
 window.navigateToNextSession = navigateToNextSession;
 window.navigateToPreviousSession = navigateToPreviousSession;
 window.updateSidebarHighlighting = updateSidebarHighlighting;
+window.updateSessionsList = updateSessionsList;
 window.exportLabelsJSON = exportLabelsJSON;
 window.showBulkUploadForm = showBulkUploadForm;
 window.pollScoringStatus = pollScoringStatus;
