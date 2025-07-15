@@ -1788,38 +1788,14 @@ async function duplicateLabeling(labelingName) {
         alert('New name must be different from the original name.');
     }
 }
-// Function to delete a labeling
-async function deleteLabeling(labelingName) {
-    // Show confirmation dialog
-    const confirmed = confirm(`Are you sure you want to delete the labeling "${labelingName}"? This action will mark it as deleted but can be recovered by an administrator.`);
-    if (!confirmed) {
-        return;
-    }
-    try {
-        const { result, shouldUpdateCurrentLabeling, newCurrentLabelingName, updatedLabelings } = 
-            await ProjectService.deleteLabeling(currentProjectId, labelingName, currentLabelingName);
-        
-        labelings = updatedLabelings;
-        
-        // Update current labeling selection if needed
-        if (shouldUpdateCurrentLabeling) {
-            currentLabelingName = newCurrentLabelingName;
-            currentLabelingJSON = null;
-            updateCurrentLabelingHeader(newCurrentLabelingName);
-        }
-        await fetchAndDisplayLabelings(currentProjectId);
-    } catch (error) {
-        console.error('Error deleting labeling:', error);
-        alert('Failed to delete labeling: ' + error.message);
-    }
-}
 
 // Make functions available globally for inline event handlers
 window.visualizeSession = visualizeSession;
 window.openColorPicker = openColorPicker;
 window.updateLabelingColor = updateLabelingColor;
+window.fetchAndDisplayLabelings = fetchAndDisplayLabelings;
 window.editLabeling = editLabeling;
-window.deleteLabeling = deleteLabeling;
+window.deleteLabeling = ProjectController.deleteLabeling;
 window.duplicateLabeling = duplicateLabeling;
 window.selectLabeling = selectLabeling;
 window.deleteAllBouts = deleteAllBouts;
