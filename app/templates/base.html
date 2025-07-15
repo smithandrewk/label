@@ -112,14 +112,14 @@
                     <div class="mb-3">
                         <div class="alert alert-info">
                             <i class="fa-solid fa-info-circle me-2"></i>
-                            Select a folder containing multiple project directories. Each subdirectory will be uploaded as a separate project and assigned to a "Bulk Upload" participant. You can reassign projects to specific participants afterward.
+                            Same as upload here. Make a new directory. Put all the projects you wanna upload in that directory. Then select the parent directory here.
                         </div>
                     </div>
                     <form id="bulk-upload-form">
                         <div class="mb-3">
-                            <label for="bulk-upload-folder" class="form-label">Projects Folder</label>
-                            <input type="file" class="form-control" id="bulk-upload-folder" webkitdirectory directory multiple required>
-                            <div class="form-text">Select the parent folder containing all project directories</div>
+                            <label for="bulk-upload-folder" class="form-label">Projects Folder Path</label>
+                            <input type="text" class="form-control" id="bulk-upload-folder">
+                            <div class="form-text">Select the parent folder containing the project directories</div>
                         </div>
                         <div class="mb-3" id="bulk-preview" style="display: none;">
                             <label class="form-label">Projects to Upload:</label>

@@ -1904,36 +1904,7 @@ window.updateOverlayPositions = updateOverlayPositions;
 window.hideOverlay = hideOverlay;
 window.createBoutOverlays = createBoutOverlays;
 
-function processBulkUploadFiles(files) {
-    // Group files by project directories
-    const projectGroups = {};
-    
-    for (const file of files) {
-        const relativePath = file.webkitRelativePath;
-        const pathParts = relativePath.split('/');
-        
-        if (pathParts.length >= 2) {
-            // First level is the main folder, second level is project folder
-            const projectName = pathParts[1];
-            if (!projectGroups[projectName]) {
-                projectGroups[projectName] = [];
-            }
-            projectGroups[projectName].push(file);
-        }
-    }
-    
-    return projectGroups;
-}
-
-function createBulkUpload(files) {
-    // Create a FormData object to handle file uploads
-    const uploadData = new FormData();
-    
-    // Add all files to the FormData
-    files.forEach((file) => {
-        uploadData.append('files', file);
-    });
-    
+function createBulkUpload(bulkUploadFolderPath) {
     // Show progress UI
     const formElement = document.getElementById('bulk-upload-form');
     const progressElement = document.getElementById('bulk-upload-progress');
@@ -1948,9 +1919,12 @@ function createBulkUpload(files) {
     progressBar.style.width = '10%';
     
     // Use fetch API to send data to your backend
+    const formData = new FormData();
+    formData.append('bulkUploadFolderPath', bulkUploadFolderPath);
+    
     fetch('/api/projects/bulk-upload', {
         method: 'POST',
-        body: uploadData
+        body: formData
     })
     .then(response => response.json())
     .then(data => {
@@ -1976,7 +1950,7 @@ function createBulkUpload(files) {
                     <span>${statusIcon} ${result.project_name}</span>
                     <span class="text-muted small">
                         ${result.status === 'success' 
-                            ? `${result.sessions_found} sessions, ${result.files_uploaded} files` 
+                            ? `${result.sessions_found} sessions,  files` 
                             : result.error}
                     </span>
                 </div>
@@ -2017,31 +1991,16 @@ function createBulkUpload(files) {
 
 // Bulk upload form event listeners
 document.addEventListener('DOMContentLoaded', function() {
-    // Handle file selection change
-    const bulkUploadFolder = document.getElementById('bulk-upload-folder');
-    if (bulkUploadFolder) {
-        bulkUploadFolder.addEventListener('change', function(event) {
-            const files = Array.from(event.target.files);
-            const projectGroups = processBulkUploadFiles(files);
-            displayBulkPreview(projectGroups);
-        });
-    }
-    
     // Handle form submission
     const bulkUploadForm = document.getElementById('bulk-upload-form');
     if (bulkUploadForm) {
         bulkUploadForm.addEventListener('submit', function(event) {
             event.preventDefault();
             
-            const bulkUploadFolder = document.getElementById('bulk-upload-folder');
-            const files = Array.from(bulkUploadFolder.files);
+            const bulkUploadFolderPath = document.getElementById('bulk-upload-folder').value;
             
-            if (files.length === 0) {
-                alert('Please select a folder containing project directories');
-                return;
-            }
-            
-            createBulkUpload(files);
+            console.log('Starting bulk upload for folder:', bulkUploadFolderPath);
+            createBulkUpload(bulkUploadFolderPath);
         });
     }
     

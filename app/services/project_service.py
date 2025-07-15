@@ -1,3 +1,4 @@
+from math import log
 from app.exceptions import DatabaseError
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.participant_repository import ParticipantRepository
@@ -153,19 +154,20 @@ class ProjectService:
                 shutil.rmtree(new_project_path)
             raise DatabaseError(f'Failed to create project with files: {str(e)}')
 
-    def create_project_with_bulk_files(self, project_name, participant_code, uploaded_files, data_dir):
+    def create_project_with_bulk_files(self, project_name, participant_code, bulkUploadFolderPath, data_dir):
         """
         Create a new project with uploaded files from bulk upload, handling the specific path structure
         
         Args:
             project_name: Name of the project
             participant_code: Code for the participant
-            uploaded_files: List of uploaded file objects (already filtered for this project)
+            bulkUploadFolderPath: Path to the parent directory containing project folders
             data_dir: Base directory for storing project data
             
         Returns:
             dict: Project creation result with project_id, participant_id, and project_path
         """
+        logger.info(f"Creating project '{project_name}' for participant '{participant_code}' with bulk files from {bulkUploadFolderPath}")
         # Get or create participant
         participant = self.get_participant_by_code(participant_code)
         if participant:
@@ -186,33 +188,16 @@ class ProjectService:
             # Create project directory and save files
             os.makedirs(new_project_path, exist_ok=True)
             
-            # Process uploaded files and recreate directory structure
-            # For bulk uploads, the file paths are: parent_folder/project_folder/session_folder/file.csv
-            # We need to extract everything after the project_folder part
-            for file in uploaded_files:
-                if file.filename and file.filename != '':
-                    # Get relative path within the selected folder
-                    relative_path = file.filename
-                    path_parts = relative_path.split('/')
-                    
-                    # For bulk upload: skip parent_folder and project_folder to get session structure
-                    if len(path_parts) > 2:
-                        # Skip first two parts (parent_folder and project_folder)
-                        session_relative_path = '/'.join(path_parts[2:])
-                    else:
-                        # File is in project root
-                        session_relative_path = path_parts[-1]
-                    
-                    # Create full file path in the new project directory
-                    file_path = os.path.join(new_project_path, session_relative_path)
-                    
-                    # Create directories if they don't exist
-                    file_dir = os.path.dirname(file_path)
-                    if file_dir != new_project_path:  # Only create subdirs, not the project dir itself
-                        os.makedirs(file_dir, exist_ok=True)
-                    
-                    # Save the file
-                    file.save(file_path)
+            # Copy project_name subdirectory from the bulk upload folder
+            project_path = os.path.join(bulkUploadFolderPath, project_name)
+            logger.info(f"Copying files from {project_path} to {new_project_path}")
+            if not os.path.exists(project_path):
+                raise DatabaseError(f"Provided project path does not exist: {project_path}")
+            if not os.path.isdir(project_path):
+                raise DatabaseError(f"Provided project path is not a directory: {project_path}")
+            # Copy the entire directory structure from the provided path
+            shutil.copytree(project_path, new_project_path, dirs_exist_ok=True)
+            logger.info(f"Created project directory at {new_project_path}")
             
             # Create project record in database
             created_project = self.insert_project(project_name, participant_id, new_project_path)
@@ -220,8 +205,7 @@ class ProjectService:
             return {
                 'project_id': created_project['project_id'],
                 'participant_id': participant_id,
-                'project_path': new_project_path,
-                'files_processed': len([f for f in uploaded_files if f.filename and f.filename != ''])
+                'project_path': new_project_path
             }
             
         except Exception as e:
