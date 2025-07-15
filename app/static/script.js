@@ -16,6 +16,7 @@ import {
 } from './js/ui/uiUtils.js';
 import SessionAPI from './js/api/sessionAPI.js';
 import SessionService from './js/services/sessionService.js';
+import SessionController from './js/controllers/sessionController.js';
 import { ActionButtonTemplates, ActionButtonHandlers } from './js/templates/actionButtonTemplates.js';
 import { SessionListTemplates, SessionListHandlers } from './js/templates/sessionListTemplates.js';
 
@@ -218,31 +219,6 @@ function updateSessionsList() {
         }
     });
 }
-async function scoreSession(sessionId, projectName, sessionName) {
-    try {
-        console.log(`Scoring session: ${sessionId} (${sessionName} from project ${projectName})`);
-        
-        const scoreBtn = document.getElementById(`score-btn-overlay`);
-        if (scoreBtn) {
-            scoreBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-        }
-        
-        const result = await SessionAPI.scoreSession(sessionId,projectName,sessionName);
-        
-        if (result.success) {
-            showNotification(`Scoring started for ${sessionName}`, 'success');
-            pollScoringStatus(result.scoring_id, sessionId, sessionName, 'cpu');
-        } else {
-            showNotification(`Scoring failed: ${result.error}`, 'error');
-            resetScoreButton(sessionId);
-        }
-    } catch (error) {
-        console.error('Error scoring session:', error);
-        showNotification('Failed to start scoring', 'error');
-        resetScoreButton(sessionId);
-    }
-}
-
 async function pollScoringStatus(scoringId, sessionId, sessionName, deviceType = 'cpu') {
     const maxPolls = 120; // 2 minutes max
     let pollCount = 0;
@@ -504,7 +480,7 @@ async function visualizeSession(sessionId) {
         onDelete: () => decideSession(currentSessionId, false),
         onVerify: () => toggleVerifiedStatus(),
         onSplit: () => toggleSplitMode(),
-        onScore: () => scoreSession(currentSessionId, session.project_name, session.session_name),
+        onScore: () => SessionController.scoreSession(currentSessionId, session.project_name, session.session_name),
         onDarkMode: () => toggleDarkMode(),
         isSplitting: isSplitting
     });
@@ -1847,7 +1823,7 @@ window.deleteLabeling = deleteLabeling;
 window.duplicateLabeling = duplicateLabeling;
 window.selectLabeling = selectLabeling;
 window.deleteAllBouts = deleteAllBouts;
-window.scoreSession = scoreSession;
+window.scoreSession = SessionController.scoreSession;
 window.showTableView = showTableView;
 window.decideSession = decideSession;
 window.toggleSplitMode = toggleSplitMode;
