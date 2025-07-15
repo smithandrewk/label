@@ -172,6 +172,80 @@ class ModelController:
         except Exception as e:
             logging.error(f"error getting scoring status: {e}")
             return jsonify({'error': str(e)}), 500
+        
+    def get_gpu_status(self):
+        """Check if GPU is available for PyTorch"""
+        try:
+            gpu_available = self.model_service.is_gpu_available()
+            gpu_count = self.model_service.get_gpu_count()
+            gpu_name = self.model_service.get_gpu_name()
+            
+            return jsonify({
+                'gpu_available': gpu_available,
+                'gpu_count': gpu_count,
+                'gpu_name': gpu_name,
+                'cuda_version': self.model_service.get_cuda_version()
+            }), 200
+            
+        except Exception as e:
+            logging.error(f"error checking GPU status: {e}")
+            return jsonify({
+                'gpu_available': False,
+                'error': str(e)
+            }), 200
+
+    def score_session_with_model_gpu(self):
+        """Score a session using a specific model on GPU"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'no data provided'}), 400
+            
+            session_id = data.get('session_id')
+            model_id = data.get('model_id')
+            project_name = data.get('project_name')
+            session_name = data.get('session_name')
+            
+            if not all([session_id, model_id, project_name, session_name]):
+                return jsonify({'error': 'missing required fields: session_id, model_id, project_name, session_name'}), 400
+            
+            # check if GPU is available
+            if not self.model_service.is_gpu_available():
+                return jsonify({'error': 'GPU is not available on this system'}), 400
+            
+            logging.info(f"scoring session {session_id} with model {model_id} on GPU")
+            
+            # get full session info including project_path
+            try:
+                session_info = self.session_service.get_session_details(session_id)
+                if not session_info:
+                    return jsonify({'error': 'session not found'}), 404
+            except DatabaseError as e:
+                return jsonify({'error': str(e)}), 500
+            
+            project_path = session_info['project_path']
+            session_name = session_info['session_name']
+            
+            # delegate to model service for GPU scoring
+            scoring_result = self.model_service.score_session_with_model_gpu(
+                session_id, model_id, project_path, session_name
+            )
+            
+            logging.info(f"GPU scoring started with id: {scoring_result.get('scoring_id')}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'GPU scoring session {session_name} with model',
+                'scoring_id': scoring_result['scoring_id']
+            }), 200
+            
+        except DatabaseError as e:
+            logging.error(f"database error in score_session_with_model_gpu: {e}")
+            return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            logging.error(f"unexpected error in score_session_with_model_gpu: {e}")
+            traceback.print_exc()
+            return jsonify({'error': f'failed to start GPU scoring: {str(e)}'}), 500
 
 controller = None
 
@@ -202,3 +276,11 @@ def score_session_with_model():
 @models_bp.route('/api/scoring_status/<scoring_id>')
 def get_scoring_status(scoring_id):
     return controller.get_scoring_status(scoring_id)
+
+@models_bp.route('/api/gpu_status', methods=['GET'])
+def get_gpu_status():
+    return controller.get_gpu_status()
+
+@models_bp.route('/api/models/score_gpu', methods=['POST'])
+def score_session_with_model_gpu():
+    return controller.score_session_with_model_gpu()
