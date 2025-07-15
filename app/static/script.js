@@ -19,23 +19,6 @@ import SessionService from './js/services/sessionService.js';
 import { ActionButtonTemplates, ActionButtonHandlers } from './js/templates/actionButtonTemplates.js';
 import { SessionListTemplates, SessionListHandlers } from './js/templates/sessionListTemplates.js';
 
-async function fetchSession(projectId) {
-    try {
-        sessions = await ProjectService.fetchSessions(projectId);
-        
-        // Update the session table/list
-        updateSessionsList();
-        
-        // Update unified sidebar if function is available
-        if (window.updateSessionsSidebarList) {
-            window.updateSessionsSidebarList(sessions, projectId);
-        }
-        
-    } catch (error) {
-        console.error('Error fetching sessions:', error);
-    }
-}
-
 function checkUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const participantCode = urlParams.get('participant');
@@ -1411,7 +1394,7 @@ async function splitSession() {
         if (currentProjectId) {
             await ProjectController.fetchProjectSessions(currentProjectId);
         } else {
-            await fetchSession();
+            await ProjectController.fetchSessions();
         }
         
         showTableView();
