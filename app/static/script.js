@@ -375,7 +375,7 @@ async function pollScoringStatus(scoringId, sessionId, sessionName, deviceType =
     }, 1000); // Poll every second
 }
 
-async function createNewProject(formData) {
+async function createNewProject(formData) { // TODO: move to project service, or at least project controller
     try {
         const result = await ProjectService.createProject(formData);
         

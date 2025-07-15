@@ -34,6 +34,11 @@ class SessionService:
             with open(labels_json_path, 'r') as f:
                 labels_data = json.load(f)
             
+            # Ensure we always return a list
+            if not isinstance(labels_data, list):
+                logger.warning(f"labels.json for session {session['name']} contains non-list data: {type(labels_data)}")
+                return []
+            
             return labels_data
         except FileNotFoundError:
             logger.warning(f"labels.json not found for session {session['name']}, using empty bouts")
@@ -173,7 +178,11 @@ class SessionService:
                 logger.debug(f"Resampled data for session {session_name}")
                 logger.debug(f"Parsed {len(parent_bouts)} parent_bouts for single session {session_name}")
                 
-                return self.session_repo.insert_single_session(session_name, project_id, json.dumps(parent_bouts))
+                # Calculate start_ns and stop_ns for the whole session
+                start_ns = int(df['ns_since_reboot'].min())
+                stop_ns = int(df['ns_since_reboot'].max())
+                
+                return self.session_repo.insert_single_session(session_name, project_id, json.dumps(parent_bouts), start_ns, stop_ns)
 
             split_points = []
             for idx in gap_indices:
@@ -270,8 +279,12 @@ class SessionService:
                 if os.path.exists(labels_path):
                     shutil.copy(labels_path, os.path.join(new_dir, 'labels.json'))
                 
+                # Calculate start_ns and stop_ns for this segment
+                segment_start_ns = int(segment['ns_since_reboot'].min())
+                segment_stop_ns = int(segment['ns_since_reboot'].max())
+                
                 # Insert session into database using repository
-                result = self.session_repo.insert_single_session(new_name, project_id, json.dumps(segment_bouts[i]))
+                result = self.session_repo.insert_single_session(new_name, project_id, json.dumps(segment_bouts[i]), segment_start_ns, segment_stop_ns)
                 if result:  # Only add to new_sessions if insertion was successful
                     new_sessions.append(new_name)
             
@@ -297,7 +310,10 @@ class SessionService:
             # Fallback: insert original session
             try:
                 logger.info(f"Attempting fallback: inserting original session '{session_name}' without splitting")
-                return self.session_repo.insert_single_session(session_name, project_id, json.dumps(parent_bouts, indent=2))
+                # Calculate start_ns and stop_ns for the original session
+                fallback_start_ns = int(df['ns_since_reboot'].min())
+                fallback_stop_ns = int(df['ns_since_reboot'].max())
+                return self.session_repo.insert_single_session(session_name, project_id, json.dumps(parent_bouts, indent=2), fallback_start_ns, fallback_stop_ns)
             except Exception as fallback_error:
                 logger.error(
                     f"Fallback insertion also failed for session '{session_name}': {str(fallback_error)}", 
@@ -634,16 +650,22 @@ class SessionService:
                 created_sessions = []
                 
                 for session_data in new_sessions:
+                    # Extract start_ns and stop_ns from session_data and ensure they're integers
+                    start_ns = int(session_data.get('start_ns'))
+                    stop_ns = int(session_data.get('stop_ns'))
+                    
                     # Keep the same project_id
                     cursor.execute("""
-                        INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO sessions (project_id, session_name, status, keep, bouts, start_ns, stop_ns)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """, (
                         session_info['project_id'], 
                         session_data['name'], 
                         'Initial', 
                         session_info['keep'], 
-                        json.dumps(session_data['bouts'])
+                        json.dumps(session_data['bouts']),
+                        start_ns,
+                        stop_ns
                     ))
                     # Get the new session ID
                     child_id = cursor.lastrowid

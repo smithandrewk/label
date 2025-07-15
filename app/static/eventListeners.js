@@ -115,24 +115,12 @@ export function addEventListeners() {
             
             const projectName = document.getElementById('project-name').value;
             const participantCode = document.getElementById('project-participant').value;
-            const projectPathInput = document.getElementById('project-path');
+            const projectPath = document.getElementById('project-path').value;
             
-            if (projectPathInput.files.length === 0) {
-                alert('Please select a project folder');
-                return;
-            }
-            
-            const firstFile = projectPathInput.files[0];
-            const relativePath = firstFile.webkitRelativePath;
-            const folderName = relativePath.split('/')[0];
-            
-            // Since we can't get the absolute path in a web browser for security reasons,
-            // we'll need to use the File API to read the directory structure
             const formData = {
                 name: projectName,
                 participant: participantCode,
-                folderName: folderName,
-                files: Array.from(projectPathInput.files)
+                projectPath: projectPath,
             };
             
             // Send data to your backend

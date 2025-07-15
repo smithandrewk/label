@@ -259,11 +259,17 @@ class SessionController:
                 new_name = self.session_service.generate_unique_session_name(session_name, project_path, session_info['project_id'])
                 new_dir = os.path.join(project_path, new_name)
                 
+                # Calculate start_ns and stop_ns for this segment
+                segment_start_ns = int(segment['ns_since_reboot'].min())
+                segment_stop_ns = int(segment['ns_since_reboot'].max())
+                
                 os.makedirs(new_dir)
                 segment.to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
                 new_sessions.append({
                     'name': new_name,
-                    'bouts': segment_bouts[i]
+                    'bouts': segment_bouts[i],
+                    'start_ns': segment_start_ns,
+                    'stop_ns': segment_stop_ns
                 })
 
             # Copy original log file to new directories

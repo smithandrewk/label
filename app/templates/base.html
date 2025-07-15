@@ -51,9 +51,9 @@
                             <input type="text" class="form-control" id="project-participant" required>
                         </div>
                         <div class="mb-3">
-                            <label for="project-path" class="form-label">Project Folder</label>
-                            <input type="file" class="form-control" id="project-path" webkitdirectory directory multiple required>
-                            <div class="form-text">Select the folder containing your session directories</div>
+                            <label for="project-path" class="form-label">Project Path</label>
+                            <input type="text" class="form-control" id="project-path" required>
+                            <div class="form-text">Literally just put the path of the folder (has to be on the machine the server is running on). Sending files this big is just too slow for now.</div>
                         </div>
                         <button type="submit" class="btn btn-primary">Create and Upload</button>
                     </form>

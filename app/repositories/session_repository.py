@@ -41,7 +41,7 @@ class SessionRepository(BaseRepository):
         query = "UPDATE sessions SET bouts = %s WHERE session_id = %s"
         return self._execute_query(query, (bouts, session_id), commit=True)
 
-    def insert_single_session(self, session_name, project_id, bouts_json):
+    def insert_single_session(self, session_name, project_id, bouts_json, start_ns, stop_ns):
         """
         Insert a single session into the database.
         
@@ -49,17 +49,19 @@ class SessionRepository(BaseRepository):
             session_name: Name of the session
             project_id: ID of the project this session belongs to
             bouts_json: JSON string of bouts data
+            start_ns: Start timestamp in nanoseconds since reboot
+            stop_ns: Stop timestamp in nanoseconds since reboot
             
         Returns:
             list: List containing the session name if successful, empty list if failed
         """
         try:
             query = """
-                INSERT INTO sessions (project_id, session_name, status, keep, bouts)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO sessions (project_id, session_name, status, keep, bouts, start_ns, stop_ns)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
-            self._execute_query(query, (project_id, session_name, 'Initial', None, bouts_json), commit=True)
-            logger.debug(f"Successfully inserted single session '{session_name}' for project {project_id}")
+            self._execute_query(query, (project_id, session_name, 'Initial', None, bouts_json, start_ns, stop_ns), commit=True)
+            logger.debug(f"Successfully inserted single session '{session_name}' for project {project_id} (start_ns: {start_ns}, stop_ns: {stop_ns})")
             return [session_name]
         except Exception as e:
             logger.error(
