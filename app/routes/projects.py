@@ -7,7 +7,7 @@ import shutil
 from app.exceptions import DatabaseError
 from app.logging_config import get_logger
 import traceback
-
+import json
 from app.services.project_service import ProjectService
 from app.services.session_service import SessionService
 
@@ -32,43 +32,45 @@ class ProjectController:
     
     def upload_new_project(self):
         try:
-            if 'files' not in request.files:
-                return jsonify({'error': 'No files uploaded'}), 400
-            
             project_name = request.form.get('name')
             participant_code = request.form.get('participant')
-            folder_name = request.form.get('folderName')
+            project_path = request.form.get('projectPath')
             
-            if not all([project_name, participant_code, folder_name]):
+            if not all([project_name, participant_code, project_path]):
                 return jsonify({'error': 'Missing required fields: name, participant, or folderName'}), 400 
             
-            uploaded_files = request.files.getlist('files')
-
-            if not uploaded_files:
-                return jsonify({'error': 'No files uploaded'}), 400
-            
-            logger.info(f"Received {len(uploaded_files)} files for upload")
-
             project_result = self.project_service.create_project_with_files(
-                project_name, participant_code, uploaded_files, DATA_DIR
+                project_name, participant_code, project_path, DATA_DIR
             )
+
             logger.info(f"Project upload result: {project_result}")
             project_id = project_result['project_id']
             participant_id = project_result['participant_id']
             new_project_path = project_result['project_path']
 
             sessions = self.project_service.discover_project_sessions(new_project_path)
-            logger.info(f"Discovered {len(sessions)} sessions in project {project_name} at {new_project_path}")
+            logger.info(f"Discovered {len(sessions) if sessions else 0} sessions in project {project_name} at {new_project_path}")
+            
+            # Ensure sessions is always a list
+            if not isinstance(sessions, list):
+                logger.warning(f"Sessions discovery returned non-list: {type(sessions)}, using empty list")
+                sessions = []
+            
             print(sessions)
             upload_id = str(uuid.uuid4())
             logger.info(f"Generated upload ID: {upload_id}")
             
-            import json
             skipped_sessions = self.session_service.validate_sessions(sessions, new_project_path)
             sessions = [s for s in sessions if s['name'] not in skipped_sessions]
             for session in sessions:
                 logger.info(f"Processing session: {session['name']}")
                 bouts = self.session_service.load_bouts_from_labels_json(new_project_path, session)
+                
+                # Ensure bouts is always a list to prevent iteration errors
+                if not isinstance(bouts, list):
+                    logger.warning(f"Bouts for session {session['name']} is not a list: {type(bouts)}, using empty list")
+                    bouts = []
+                
                 for bout in bouts:
                     if 'label' not in bout:
                         bout['label'] = 'smoking'
@@ -85,8 +87,7 @@ class ProjectController:
                 'participant_id': participant_id,
                 'central_path': new_project_path,
                 'upload_id': upload_id,
-                'sessions_found': len(sessions),
-                'files_uploaded': project_result['files_processed']
+                'sessions_found': len(sessions)
             })
             
         except Exception as e:

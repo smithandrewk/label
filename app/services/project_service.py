@@ -96,14 +96,14 @@ class ProjectService:
         """Delete participant and all associated data (projects, sessions, lineage)"""
         return self.participant_repo.delete_cascade(participant_id)
 
-    def create_project_with_files(self, project_name, participant_code, uploaded_files, data_dir):
+    def create_project_with_files(self, project_name, participant_code, project_path, data_dir):
         """
         Create a new project with uploaded files, handling participant creation and file storage
         
         Args:
             project_name: Name of the project
             participant_code: Code for the participant
-            uploaded_files: List of uploaded file objects
+            project_path: Path to the project directory
             data_dir: Base directory for storing project data
             
         Returns:
@@ -129,25 +129,14 @@ class ProjectService:
             # Create project directory and save files
             os.makedirs(new_project_path, exist_ok=True)
             
-            # Process uploaded files and recreate directory structure
-            for file in uploaded_files:
-                if file.filename and file.filename != '':
-                    # Get relative path within the selected folder
-                    relative_path = file.filename
-                    if '/' in relative_path:
-                        # Remove the root folder name from the path since we're creating our own structure
-                        path_parts = relative_path.split('/')
-                        if len(path_parts) > 1:
-                            relative_path = '/'.join(path_parts[1:])  # Remove the first part (root folder name)
-                    
-                    # Create full file path
-                    file_path = os.path.join(new_project_path, relative_path)
-                    
-                    # Create directories if they don't exist
-                    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                    
-                    # Save the file
-                    file.save(file_path)
+            # Copy the provided project path to the new project directory
+            if not os.path.exists(project_path):
+                raise DatabaseError(f"Provided project path does not exist: {project_path}")
+            if not os.path.isdir(project_path):
+                raise DatabaseError(f"Provided project path is not a directory: {project_path}")
+            # Copy the entire directory structure from the provided path
+            shutil.copytree(project_path, new_project_path, dirs_exist_ok=True)
+            logger.info(f"Created project directory at {new_project_path}")
             
             # Create project record in database
             created_project = self.insert_project(project_name, participant_id, new_project_path)
@@ -155,8 +144,7 @@ class ProjectService:
             return {
                 'project_id': created_project['project_id'],
                 'participant_id': participant_id,
-                'project_path': new_project_path,
-                'files_processed': len([f for f in uploaded_files if f.filename and f.filename != ''])
+                'project_path': new_project_path
             }
             
         except Exception as e:

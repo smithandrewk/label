@@ -279,12 +279,7 @@ export class ProjectService {
             const uploadData = new FormData();
             uploadData.append('name', formData.name);
             uploadData.append('participant', formData.participant);
-            uploadData.append('folderName', formData.folderName);
-            
-            // Add all files to the FormData
-            formData.files.forEach((file) => {
-                uploadData.append('files', file);
-            });
+            uploadData.append('projectPath', formData.projectPath);
             
             // Call the API to upload the project
             const result = await ProjectAPI.createProject(uploadData);
