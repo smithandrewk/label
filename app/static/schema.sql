@@ -44,3 +44,15 @@ CREATE TABLE session_lineage (
     FOREIGN KEY (child_session_id) REFERENCES sessions(session_id),
     FOREIGN KEY (parent_session_id) REFERENCES sessions(session_id)
 );
+
+CREATE TABLE models (
+    model_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    py_filename VARCHAR(255) NOT NULL,
+    pt_filename VARCHAR(255) NOT NULL,
+    class_name VARCHAR(255) NOT NULL,
+    is_active TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
