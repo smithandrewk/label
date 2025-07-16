@@ -1,5 +1,5 @@
 import * as eventListeners from './eventListeners.js';
-import { ensureSessionBoutsIsArray } from './helpers.js'
+import { ensureSessionBoutsIsArray, generateDefaultColor } from './js/helpers.js'
 import ProjectAPI from './js/api/projectAPI.js';
 import ProjectService from './js/services/projectService.js';
 import ProjectController from './js/controllers/projectController.js';
@@ -10,7 +10,6 @@ import {
     showTableView, 
     showNotification,
     showBulkUploadForm,
-    displayBulkPreview,
     hideModal,
     resetForm
 } from './js/ui/uiUtils.js';
@@ -658,7 +657,7 @@ if (labelingModal) {
     labelingModal.addEventListener('shown.bs.modal', function() {
         console.log('Labeling modal opened');
         // Fetch and display labelings when the modal is opened
-        fetchAndDisplayLabelings(currentProjectId);
+        ProjectController.fetchAndDisplayLabelings(currentProjectId);
     });
 }
 
@@ -675,7 +674,7 @@ async function createNewLabeling() {
             labelings = updatedLabelings;
             
             // Refresh the labelings list to show the new labeling
-            await fetchAndDisplayLabelings(currentProjectId);
+            await ProjectController.fetchAndDisplayLabelings(currentProjectId);
             
             // Select the new labeling immediately
             selectLabeling(labelingName.trim());
@@ -718,71 +717,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 });
-async function fetchAndDisplayLabelings(projectId) {
-    try {
-        labelings = await ProjectAPI.fetchLabelings(projectId);
-        labelingsList = document.getElementById('available-labelings-list');
-        
-        // Reset current labeling header when refreshing the list
-        updateCurrentLabelingHeader();
-        
-        // Clear existing content except the plus icon
-        const plusIcon = labelingsList.querySelector('.fa-plus');
-        labelingsList.innerHTML = '';
-        if (plusIcon) {
-            labelingsList.appendChild(plusIcon);
-        }
-        
-        console.log('Parsed labelings:', labelings);
-        console.log(typeof(labelings))
-        // Display each labeling
-        if (labelings && labelings.length > 0) {
-            labelings.forEach((labeling, index) => {
-                console.log(typeof(labeling))
-                console.log('Labeling item:', labeling.name);
-                const currentColor = labeling.color || generateDefaultColor(index);
-                const labelingName = labeling.name;
-                const labelingItem = document.createElement('div');
-                labelingItem.className = 'labeling-item d-flex justify-content-between align-items-center py-1';
 
-                labelingItem.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <div class="color-picker-container me-2" style="position: relative;">
-                            <div class="color-circle" style="width: 20px; height: 20px; border-radius: 50%; background-color: ${currentColor}; border: 1px solid #ccc; cursor: pointer;" onclick="openColorPicker('${labelingName.replace(/'/g, "\\'")}', this)"></div>
-                            <input type="color" class="color-picker" value="${currentColor}" style="position: absolute; opacity: 0; width: 20px; height: 20px; cursor: pointer;" onchange="updateLabelingColor('${labelingName.replace(/'/g, "\\'")}', this.value, this)">
-                        </div>
-                        <span>${labelingName}</span>
-                    </div>
-                    <div class="labeling-actions d-flex gap-1">
-                        <button class="btn btn-sm btn-outline-secondary" onclick="editLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Edit Labeling">
-                            <i class="bi bi-pencil"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-info" onclick="duplicateLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Duplicate Labeling">
-                            <i class="bi bi-files"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Delete Labeling">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="selectLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;">
-                            Select
-                        </button>
-                    </div>
-                `;
-                labelingsList.appendChild(labelingItem);
-            });
-        } else {
-            const noLabelings = document.createElement('div');
-            noLabelings.className = 'text-muted small';
-            noLabelings.textContent = 'No labelings available';
-            labelingsList.appendChild(noLabelings);
-        }
-        
-    } catch (error) {
-        console.error('Error fetching labelings:', error);
-        const labelingsList = document.getElementById('available-labelings-list');
-        labelingsList.innerHTML = '<div class="text-danger small">Error loading labelings</div>';
-    }
-}
 
 function getLabelingFromLabelingName(labelingName) {
     if (!labelings || labelings.length === 0) {
@@ -1630,7 +1565,7 @@ async function createOrUpdateModelLabeling(labelingName) {
             // Update the labelings display if modal is open
             const labelingModal = document.getElementById('labelingModal');
             if (labelingModal && labelingModal.classList.contains('show')) {
-                await fetchAndDisplayLabelings(currentProjectId);
+                await ProjectController.fetchAndDisplayLabelings(currentProjectId);
             }
         } else {
             console.log(`Labeling ${labelingName} already exists, no need to create`);
@@ -1639,16 +1574,6 @@ async function createOrUpdateModelLabeling(labelingName) {
     } catch (error) {
         console.error('Error creating/updating model labeling:', error);
     }
-}
-
-// Helper function to generate default colors for labelings
-function generateDefaultColor(index) {
-    const colors = [
-        '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-        '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-        '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D2B4DE'
-    ];
-    return colors[index % colors.length];
 }
 
 // Function to open color picker when circle is clicked
@@ -1724,7 +1649,7 @@ async function editLabeling(labelingName) {
             }
             
             // Refresh the labelings list to show the updated name
-            await fetchAndDisplayLabelings(currentProjectId);
+            await ProjectController.fetchAndDisplayLabelings(currentProjectId);
             
             alert(`Labeling renamed from "${labelingName}" to "${newName.trim()}" successfully!`);
             
@@ -1773,7 +1698,7 @@ async function duplicateLabeling(labelingName) {
             }
             
             // Refresh the labelings list to show the new duplicate
-            await fetchAndDisplayLabelings(currentProjectId);
+            await ProjectController.fetchAndDisplayLabelings(currentProjectId);
             
             // Select the new labeling immediately (this will now show the duplicated bouts)
             selectLabeling(newName.trim());
@@ -1793,9 +1718,7 @@ async function duplicateLabeling(labelingName) {
 window.visualizeSession = visualizeSession;
 window.openColorPicker = openColorPicker;
 window.updateLabelingColor = updateLabelingColor;
-window.fetchAndDisplayLabelings = fetchAndDisplayLabelings;
 window.editLabeling = editLabeling;
-window.deleteLabeling = ProjectController.deleteLabeling;
 window.duplicateLabeling = duplicateLabeling;
 window.selectLabeling = selectLabeling;
 window.deleteAllBouts = deleteAllBouts;
