@@ -157,5 +157,35 @@ export class ProjectController {
             labelingsList.innerHTML = '<div class="text-danger small">Error loading labelings</div>';
         }
     }
+
+    /**
+     * Create a new labeling with user input and update UI
+     */
+    static async createNewLabeling() {
+        // Show a prompt to get the new labeling name
+        const labelingName = prompt('Enter a name for the new labeling:');
+        
+        if (labelingName && labelingName.trim()) {
+            try {
+                const { result, updatedLabelings } = await ProjectService.createLabeling(window.currentProjectId, labelingName.trim());
+                console.log('New labeling created:', result);
+                
+                // Update global labelings array
+                window.labelings = updatedLabelings;
+                
+                // Refresh the labelings list to show the new labeling
+                await ProjectController.fetchAndDisplayLabelings(window.currentProjectId);
+                
+                // Select the new labeling immediately
+                if (window.selectLabeling) {
+                    window.selectLabeling(labelingName.trim());
+                }
+                
+            } catch (error) {
+                console.error('Error creating new labeling:', error);
+                alert('Failed to create new labeling. Please try again.');
+            }
+        }
+    }
 }
 export default ProjectController;

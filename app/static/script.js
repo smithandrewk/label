@@ -661,30 +661,7 @@ if (labelingModal) {
     });
 }
 
-async function createNewLabeling() {
-    // Show a prompt to get the new labeling name
-    const labelingName = prompt('Enter a name for the new labeling:');
-    
-    if (labelingName && labelingName.trim()) {
-        try {
-            const { result, updatedLabelings } = await ProjectService.createLabeling(currentProjectId, labelingName.trim());
-            console.log('New labeling created:', result);
-            
-            // Update global labelings array
-            labelings = updatedLabelings;
-            
-            // Refresh the labelings list to show the new labeling
-            await ProjectController.fetchAndDisplayLabelings(currentProjectId);
-            
-            // Select the new labeling immediately
-            selectLabeling(labelingName.trim());
-            
-        } catch (error) {
-            console.error('Error creating new labeling:', error);
-            alert('Failed to create new labeling. Please try again.');
-        }
-    }
-}
+
 // You can also initialize it in the DOMContentLoaded event listener
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize the global variable
@@ -695,7 +672,7 @@ document.addEventListener('DOMContentLoaded', function() {
         labelingsList.addEventListener('click', function(event) {
             if (event.target.classList.contains('fa-plus')) {
                 event.preventDefault();
-                createNewLabeling();
+                ProjectController.createNewLabeling();
             }
         });
         
