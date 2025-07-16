@@ -26,3 +26,8 @@ export function generateDefaultColor(index) {
     ];
     return colors[index % colors.length];
 }
+
+// Convert from pixel positions to data values for Plotly visualizations
+export function pixelToData(pixelX, xAxis) {
+    return xAxis.range[0] + (pixelX - xAxis._offset) * (xAxis.range[1] - xAxis.range[0]) / xAxis._length;
+}

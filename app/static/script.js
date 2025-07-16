@@ -1,5 +1,5 @@
 import * as eventListeners from './eventListeners.js';
-import { ensureSessionBoutsIsArray, generateDefaultColor } from './js/helpers.js'
+import { ensureSessionBoutsIsArray, generateDefaultColor, pixelToData } from './js/helpers.js'
 import ProjectAPI from './js/api/projectAPI.js';
 import ProjectService from './js/services/projectService.js';
 import ProjectController from './js/controllers/projectController.js';
@@ -69,92 +69,7 @@ function checkUrlParameters() {
     }
 }
 
-// Add to your script.js
-async function initializeProjects() {
-    console.log('Initializing projects...');
-    try {
-        const projects = await ProjectAPI.fetchProjects();
 
-        // Populate the dropdown
-        const dropdownMenu = document.getElementById('project-dropdown-menu');
-        dropdownMenu.innerHTML = ''; // Clear existing items
-        
-        projects.forEach(project => {
-            const li = document.createElement('li');
-            const a = document.createElement('a');
-            a.className = 'dropdown-item d-flex justify-content-between align-items-center';
-            a.href = '#';
-            a.dataset.projectId = project.project_id;
-            
-            // Create project name span
-            const nameSpan = document.createElement('span');
-            nameSpan.textContent = project.project_name;
-            nameSpan.style.flexGrow = '1';
-            nameSpan.onclick = function(e) {
-                e.preventDefault();
-                currentProjectId = project.project_id; // Store selected project ID
-                
-                // Navigate to sessions page with the selected project
-                window.location.href = `/sessions?project_id=${project.project_id}`;
-            };
-            
-            // Create delete button
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'btn btn-sm btn-outline-danger ms-2';
-            deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
-            deleteBtn.title = 'Delete Project';
-            deleteBtn.onclick = function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                deleteProject(project.project_id, project.project_name);
-            };
-            
-            a.appendChild(nameSpan);
-            a.appendChild(deleteBtn);
-            li.appendChild(a);
-            dropdownMenu.appendChild(li);
-        });
-
-        // Check sessionStorage for preserved project selection if currentProjectId is not set
-        if (!currentProjectId) {
-            const storedProjectId = sessionStorage.getItem('currentProjectId');
-            if (storedProjectId) {
-                currentProjectId = parseInt(storedProjectId);
-            }
-        }
-        
-        // Select first project by default ONLY if no project is currently selected
-        if (projects.length > 0 && !currentProjectId) {
-            const firstProject = dropdownMenu.querySelector('.dropdown-item');
-            firstProject.classList.add('active');
-            firstProject.setAttribute('aria-current', 'page');
-            currentProjectId = projects[0].project_id;
-            
-            // Update current project pill
-            updateCurrentProjectPill(projects[0].project_name);
-            
-            ProjectController.fetchProjectSessions(projects[0].project_id);
-        } else if (currentProjectId) {
-            // If we have a current project, make sure it's marked as active in the dropdown
-            const currentProjectItem = dropdownMenu.querySelector(`[data-project-id="${currentProjectId}"]`);
-            if (currentProjectItem) {
-                currentProjectItem.classList.add('active');
-                currentProjectItem.setAttribute('aria-current', 'page');
-                
-                // Find the project data to update the pill
-                const currentProject = projects.find(p => p.project_id === currentProjectId);
-                if (currentProject) {
-                    updateCurrentProjectPill(currentProject.project_name);
-                    
-                    // Fetch sessions for the restored project
-                    ProjectController.fetchProjectSessions(currentProjectId);
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Error initializing projects:', error);
-    }
-}
 /*
 OTHER
 */
@@ -317,28 +232,7 @@ async function pollScoringStatus(scoringId, sessionId, sessionName, deviceType =
     }, 1000); // Poll every second
 }
 
-function createNewProject(formData) { // TODO: move to project service, or at least project controller
-    // Hide modal and reset form
-    hideModal('createProjectModal');
 
-    // Start project creation in background
-    ProjectService.createProject(formData)
-        .then(result => {
-            console.log("Project created:", result);
-        })
-        .catch(error => {
-            console.error('Error creating project:', error);
-        });
-        
-    console.log('Project creation started in background:', formData);
-    // Refresh projects list if we're on the projects page
-    setTimeout(() => {
-        console.log('Refreshing projects list after creation');
-        initializeProjects();
-        location.reload(); // Refresh the page to show updated projects
-    }, 1000);
-    resetForm('create-project-form');
-}
 
 // Show visualization view
 async function visualizeSession(sessionId) {
@@ -646,11 +540,6 @@ async function visualizeSession(sessionId) {
 
 
 }
-// Convert from pixel positions to data values
-function pixelToData(pixelX, xAxis) {
-    return xAxis.range[0] + (pixelX - xAxis._offset) * (xAxis.range[1] - xAxis.range[0]) / xAxis._length;
-}
-
 // When opening the modal
 const labelingModal = document.getElementById('labelingModal');
 if (labelingModal) {
@@ -1423,7 +1312,7 @@ async function deleteProject(projectId, projectName) {
         );
         
         // Refresh the projects list
-        await initializeProjects();
+        await ProjectController.initializeProjects();
         
         // If the deleted project was currently selected, clear the session view
         if (currentProjectId === projectId) {
@@ -1639,64 +1528,15 @@ async function editLabeling(labelingName) {
     }
 }
 
-// Function to duplicate a labeling with all its bouts
-async function duplicateLabeling(labelingName) {
-    // Show confirmation dialog and get new name
-    const confirmed = confirm(`Are you sure you want to duplicate the labeling "${labelingName}"?`);
-    if (!confirmed) {
-        return;
-    }
-    
-    const newName = prompt(`Enter a name for the duplicate labeling:`, `${labelingName} Copy`);
-    
-    if (newName && newName.trim() && newName.trim() !== labelingName) {
-        try {
-            // Use the service method that handles session refresh
-            const { result, updatedLabelings, refreshedSessionData } = await ProjectService.duplicateLabelingWithSessionRefresh(
-                currentProjectId, 
-                labelingName, 
-                newName.trim(), 
-                currentSessionId
-            );
-            
-            console.log('Labeling duplicated successfully:', result);
-            
-            // Update global labelings array
-            labelings = updatedLabelings;
-            
-            // Use overlay manager to handle session data refresh
-            if (refreshedSessionData) {
-                window.OverlayManager.handleSessionDataRefresh({
-                    refreshedSessionData,
-                    dragContext,
-                    currentLabelingName,
-                    currentSessionId
-                });
-            }
-            
-            // Refresh the labelings list to show the new duplicate
-            await ProjectController.fetchAndDisplayLabelings(currentProjectId);
-            
-            // Select the new labeling immediately (this will now show the duplicated bouts)
-            selectLabeling(newName.trim());
-            
-            alert(`Labeling "${labelingName}" duplicated as "${newName.trim()}" successfully! All bouts have been copied.`);
-            
-        } catch (error) {
-            console.error('Error duplicating labeling:', error);
-            alert('Failed to duplicate labeling: ' + error.message);
-        }
-    } else if (newName && newName.trim() === labelingName) {
-        alert('New name must be different from the original name.');
-    }
-}
+
 
 // Make functions available globally for inline event handlers
 window.visualizeSession = visualizeSession;
 window.openColorPicker = openColorPicker;
 window.updateLabelingColor = updateLabelingColor;
 window.editLabeling = editLabeling;
-window.duplicateLabeling = duplicateLabeling;
+window.duplicateLabeling = ProjectController.duplicateLabeling;
+window.deleteLabeling = ProjectController.deleteLabeling;
 window.selectLabeling = selectLabeling;
 window.deleteAllBouts = deleteAllBouts;
 window.scoreSession = SessionController.scoreSession;
@@ -1707,7 +1547,8 @@ window.toggleVerifiedStatus = toggleVerifiedStatus;
 window.splitSession = splitSession;
 window.createNewBout = createNewBout;
 window.showCreateProjectForm = showCreateProjectForm;
-window.createNewProject = createNewProject;
+window.createNewProject = ProjectController.createNewProject;
+window.createBulkUpload = ProjectController.createBulkUpload;
 window.showBulkUploadForm = showBulkUploadForm;
 window.deleteProject = deleteProject;
 window.navigateToNextSession = navigateToNextSession;
@@ -1723,38 +1564,7 @@ window.updateOverlayPositions = updateOverlayPositions;
 window.hideOverlay = hideOverlay;
 window.createBoutOverlays = createBoutOverlays;
 
-function createBulkUpload(bulkUploadFolderPath) {
-    // Show progress UI
-    const formElement = document.getElementById('bulk-upload-form');
-    const progressElement = document.getElementById('bulk-upload-progress');
-    formElement.style.display = 'none';
-    progressElement.style.display = 'block';
-    
-    
-    // Use fetch API to send data to your backend
-    const formData = new FormData();
-    formData.append('bulkUploadFolderPath', bulkUploadFolderPath);
-    
-    fetch('/api/projects/bulk-upload', {
-        method: 'POST',
-        body: formData
-    });
-    // Close the modal after starting the upload
-    const bulkUploadModal = document.getElementById('bulkUploadModal');
-    if (bulkUploadModal) {
-        const modal = bootstrap.Modal.getInstance(bulkUploadModal);
-        if (modal) {
-            modal.hide();
-        }
-    }
-    // Reload the projects list to reflect the new uploads and refresh page
-    initializeProjects().then(() => {
-        location.reload(); // Refresh the page to show updated projects
-    }).catch(error => {
-        console.error('Error during bulk upload:', error);
-        alert('Failed to start bulk upload: ' + error.message);
-    });
-}
+
 
 // Bulk upload form event listeners
 document.addEventListener('DOMContentLoaded', function() {
@@ -1767,7 +1577,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const bulkUploadFolderPath = document.getElementById('bulk-upload-folder').value;
             
             console.log('Starting bulk upload for folder:', bulkUploadFolderPath);
-            createBulkUpload(bulkUploadFolderPath);
+            ProjectController.createBulkUpload(bulkUploadFolderPath);
         });
     }
     
@@ -1788,7 +1598,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-initializeProjects();
+ProjectController.initializeProjects();
 eventListeners.addEventListeners();
 checkUrlParameters();
 checkUrlParameters();
