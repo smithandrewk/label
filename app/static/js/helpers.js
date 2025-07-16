@@ -31,3 +31,38 @@ export function generateDefaultColor(index) {
 export function pixelToData(pixelX, xAxis) {
     return xAxis.range[0] + (pixelX - xAxis._offset) * (xAxis.range[1] - xAxis.range[0]) / xAxis._length;
 }
+
+// Plotly layout configurations
+export function createDarkLayout(shapes = []) {
+    return {
+        xaxis: { 
+            title: 'Timestamp', 
+            rangeslider: { visible: false },
+            color: '#ffffff',
+            gridcolor: '#444444',
+            zerolinecolor: '#666666'
+        },
+        yaxis: { 
+            title: 'Acceleration (m/s²)',
+            color: '#ffffff',
+            gridcolor: '#444444',
+            zerolinecolor: '#666666'
+        },
+        showlegend: true,
+        shapes: shapes,
+        paper_bgcolor: '#4a4a4a',
+        plot_bgcolor: '#4a4a4a',
+        font: {
+            color: '#ffffff'
+        }
+    };
+}
+
+export function createLightLayout(shapes = []) {
+    return {
+        xaxis: { title: 'Timestamp', rangeslider: { visible: false } },
+        yaxis: { title: 'Acceleration (m/s²)'},
+        showlegend: true,
+        shapes: shapes
+    };
+}

@@ -110,7 +110,7 @@ function renderParticipants() {
                                             <button class="btn btn-sm btn-outline-secondary" onclick="showChangeParticipantModal(${projectId}, '${escapedProjectName}', '${escapedParticipantCode}'); return false;" title="Change participant">
                                                 <i class="fa-solid fa-user"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteProject(${projectId}, '${escapedProjectName}'); return false;" title="Delete project">
+                                            <button class="btn btn-sm btn-outline-danger" onclick="window.deleteProject(${projectId}, '${escapedProjectName}'); return false;" title="Delete project">
                                                 <i class="fa-solid fa-trash"></i>
                                             </button>
                                         </div>

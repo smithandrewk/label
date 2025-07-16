@@ -1,6 +1,10 @@
 import ProjectService from '../services/projectService.js';
 import { generateDefaultColor } from '../helpers.js';
 import ProjectAPI from '../api/projectAPI.js';
+import { 
+    updateCurrentProjectPill
+} from '../ui/uiUtils.js';
+import SessionService from '../services/sessionService.js';
 
 export class ProjectController {
     /**
@@ -299,9 +303,7 @@ export class ProjectController {
                 deleteBtn.onclick = function(e) {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (window.deleteProject) {
-                        window.deleteProject(project.project_id, project.project_name);
-                    }
+                    deleteProject(project.project_id, project.project_name);
                 };
                 
                 a.appendChild(nameSpan);
@@ -410,6 +412,216 @@ export class ProjectController {
         } else if (newName && newName.trim() === labelingName) {
             alert('New name must be different from the original name.');
         }
+    }
+
+    // Delete project function
+    static async deleteProject(projectId, projectName) {
+        // Show confirmation dialog
+        const confirmDelete = confirm(
+            `Are you sure you want to delete the project "${projectName}"?\n\n` +
+            `This will permanently delete:\n` +
+            `• All sessions in this project\n` +
+            `• All data files and directories\n` +
+            `• The participant record (if no other projects exist)\n\n` +
+            `This action cannot be undone.`
+        );
+        
+        if (!confirmDelete) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/project/${projectId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to delete project');
+            }
+            
+            const result = await response.json();
+            
+            // Show success message
+            alert(
+                `Project deleted successfully!\n\n` +
+                `Project: ${result.project_name}\n` +
+                `Participant: ${result.participant_code}\n` +
+                `Sessions deleted: ${result.sessions_deleted}\n` +
+                `Directory deleted: ${result.directory_deleted ? 'Yes' : 'No'}\n` +
+                `Participant deleted: ${result.participant_deleted ? 'Yes' : 'No'}`
+            );
+            
+            // Refresh the projects list
+            await ProjectController.initializeProjects();
+            
+            // If the deleted project was currently selected, clear the session view
+            if (currentProjectId === projectId) {
+                currentProjectId = null;
+                document.getElementById('sessions-table-body').innerHTML = '';
+                window.showTableView(); // Go back to table view if in visualization
+            }
+            
+            updateCurrentProjectPill();
+            
+        } catch (error) {
+            console.error('Error deleting project:', error);
+            alert(`Failed to delete project: ${error.message}`);
+        }
+    }
+    /**
+     * Edit (rename) a labeling
+     * @param {string} labelingName - The current name of the labeling to rename
+     */
+    static async editLabeling(labelingName) {
+        const newName = prompt(`Enter a new name for labeling "${labelingName}":`, labelingName);
+        
+        if (newName && newName.trim() && newName.trim() !== labelingName) {
+            try {
+                const { result, shouldUpdateCurrentLabeling, newCurrentLabelingName, updatedLabelings } = 
+                    await ProjectService.renameLabeling(window.currentProjectId, labelingName, newName.trim(), window.currentLabelingName);
+                
+                console.log('Labeling renamed successfully:', result);
+                
+                // Update global labelings array
+                window.labelings = updatedLabelings;
+                
+                // Update current labeling selection if needed
+                if (shouldUpdateCurrentLabeling) {
+                    window.currentLabelingName = newCurrentLabelingName;
+                    if (window.updateCurrentLabelingHeader) {
+                        window.updateCurrentLabelingHeader(newCurrentLabelingName);
+                    }
+                }
+                
+                // Refresh the labelings list to show the updated name
+                await ProjectController.fetchAndDisplayLabelings(window.currentProjectId);
+                
+                alert(`Labeling renamed from "${labelingName}" to "${newName.trim()}" successfully!`);
+                
+            } catch (error) {
+                console.error('Error renaming labeling:', error);
+                alert('Failed to rename labeling: ' + error.message);
+            }
+        } else if (newName && newName.trim() === labelingName) {
+            alert('New name must be different from the current name.');
+        }
+    }
+
+    /**
+     * Create or update labeling for model-generated bouts
+     * @param {string} labelingName - The name of the labeling to create or update
+     */
+    static async createOrUpdateModelLabeling(labelingName) {
+        try {
+            console.log(`Creating/updating labeling: ${labelingName} for project ${window.currentProjectId}`);
+            
+            const { created, labeling, updatedLabelings } = await ProjectService.createOrUpdateModelLabeling(
+                window.currentProjectId, 
+                labelingName, 
+                window.labelings
+            );
+            
+            if (created) {
+                console.log('New model labeling created:', labeling);
+                
+                // Update global labelings array
+                window.labelings = updatedLabelings;
+                
+                // Update the labelings display if modal is open
+                const labelingModal = document.getElementById('labelingModal');
+                if (labelingModal && labelingModal.classList.contains('show')) {
+                    await ProjectController.fetchAndDisplayLabelings(window.currentProjectId);
+                }
+            } else {
+                console.log(`Labeling ${labelingName} already exists, no need to create`);
+            }
+            
+        } catch (error) {
+            console.error('Error creating/updating model labeling:', error);
+        }
+    }
+
+    /**
+     * Update labeling color with immediate UI feedback and error handling
+     * @param {string} labelingName - The name of the labeling to update
+     * @param {string} newColor - The new color value
+     * @param {HTMLElement} colorPickerElement - The color picker element for UI updates
+     */
+    static async updateLabelingColor(labelingName, newColor, colorPickerElement) {
+        try {
+            // Update the visual circle immediately for better UX
+            const colorCircle = colorPickerElement.parentElement.querySelector('.color-circle');
+            if (colorCircle) {
+                colorCircle.style.backgroundColor = newColor;
+            }
+            
+            // Update color via service layer
+            const { result, updatedLabelings } = await ProjectService.updateLabelingColor(window.currentProjectId, labelingName, newColor);
+            console.log(`Color updated for labeling "${labelingName}" to ${newColor}`);
+            
+            // Update global labelings array
+            window.labelings = updatedLabelings;
+            
+            // If we're in visualization view, update the overlays to show only bouts matching this labeling
+            if (window.dragContext.currentSession && window.dragContext.currentSession.bouts) {
+                window.OverlayManager.updateOverlaysForLabelingChange(window.dragContext.currentSession, window.currentLabelingName);
+            }
+            
+            // Update current labeling header color if this is the selected labeling
+            const currentLabelingNameElement = document.getElementById('current-labeling-name');
+            if (labelingName == window.currentLabelingName && currentLabelingNameElement) {
+                currentLabelingNameElement.innerHTML = `
+                    <div class="color-circle me-1" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${newColor}; border: 1px solid #ccc; display: inline-block;"></div>
+                    ${labelingName}
+                `;
+            }
+
+        } catch (error) {
+            console.error('Error updating labeling color:', error);
+            // Revert the visual change on error
+            const colorCircle = colorPickerElement.parentElement.querySelector('.color-circle');
+            if (colorCircle) {
+                // Try to find the original color from the labelings array
+                const originalLabeling = window.labelings.find(l => l.name === labelingName);
+                if (originalLabeling) {
+                    colorCircle.style.backgroundColor = originalLabeling.color;
+                }
+            }
+        }
+    }
+
+    static navigateToNextSession() {
+        const nextSession = SessionService.getNextSession(sessions, currentSessionId);
+        
+        if (!nextSession) {
+            console.log('No next session available');
+            if (SessionService.getFilteredSessions(sessions).length === 0) {
+                window.showTableView();
+            }
+            return;
+        }
+        
+        console.log(`Navigating to next session: ${nextSession.session_name}`);
+        window.visualizeSession(nextSession.session_id);
+    }
+
+    static navigateToPreviousSession() {
+        const prevSession = SessionService.getPreviousSession(sessions, currentSessionId);
+        
+        if (!prevSession) {
+            console.log('No previous session available');
+            if (SessionService.getFilteredSessions(sessions).length === 0) {
+                window.showTableView();
+            }
+            return;
+        }
+        
+        console.log(`Navigating to previous session: ${prevSession.session_name}`);
+        window.visualizeSession(prevSession.session_id);
     }
 }
 

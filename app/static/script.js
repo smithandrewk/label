@@ -1,7 +1,6 @@
 import * as eventListeners from './eventListeners.js';
-import { ensureSessionBoutsIsArray, generateDefaultColor, pixelToData } from './js/helpers.js'
+import { ensureSessionBoutsIsArray, generateDefaultColor, pixelToData, createDarkLayout, createLightLayout } from './js/helpers.js'
 import ProjectAPI from './js/api/projectAPI.js';
-import ProjectService from './js/services/projectService.js';
 import ProjectController from './js/controllers/projectController.js';
 import { 
     updateCurrentProjectPill, 
@@ -192,7 +191,7 @@ async function pollScoringStatus(scoringId, sessionId, sessionName, deviceType =
                             console.log(`Creating/updating labeling: ${modelLabelingName}`);
                             
                             if (modelLabelingName && currentProjectId) {
-                                await createOrUpdateModelLabeling(modelLabelingName);
+                                await ProjectController.createOrUpdateModelLabeling(modelLabelingName);
                                 // Automatically select the new model labeling to show the results
                                 selectLabeling(modelLabelingName);
                             }
@@ -432,34 +431,8 @@ async function visualizeSession(sessionId) {
         });
     });
 
-    const darkLayout = {
-        xaxis: { title: 'Timestamp', rangeslider: { visible: false } },
-        yaxis: { title: 'Acceleration (m/s²)'},
-        showlegend: true,
-        shapes: shapes,
-
-        paper_bgcolor: '#4a4a4a',
-        plot_bgcolor: '#4a4a4a',
-        font: {
-            color: '#ffffff'
-        },
-        xaxis: {
-            color: '#ffffff',
-            gridcolor: '#444444',
-            zerolinecolor: '#666666'
-        },
-        yaxis: {
-            color: '#ffffff',
-            gridcolor: '#444444',
-            zerolinecolor: '#666666'
-        },
-    };
-    const lightLayout = {
-        xaxis: { title: 'Timestamp', rangeslider: { visible: false } },
-        yaxis: { title: 'Acceleration (m/s²)'},
-        showlegend: true,
-        shapes: shapes, 
-    };
+    const darkLayout = createDarkLayout(shapes);
+    const lightLayout = createLightLayout(shapes);
     const isDarkMode = document.body.classList.contains('dark-mode');
     const layout = isDarkMode ? darkLayout : lightLayout; 
 
@@ -1270,64 +1243,7 @@ function addBoutToSession(newBout, viewState = null) {
         console.error('No current session in drag context');
     }
 }
-// Delete project function
-async function deleteProject(projectId, projectName) {
-    // Show confirmation dialog
-    const confirmDelete = confirm(
-        `Are you sure you want to delete the project "${projectName}"?\n\n` +
-        `This will permanently delete:\n` +
-        `• All sessions in this project\n` +
-        `• All data files and directories\n` +
-        `• The participant record (if no other projects exist)\n\n` +
-        `This action cannot be undone.`
-    );
-    
-    if (!confirmDelete) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/api/project/${projectId}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to delete project');
-        }
-        
-        const result = await response.json();
-        
-        // Show success message
-        alert(
-            `Project deleted successfully!\n\n` +
-            `Project: ${result.project_name}\n` +
-            `Participant: ${result.participant_code}\n` +
-            `Sessions deleted: ${result.sessions_deleted}\n` +
-            `Directory deleted: ${result.directory_deleted ? 'Yes' : 'No'}\n` +
-            `Participant deleted: ${result.participant_deleted ? 'Yes' : 'No'}`
-        );
-        
-        // Refresh the projects list
-        await ProjectController.initializeProjects();
-        
-        // If the deleted project was currently selected, clear the session view
-        if (currentProjectId === projectId) {
-            currentProjectId = null;
-            document.getElementById('sessions-table-body').innerHTML = '';
-            showTableView(); // Go back to table view if in visualization
-        }
-        
-        updateCurrentProjectPill();
-        
-    } catch (error) {
-        console.error('Error deleting project:', error);
-        alert(`Failed to delete project: ${error.message}`);
-    }
-}
+
 
 async function exportLabelsJSON() {
     try {
@@ -1381,66 +1297,7 @@ function updateSidebarHighlighting() {
     }
 }
 
-function navigateToNextSession() {
-    const nextSession = SessionService.getNextSession(sessions, currentSessionId);
-    
-    if (!nextSession) {
-        console.log('No next session available');
-        if (SessionService.getFilteredSessions(sessions).length === 0) {
-            showTableView();
-        }
-        return;
-    }
-    
-    console.log(`Navigating to next session: ${nextSession.session_name}`);
-    visualizeSession(nextSession.session_id);
-}
 
-function navigateToPreviousSession() {
-    const prevSession = SessionService.getPreviousSession(sessions, currentSessionId);
-    
-    if (!prevSession) {
-        console.log('No previous session available');
-        if (SessionService.getFilteredSessions(sessions).length === 0) {
-            showTableView();
-        }
-        return;
-    }
-    
-    console.log(`Navigating to previous session: ${prevSession.session_name}`);
-    visualizeSession(prevSession.session_id);
-}
-
-// Create or update labeling for model-generated bouts
-async function createOrUpdateModelLabeling(labelingName) {
-    try {
-        console.log(`Creating/updating labeling: ${labelingName} for project ${currentProjectId}`);
-        
-        const { created, labeling, updatedLabelings } = await ProjectService.createOrUpdateModelLabeling(
-            currentProjectId, 
-            labelingName, 
-            labelings
-        );
-        
-        if (created) {
-            console.log('New model labeling created:', labeling);
-            
-            // Update global labelings array
-            labelings = updatedLabelings;
-            
-            // Update the labelings display if modal is open
-            const labelingModal = document.getElementById('labelingModal');
-            if (labelingModal && labelingModal.classList.contains('show')) {
-                await ProjectController.fetchAndDisplayLabelings(currentProjectId);
-            }
-        } else {
-            console.log(`Labeling ${labelingName} already exists, no need to create`);
-        }
-        
-    } catch (error) {
-        console.error('Error creating/updating model labeling:', error);
-    }
-}
 
 // Function to open color picker when circle is clicked
 function openColorPicker(labelingName, circleElement) {
@@ -1449,122 +1306,6 @@ function openColorPicker(labelingName, circleElement) {
         colorPicker.click();
     }
 }
-
-// Function to update labeling color
-async function updateLabelingColor(labelingName, newColor, colorPickerElement) {
-    try {
-        // Update the visual circle immediately for better UX
-        const colorCircle = colorPickerElement.parentElement.querySelector('.color-circle');
-        if (colorCircle) {
-            colorCircle.style.backgroundColor = newColor;
-        }
-        
-        // Update color via service layer
-        const { result, updatedLabelings } = await ProjectService.updateLabelingColor(currentProjectId, labelingName, newColor);
-        console.log(`Color updated for labeling "${labelingName}" to ${newColor}`);
-        
-        // Update global labelings array
-        labelings = updatedLabelings;
-        
-        // If we're in visualization view, update the overlays to show only bouts matching this labeling
-        if (dragContext.currentSession && dragContext.currentSession.bouts) {
-            window.OverlayManager.updateOverlaysForLabelingChange(dragContext.currentSession, currentLabelingName);
-        }
-        
-        // Update current labeling header color if this is the selected labeling
-        const currentLabelingNameElement = document.getElementById('current-labeling-name');
-        if (labelingName == currentLabelingName && currentLabelingNameElement) {
-            currentLabelingNameElement.innerHTML = `
-                <div class="color-circle me-1" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${newColor}; border: 1px solid #ccc; display: inline-block;"></div>
-                ${labelingName}
-            `;
-        }
-
-    } catch (error) {
-        console.error('Error updating labeling color:', error);
-        // Revert the visual change on error
-        const colorCircle = colorPickerElement.parentElement.querySelector('.color-circle');
-        if (colorCircle) {
-            // Try to find the original color from the labelings array
-            const originalLabeling = labelings.find(l => l.name === labelingName);
-            if (originalLabeling) {
-                colorCircle.style.backgroundColor = originalLabeling.color;
-            }
-        }
-    }
-}
-
-// Function to edit (rename) a labeling
-async function editLabeling(labelingName) {
-    const newName = prompt(`Enter a new name for labeling "${labelingName}":`, labelingName);
-    
-    if (newName && newName.trim() && newName.trim() !== labelingName) {
-        try {
-            const { result, shouldUpdateCurrentLabeling, newCurrentLabelingName, updatedLabelings } = 
-                await ProjectService.renameLabeling(currentProjectId, labelingName, newName.trim(), currentLabelingName);
-            
-            console.log('Labeling renamed successfully:', result);
-            
-            // Update global labelings array
-            labelings = updatedLabelings;
-            
-            // Update current labeling selection if needed
-            if (shouldUpdateCurrentLabeling) {
-                currentLabelingName = newCurrentLabelingName;
-                updateCurrentLabelingHeader(newCurrentLabelingName);
-            }
-            
-            // Refresh the labelings list to show the updated name
-            await ProjectController.fetchAndDisplayLabelings(currentProjectId);
-            
-            alert(`Labeling renamed from "${labelingName}" to "${newName.trim()}" successfully!`);
-            
-        } catch (error) {
-            console.error('Error renaming labeling:', error);
-            alert('Failed to rename labeling: ' + error.message);
-        }
-    } else if (newName && newName.trim() === labelingName) {
-        alert('New name must be different from the current name.');
-    }
-}
-
-
-
-// Make functions available globally for inline event handlers
-window.visualizeSession = visualizeSession;
-window.openColorPicker = openColorPicker;
-window.updateLabelingColor = updateLabelingColor;
-window.editLabeling = editLabeling;
-window.duplicateLabeling = ProjectController.duplicateLabeling;
-window.deleteLabeling = ProjectController.deleteLabeling;
-window.selectLabeling = selectLabeling;
-window.deleteAllBouts = deleteAllBouts;
-window.scoreSession = SessionController.scoreSession;
-window.showTableView = showTableView;
-window.decideSession = decideSession;
-window.toggleSplitMode = toggleSplitMode;
-window.toggleVerifiedStatus = toggleVerifiedStatus;
-window.splitSession = splitSession;
-window.createNewBout = createNewBout;
-window.showCreateProjectForm = showCreateProjectForm;
-window.createNewProject = ProjectController.createNewProject;
-window.createBulkUpload = ProjectController.createBulkUpload;
-window.showBulkUploadForm = showBulkUploadForm;
-window.deleteProject = deleteProject;
-window.navigateToNextSession = navigateToNextSession;
-window.navigateToPreviousSession = navigateToPreviousSession;
-window.updateSidebarHighlighting = updateSidebarHighlighting;
-window.updateSessionsList = updateSessionsList;
-window.exportLabelsJSON = exportLabelsJSON;
-window.showBulkUploadForm = showBulkUploadForm;
-window.pollScoringStatus = pollScoringStatus;
-
-// Export overlay management functions for overlay manager
-window.updateOverlayPositions = updateOverlayPositions;
-window.hideOverlay = hideOverlay;
-window.createBoutOverlays = createBoutOverlays;
-
-
 
 // Bulk upload form event listeners
 document.addEventListener('DOMContentLoaded', function() {
@@ -1597,6 +1338,38 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Make functions available globally for inline event handlers
+window.visualizeSession = visualizeSession;
+window.openColorPicker = openColorPicker;
+window.updateLabelingColor = ProjectController.updateLabelingColor;
+window.editLabeling = ProjectController.editLabeling;
+window.duplicateLabeling = ProjectController.duplicateLabeling;
+window.deleteLabeling = ProjectController.deleteLabeling;
+window.selectLabeling = selectLabeling;
+window.deleteAllBouts = deleteAllBouts;
+window.scoreSession = SessionController.scoreSession;
+window.showTableView = showTableView;
+window.decideSession = decideSession;
+window.toggleSplitMode = toggleSplitMode;
+window.toggleVerifiedStatus = toggleVerifiedStatus;
+window.splitSession = splitSession;
+window.createNewBout = createNewBout;
+window.showCreateProjectForm = showCreateProjectForm;
+window.createNewProject = ProjectController.createNewProject;
+window.createBulkUpload = ProjectController.createBulkUpload;
+window.showBulkUploadForm = showBulkUploadForm;
+window.updateSidebarHighlighting = updateSidebarHighlighting;
+window.updateSessionsList = updateSessionsList;
+window.exportLabelsJSON = exportLabelsJSON;
+window.showBulkUploadForm = showBulkUploadForm;
+window.pollScoringStatus = pollScoringStatus;
+window.deleteProject = ProjectController.deleteProject;
+
+// Export overlay management functions for overlay manager
+window.updateOverlayPositions = updateOverlayPositions;
+window.hideOverlay = hideOverlay;
+window.createBoutOverlays = createBoutOverlays;
 
 ProjectController.initializeProjects();
 eventListeners.addEventListeners();
