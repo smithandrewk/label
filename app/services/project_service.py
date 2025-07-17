@@ -7,6 +7,7 @@ from app.logging_config import get_logger
 import os
 import shutil
 from datetime import datetime
+import random
 
 # Get logger for this module
 logger = get_logger(__name__)
@@ -248,6 +249,36 @@ class ProjectService:
             
         return labelings_data
 
+    def add_list_of_labeling_names_to_project(self, project_id, labels):
+        """Add new labels to a project's labelings"""
+        logger.info(f'Adding labels to project {project_id}: {labels}')
+
+        # Validate input
+        if not isinstance(labels, list) or not all(isinstance(label, str) for label in labels):
+            raise DatabaseError('Labels must be a list of strings')
+        pretty_colors = [
+            '#FF6B6B',  # Coral Red
+            '#4ECDC4',  # Turquoise
+            '#45B7D1',  # Sky Blue
+            '#96CEB4',  # Mint Green
+            '#FFEAA7',  # Warm Yellow
+            '#DDA0DD',  # Plum
+            '#98D8C8',  # Seafoam
+            '#F7DC6F',  # Light Gold
+            '#BB8FCE',  # Lavender
+            '#85C1E9',  # Light Blue
+            '#F8C471',  # Peach
+            '#82E0AA',  # Light Green
+            '#F1948A',  # Salmon
+            '#85C1E9',  # Powder Blue
+            '#D7BDE2'   # Light Purple
+        ]
+            
+        return [self.update_labelings(project_id, {
+            "name": label,
+            "color": random.choice(pretty_colors)
+        }) for label in labels]
+    
     def update_labelings(self, project_id, label):
         """Update labelings for a specific project by appending a new label"""
         logger.info(f'Updating labelings for project {project_id} with label: {label}')
