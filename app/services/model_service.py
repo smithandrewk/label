@@ -478,7 +478,7 @@ class ModelService:
 
             # Step 1: Load session data
             data = self.load_session_data(project_path, session_name)
-            
+
             # Step 2: Load and wrap model with processor
             model_instance = self._load_model_instance(model_config, device)
             processor = ModelProcessor(model_instance)

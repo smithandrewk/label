@@ -163,7 +163,7 @@ class ModelController:
             traceback.print_exc()
             return jsonify({'error': f'failed to start scoring: {str(e)}'}), 500
 
-    def score_range_with_model(self):
+    def score_range_with_model(self, device='cpu'):
         """Score a session using a specific model"""
         try:
             data = request.get_json()
@@ -195,7 +195,7 @@ class ModelController:
             
             # delegate to model service for scoring
             scoring_result = self.model_service.score_session_with_model(
-                session_id, model_id, project_path, session_name, start_ns, end_ns, device='cpu'  # Use the full project_path
+                session_id, model_id, project_path, session_name, start_ns, end_ns, device=device  # Use the full project_path
             )
 
             logging.info(f"scoring started with id: {scoring_result.get('scoring_id')}")
@@ -324,10 +324,9 @@ def delete_model(model_id):
 def score_session_with_model():
     return controller.score_session_with_model()
 
-
 @models_bp.route('/api/models/score_range', methods=['POST'])
 def score_range_with_model():
-    return controller.score_range_with_model()
+    return controller.score_range_with_model(device='cpu')
 
 @models_bp.route('/api/scoring_status/<scoring_id>')
 def get_scoring_status(scoring_id):
@@ -340,3 +339,7 @@ def get_gpu_status():
 @models_bp.route('/api/models/score_gpu', methods=['POST'])
 def score_session_with_model_gpu():
     return controller.score_session_with_model_gpu()
+
+@models_bp.route('/api/models/score_range_gpu', methods=['POST'])
+def score_range_with_model_gpu():
+    return controller.score_range_with_model(device='cuda')
