@@ -11,6 +11,7 @@
  * Only non-discarded sessions (keep != 0) are included in navigation.
  */
 
+import ProjectController from "./js/controllers/projectController.js";
 export function addEventListeners() {
     document.addEventListener('keydown', function(event) {
         // ignore keydown events when user is typing in form inputs
@@ -55,11 +56,17 @@ export function addEventListeners() {
         } else if (event.key.toLowerCase() === 'n' && !(event.metaKey || event.ctrlKey)) {
             // Navigate to next session
             event.preventDefault();
-            navigateToNextSession();
+            ProjectController.navigateToNextSession();
         } else if (event.key.toLowerCase() === 'p' && !(event.metaKey || event.ctrlKey)) {
             // Navigate to previous session
             event.preventDefault();
-            navigateToPreviousSession();
+            ProjectController.navigateToPreviousSession();
+        } else if (event.key.toLowerCase() === 'b' && !(event.metaKey || event.ctrlKey)) {
+            console.log(window.currentModelId, window.currentModelName);
+            // Navigate to first session
+            event.preventDefault();
+            selectModelForScoringInVisibleRange(window.currentModelId,window.currentModelName, confirm = false);
+            
         }
     }
     });
