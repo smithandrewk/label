@@ -194,8 +194,8 @@ class ModelController:
             session_name = session_info['session_name']
             
             # delegate to model service for scoring
-            scoring_result = self.model_service.score_range_with_model(
-                session_id, model_id, project_path, session_name, start_ns, end_ns  # Use the full project_path
+            scoring_result = self.model_service.score_session_with_model(
+                session_id, model_id, project_path, session_name, start_ns, end_ns, device='cpu'  # Use the full project_path
             )
 
             logging.info(f"scoring started with id: {scoring_result.get('scoring_id')}")

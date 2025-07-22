@@ -576,29 +576,7 @@ class ModelService:
     # Updated Public API Methods
     # =======================
 
-    def score_range_with_model(self, session_id, model_id, project_path, session_name, start_ns, end_ns):
-        """score a session using a specific model on CPU"""
-        try:
-            model_config = self.get_model_by_id(model_id)
-            if not model_config:
-                raise DatabaseError(f'model {model_id} not found')
-            
-            logger.info(f"starting CPU scoring with model {model_config['name']} for session {session_id}")
-            
-            # Validate model files exist
-            self._validate_model_files(model_config)
-            
-            scoring_id = self.score_range_async_with_model(
-                project_path, session_name, session_id, model_config, start_ns, end_ns, device='cpu'
-            )
-            
-            return {'scoring_id': scoring_id}
-            
-        except Exception as e:
-            logger.error(f"error starting CPU scoring with model {model_id}: {e}")
-            raise DatabaseError(f'failed to start scoring: {str(e)}')
-        
-    def score_session_with_model(self, session_id, model_id, project_path, session_name, device='cpu'):
+    def score_session_with_model(self, session_id, model_id, project_path, session_name, start_ns=None, end_ns=None, device='cpu'):
         """score a session using a specific model"""
         try:
             if device not in ['cpu', 'cuda']:
@@ -616,9 +594,18 @@ class ModelService:
             # Validate model files exist
             self._validate_model_files(model_config)
             
-            scoring_id = self.score_session_async_with_model(
-                project_path, session_name, session_id, model_config, device=device
-            )
+            if start_ns is not None and end_ns is not None:
+                # Range scoring
+                logger.info(f"scoring range {start_ns} to {end_ns} for session {session_id}")
+                scoring_id = self.score_range_async_with_model(
+                    project_path, session_name, session_id, model_config, start_ns, end_ns, device=device
+                )
+            else:
+                # Full session scoring
+                logger.info(f"scoring full session {session_id} with model {model_config['name']}")
+                scoring_id = self.score_session_async_with_model(
+                    project_path, session_name, session_id, model_config, device=device
+                )
             
             return {'scoring_id': scoring_id}
             
