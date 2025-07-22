@@ -243,6 +243,45 @@ class ModelService:
         except Exception as e:
             logger.error(f"error loading session data: {e}")
             raise DatabaseError(f'failed to load session data: {str(e)}')
+        
+    def load_range_data(self, project_path, session_name, start_ns, end_ns):
+        """
+        Extract CSV loading logic into a separate method
+        
+        Args:
+            project_path: Path to the project directory
+            session_name: Name of the session
+            
+        Returns:
+            pandas.DataFrame: Session data with proper column naming
+        """
+        try:
+            csv_path = f"{project_path}/{session_name}/accelerometer_data.csv"
+            logger.info(f"Loading session data from: {csv_path}")
+            
+            df = pd.read_csv(csv_path)
+            
+            # Ensure proper column naming
+            if 'x' in df.columns:
+                df = df.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
+            
+            # Calculate sample rate for logging
+            sample_interval = df['ns_since_reboot'].diff().median() * 1e-9
+            sample_rate = 1 / sample_interval
+            logger.info(f"loaded session data: {len(df)} rows at {sample_rate:.1f} Hz")
+            
+            # Filter by range
+            df = df[(df['ns_since_reboot'] >= start_ns) & (df['ns_since_reboot'] <= end_ns)]
+
+            if df.empty:
+                logger.warning(f"no data found in range {start_ns} to {end_ns} for session {session_name}")
+                return pd.DataFrame(columns=['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z', 'y_pred'])
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"error loading session data: {e}")
+            raise DatabaseError(f'failed to load session data: {str(e)}')
 
     def _extract_bouts_from_predictions(self, df, predictions, model_name, min_duration_sec=30):
         """
@@ -477,10 +516,88 @@ class ModelService:
             if device == 'cuda':
                 torch.cuda.empty_cache()
 
+    def _score_range_worker(self, scoring_id, project_path, session_name, session_id, model_config, start_ns, end_ns, device='cpu'):
+        """
+        Unified worker function that handles both CPU and GPU scoring through delegation
+        
+        Args:
+            scoring_id: Unique identifier for this scoring operation
+            project_path: Path to the project directory
+            session_name: Name of the session
+            session_id: Database session ID
+            model_config: Model configuration dictionary
+            device: Target device ('cpu' or 'cuda')
+        """
+        try:
+            device_label = device.upper()
+            logger.info(f"{device_label} scoring session {scoring_id} with model {model_config['name']}")
+
+            # Step 1: Load session data
+            data = self.load_range_data(project_path, session_name, start_ns, end_ns)
+            
+            # Step 2: Load and wrap model with processor
+            model_instance = self._load_model_instance(model_config, device)
+            processor = ModelProcessor(model_instance)
+            
+            # Step 3: Process through model pipeline
+            time_domain_predictions = processor.process(data, device)
+            
+            # Step 4: Extract bouts from predictions
+            bouts = self._extract_bouts_from_predictions(
+                data, time_domain_predictions, model_config['name']
+            )
+            
+            # Step 5: Save bouts to database
+            self._save_bouts_to_session(session_id, bouts)
+            
+            # Update status on completion
+            self.scoring_status[scoring_id].update({
+                'status': 'completed',
+                'end_time': time.time(),
+                'bouts_count': len(bouts),
+                'device_used': f"{device_label}" + (f" ({torch.cuda.get_device_name(0)})" if device == 'cuda' else "")
+            })
+            
+            logger.info(f"{device_label} scoring completed successfully for {scoring_id}")
+            
+        except Exception as e:
+            logger.error(f"error during {device.upper()} scoring {scoring_id}: {e}")
+            self.scoring_status[scoring_id].update({
+                'status': 'error',
+                'error': str(e),
+                'end_time': time.time()
+            })
+        finally:
+            # Cleanup: clear GPU cache if using GPU
+            if device == 'cuda':
+                torch.cuda.empty_cache()
+
     # =======================
     # Updated Public API Methods
     # =======================
 
+    def score_range_with_model(self, session_id, model_id, project_path, session_name, start_ns, end_ns):
+        """score a session using a specific model on CPU"""
+        try:
+            model_config = self.get_model_by_id(model_id)
+            if not model_config:
+                raise DatabaseError(f'model {model_id} not found')
+            
+            logger.info(f"starting CPU scoring with model {model_config['name']} for session {session_id}")
+            
+            # Validate model files exist
+            self._validate_model_files(model_config)
+            
+            scoring_id = self.score_range_async_with_model(
+                project_path, session_name, session_id, model_config, start_ns, end_ns, device='cpu'
+            )
+            
+            return {'scoring_id': scoring_id}
+            
+        except Exception as e:
+            logger.error(f"error starting CPU scoring with model {model_id}: {e}")
+            raise DatabaseError(f'failed to start scoring: {str(e)}')
+        
     def score_session_with_model(self, session_id, model_id, project_path, session_name):
         """score a session using a specific model on CPU"""
         try:
@@ -548,6 +665,34 @@ class ModelService:
         scoring_thread = threading.Thread(
             target=self._score_session_worker,  
             args=(scoring_id, project_path, session_name, session_id, model_config, device)
+        )
+        scoring_thread.daemon = True
+        scoring_thread.start()
+        
+        logger.info(f"started {device_label} scoring thread for {scoring_id}")
+        return scoring_id
+    
+    def score_range_async_with_model(self, project_path, session_name, session_id, model_config, start_ns, end_ns, device='cpu'):
+        """start async scoring with specific model configuration and device"""
+        scoring_id = str(uuid.uuid4())
+        device_label = device.upper()
+
+        # Initialize status tracking
+        self.scoring_status[scoring_id] = {
+            'status': 'running',
+            'session_id': session_id,
+            'session_name': session_name,
+            'model_id': model_config['id'],
+            'model_name': model_config['name'],
+            'device': device,
+            'start_time': time.time(),
+            'error': None
+        }
+        
+        # Start async processing using unified worker
+        scoring_thread = threading.Thread(
+            target=self._score_range_worker,  
+            args=(scoring_id, project_path, session_name, session_id, model_config, start_ns, end_ns, device)
         )
         scoring_thread.daemon = True
         scoring_thread.start()

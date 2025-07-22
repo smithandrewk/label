@@ -403,6 +403,9 @@ export const ActionButtonHandlers = {
                                 </div>
                             </div>
                             <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-primary" onclick="selectModelForScoringInVisibleRange('${model.id}', '${model.name}')" title="score only data in visible range">
+                                    <i class="fa-solid fa-window-minimize"></i>
+                                </button>
                                 <button class="btn btn-sm btn-outline-primary" onclick="selectModelForScoring('${model.id}', '${model.name}')" title="use this model">
                                     <i class="fa-solid fa-rocket"></i>
                                 </button>
@@ -646,6 +649,98 @@ window.selectModelForScoring = function(modelId, modelName) {
         window.scoreSessionWithModelGpu(window.currentSessionId, modelId, modelName);
     } else {
         window.scoreSessionWithModel(window.currentSessionId, modelId, modelName);
+    }
+};
+
+window.selectModelForScoringInVisibleRange = function(modelId, modelName) {
+    console.log('selected model for scoring:', { modelId, modelName });
+    
+    if (!window.currentSessionId) {
+        alert('no session selected');
+        return;
+    }
+    
+    // get device type from modal
+    const modal = document.getElementById('modelSelection');
+    const deviceType = modal ? modal.dataset.deviceType || 'cpu' : 'cpu';
+    console.log('🔍 Device type detected:', deviceType);
+    
+    const deviceLabel = deviceType.toUpperCase();
+    const confirmed = confirm(`score current session using model: ${modelName} on ${deviceLabel}?`);
+    if (!confirmed) return;
+    
+    // close modal
+    const bsModal = bootstrap.Modal.getInstance(modal);
+    if (bsModal) bsModal.hide();
+    
+    // start scoring with selected model and device
+    if (deviceType === 'gpu') {
+        window.scoreSessionWithModelGpu(window.currentSessionId, modelId, modelName);
+    } else {
+        window.scoreSessionWithModelInVisibleRange(window.currentSessionId, modelId, modelName);
+    }
+};
+
+window.getVisibleRangeInNs = function() {
+    const plotDiv = document.getElementById('timeSeriesPlot');
+    console.log(plotDiv);
+    let viewState = null;
+    if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
+        viewState = {
+            xrange: plotDiv._fullLayout.xaxis.range.slice(),
+            yrange: plotDiv._fullLayout.yaxis.range.slice()
+        };
+    }
+    return viewState.xrange ? {
+        start: viewState.xrange[0],
+        end: viewState.xrange[1]
+    } : null;
+}
+window.scoreSessionWithModelInVisibleRange = async function(sessionId, modelId, modelName) {
+    try {
+        console.log('scoring session with CPU model:', { sessionId, modelId, modelName });
+        
+        // get session details
+        const session = window.sessions?.find(s => s.session_id == sessionId);
+        if (!session) {
+            throw new Error('session not found');
+        }
+        
+        // update score button to show loading
+        const scoreBtn = document.getElementById('score-btn-overlay');
+        if (scoreBtn) {
+            scoreBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        }
+        
+        // Get start and end times of visible range in ns_since_reboot
+        const visibleRange = window.getVisibleRangeInNs();
+        console.log('Visible range for scoring:', visibleRange);
+        // import ModelAPI and start scoring
+        const { default: ModelAPI } = await import('../api/modelAPI.js');
+        const result = await ModelAPI.scoreSessionInVisibleRange(sessionId, modelId, session.project_name, session.session_name, visibleRange.start, visibleRange.end);
+        
+        if (result.success) {
+            console.log('scoring started successfully:', result);
+            
+            // Use the global function directly
+            if (typeof window.pollScoringStatus === 'function') {
+                window.pollScoringStatus(result.scoring_id, sessionId, session.session_name, 'cpu');
+            } else {
+                throw new Error('pollScoringStatus function not available globally');
+            }
+        } else {
+            throw new Error(result.error || 'scoring failed to start');
+        }
+        
+    } catch (error) {
+        console.error('error scoring session with model:', error);
+        alert('failed to start scoring: ' + error.message);
+        
+        // reset score button
+        const scoreBtn = document.getElementById('score-btn-overlay');
+        if (scoreBtn) {
+            scoreBtn.innerHTML = '<i class="fa-solid fa-rocket"></i>';
+        }
     }
 };
 

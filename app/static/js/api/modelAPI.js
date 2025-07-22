@@ -159,6 +159,39 @@ export class ModelAPI {
         }
     }
 
+    static async scoreSessionInVisibleRange(sessionId, modelId, projectName, sessionName, startNs, endNs) {
+        try {
+            console.log('scoring session with model:', { sessionId, modelId, projectName, sessionName, startNs, endNs });
+            
+            const response = await fetch('/api/models/score_range', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    model_id: modelId,
+                    project_name: projectName,
+                    session_name: sessionName,
+                    start_ns: startNs,
+                    end_ns: endNs
+                })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'failed to start scoring');
+            }
+            
+            const result = await response.json();
+            console.log('scoring started:', result);
+            return result;
+        } catch (error) {
+            console.error('error scoring session:', error);
+            throw error;
+        }
+    }
+
     /**
      * Get the status of a scoring operation
      * @param {string} scoringId - ID of the scoring operation

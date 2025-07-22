@@ -163,6 +163,57 @@ class ModelController:
             traceback.print_exc()
             return jsonify({'error': f'failed to start scoring: {str(e)}'}), 500
 
+    def score_range_with_model(self):
+        """Score a session using a specific model"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'no data provided'}), 400
+            
+            session_id = data.get('session_id')
+            model_id = data.get('model_id')
+            project_name = data.get('project_name')
+            session_name = data.get('session_name')
+            start_ns = data.get('start_ns')
+            end_ns = data.get('end_ns')
+            
+            if not all([session_id, model_id, project_name, session_name]):
+                return jsonify({'error': 'missing required fields: session_id, model_id, project_name, session_name'}), 400
+            
+            logging.info(f"scoring session {session_id} with model {model_id}")
+            
+            # # Get full session info including project_path - THIS IS THE FIX
+            try:
+                session_info = self.session_service.get_session_details(session_id)
+                if not session_info:
+                    return jsonify({'error': 'session not found'}), 404
+            except DatabaseError as e:
+                return jsonify({'error': str(e)}), 500
+            
+            project_path = session_info['project_path']  # Get the full path
+            session_name = session_info['session_name']
+            
+            # delegate to model service for scoring
+            scoring_result = self.model_service.score_range_with_model(
+                session_id, model_id, project_path, session_name, start_ns, end_ns  # Use the full project_path
+            )
+
+            logging.info(f"scoring started with id: {scoring_result.get('scoring_id')}")
+        
+            return jsonify({
+                'success': True,
+                'message': f'scoring session {session_name} with model',
+                'scoring_id': scoring_result['scoring_id']
+            }), 200
+            
+        except DatabaseError as e:
+            logging.error(f"database error in score_session_with_model: {e}")
+            return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            logging.error(f"unexpected error in score_session_with_model: {e}")
+            traceback.print_exc()
+            return jsonify({'error': f'failed to start scoring: {str(e)}'}), 500
+
     def get_scoring_status(self, scoring_id):
         """Get the status of a scoring operation"""
         try:
@@ -272,6 +323,11 @@ def delete_model(model_id):
 @models_bp.route('/api/models/score', methods=['POST'])
 def score_session_with_model():
     return controller.score_session_with_model()
+
+
+@models_bp.route('/api/models/score_range', methods=['POST'])
+def score_range_with_model():
+    return controller.score_range_with_model()
 
 @models_bp.route('/api/scoring_status/<scoring_id>')
 def get_scoring_status(scoring_id):
