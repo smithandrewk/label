@@ -202,7 +202,22 @@ async function pollScoringStatus(scoringId, sessionId, sessionName, deviceType =
                 // If this session is currently being visualized, refresh it
                 if (currentSessionId == sessionId) {
                     console.log(`Refreshing currently visualized session with new ${deviceLabel} bouts`);
-                    visualizeSession(sessionId);
+                    const plotDiv = document.getElementById('timeSeriesPlot');
+                    let viewState = null;
+                    if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis && plotDiv._fullLayout.yaxis) {
+                        viewState = {
+                            xrange: plotDiv._fullLayout.xaxis.range.slice(),
+                            yrange: plotDiv._fullLayout.yaxis.range.slice()
+                        };
+                    }
+                    visualizeSession(sessionId).then(() => {
+                        if (viewState && document.getElementById('timeSeriesPlot')) {
+                            Plotly.relayout('timeSeriesPlot', {
+                                'xaxis.range': viewState.xrange,
+                                'yaxis.range': viewState.yrange
+                            });
+                        }
+                    });
                 }
                 
             } else if (status.status === 'error') {
