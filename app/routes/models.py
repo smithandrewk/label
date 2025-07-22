@@ -278,8 +278,8 @@ class ModelController:
             session_name = session_info['session_name']
             
             # delegate to model service for GPU scoring
-            scoring_result = self.model_service.score_session_with_model_gpu(
-                session_id, model_id, project_path, session_name
+            scoring_result = self.model_service.score_session_with_model(
+                session_id, model_id, project_path, session_name, device='cuda'  # Use GPU for scoring
             )
             
             logging.info(f"GPU scoring started with id: {scoring_result.get('scoring_id')}")

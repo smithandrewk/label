@@ -598,20 +598,26 @@ class ModelService:
             logger.error(f"error starting CPU scoring with model {model_id}: {e}")
             raise DatabaseError(f'failed to start scoring: {str(e)}')
         
-    def score_session_with_model(self, session_id, model_id, project_path, session_name):
-        """score a session using a specific model on CPU"""
+    def score_session_with_model(self, session_id, model_id, project_path, session_name, device='cpu'):
+        """score a session using a specific model"""
         try:
+            if device not in ['cpu', 'cuda']:
+                raise ValueError('device must be either "cpu" or "cuda"')
+            
+            if device == 'cuda' and not self.is_gpu_available():
+                raise RuntimeError('GPU is not available on this system')
+
             model_config = self.get_model_by_id(model_id)
             if not model_config:
                 raise DatabaseError(f'model {model_id} not found')
             
-            logger.info(f"starting CPU scoring with model {model_config['name']} for session {session_id}")
+            logger.info(f"starting {device} scoring with model {model_config['name']} for session {session_id}")
             
             # Validate model files exist
             self._validate_model_files(model_config)
             
             scoring_id = self.score_session_async_with_model(
-                project_path, session_name, session_id, model_config, device='cpu'
+                project_path, session_name, session_id, model_config, device=device
             )
             
             return {'scoring_id': scoring_id}
@@ -619,30 +625,6 @@ class ModelService:
         except Exception as e:
             logger.error(f"error starting CPU scoring with model {model_id}: {e}")
             raise DatabaseError(f'failed to start scoring: {str(e)}')
-
-    def score_session_with_model_gpu(self, session_id, model_id, project_path, session_name):
-        """score a session using a specific model on GPU"""
-        try:
-            # Check GPU availability
-            if not self.is_gpu_available():
-                raise RuntimeError('GPU is not available on this system')
-            
-            model_config = self.get_model_by_id(model_id)
-            if not model_config:
-                raise DatabaseError(f'model {model_id} not found')
-            
-            logger.info(f"starting GPU scoring with model {model_config['name']} for session {session_id}")
-            
-            # Validate model files exist
-            self._validate_model_files(model_config)
-            
-            scoring_id = self.score_session_async_with_model(project_path, session_name, session_id, model_config, device='cuda')
-            
-            return {'scoring_id': scoring_id}
-            
-        except Exception as e:
-            logger.error(f"error starting GPU scoring with model {model_id}: {e}")
-            raise DatabaseError(f'failed to start GPU scoring: {str(e)}')
 
     def score_session_async_with_model(self, project_path, session_name, session_id, model_config, device='cpu'):
         """start async scoring with specific model configuration and device"""
