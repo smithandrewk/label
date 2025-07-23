@@ -283,7 +283,7 @@ class ModelService:
             logger.error(f"error loading session data: {e}")
             raise DatabaseError(f'failed to load session data: {str(e)}')
 
-    def _extract_bouts_from_predictions(self, df, predictions, model_name, min_duration_sec=30):
+    def _extract_bouts_from_predictions(self, df, predictions, model_name, min_duration_sec=0.25):
         """
         Extract bouts from prediction timeline
         
