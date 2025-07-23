@@ -403,8 +403,12 @@ export const ActionButtonHandlers = {
                                 </div>
                             </div>
                             <div class="d-flex gap-1">
-                                <button class="btn btn-sm btn-outline-primary" onclick="selectModelForScoringInVisibleRange('${model.id}', '${model.name}')" title="score only data in visible range">
-                                    <i class="fa-solid fa-window-minimize"></i>
+                                <button class="btn btn-sm btn-outline-primary score-range-btn" 
+                                        onclick="selectModelForScoringInVisibleRange('${model.id}', '${model.name}')" 
+                                        data-bs-toggle="tooltip" 
+                                        data-bs-placement="top" 
+                                        title="Score visible range">
+                                    <i class="fa-solid fa-crop-simple"></i>
                                 </button>
                                 <button class="btn btn-sm btn-outline-primary" onclick="selectModelForScoring('${model.id}', '${model.name}')" title="use this model">
                                     <i class="fa-solid fa-rocket"></i>
