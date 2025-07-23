@@ -711,6 +711,13 @@ window.getVisibleRangeInNs = function() {
     } : null;
 }
 
+window.formatTimeRange = function(startNs, endNs) {
+    const startSeconds = (startNs / 1e9).toFixed(1);
+    const endSeconds = (endNs / 1e9).toFixed(1);
+    const durationSeconds = ((endNs - startNs) / 1e9).toFixed(1);
+    return `${startSeconds}s - ${endSeconds}s (${durationSeconds}s duration)`;
+}
+
 window.scoreSessionWithModelInVisibleRange = async function(sessionId, modelId, modelName) {
     try {
         console.log('scoring session with CPU model:', { sessionId, modelId, modelName });
