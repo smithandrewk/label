@@ -485,6 +485,30 @@ export const ActionButtonHandlers = {
         }
     },
 
+    updateModelStatusIndicator: function(isScoring = false) {
+        const indicator = document.getElementById('model-status-indicator');
+        const modelNameSpan = document.getElementById('current-model-name');
+        
+        if (indicator && modelNameSpan) {
+            if (window.currentModelId && window.currentModelName) {
+                if (isScoring) {
+                    modelNameSpan.innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i>${window.currentModelName}`;
+                    indicator.style.background = 'rgba(255, 193, 7, 0.1)';
+                    indicator.style.borderColor = 'rgba(255, 193, 7, 0.2)';
+                    indicator.style.color = '#856404';
+                } else {
+                    modelNameSpan.textContent = window.currentModelName;
+                    indicator.style.background = 'rgba(40, 167, 69, 0.1)';
+                    indicator.style.borderColor = 'rgba(40, 167, 69, 0.2)';
+                    indicator.style.color = '#28a745';
+                }
+                indicator.style.display = 'inline-flex';
+            } else {
+                indicator.style.display = 'none';
+            }
+        }
+    },
+
     /**
      * Update GPU button state based on GPU availability
      * @param {Object} gpuStatus - GPU status from the backend
@@ -675,6 +699,9 @@ window.selectModelForScoring = function(modelId, modelName) {
     
     window.currentModelId = modelId;
     window.currentModelName = modelName;
+    
+    // Update the model status indicator
+    ActionButtonHandlers.updateModelStatusIndicator();
 
     // get device type from modal
     const modal = document.getElementById('modelSelection');
@@ -707,6 +734,9 @@ window.selectModelForScoringInVisibleRange = function(modelId, modelName, send_c
 
     window.currentModelId = modelId;
     window.currentModelName = modelName;
+    
+    // Update the model status indicator
+    ActionButtonHandlers.updateModelStatusIndicator();
 
     // get device type from modal
     const modal = document.getElementById('modelSelection');
