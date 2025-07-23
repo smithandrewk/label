@@ -424,6 +424,9 @@ export const ActionButtonHandlers = {
                     `;
                 });
                 modelsList.innerHTML = modelsHtml;
+                
+                // Update tooltips with current visible range
+                ActionButtonHandlers.updateScoreRangeTooltips();
             } else {
                 // no models available
                 modelsList.innerHTML = `
@@ -449,6 +452,29 @@ export const ActionButtonHandlers = {
         }
     },
 
+    updateScoreRangeTooltips: function() {
+        const visibleRange = window.getVisibleRangeInNs();
+        const scoreRangeButtons = document.querySelectorAll('.score-range-btn');
+        
+        if (visibleRange) {
+            const rangeText = window.formatTimeRange(visibleRange.start, visibleRange.end);
+            scoreRangeButtons.forEach(button => {
+                button.setAttribute('title', `Score visible range: ${rangeText}`);
+                // Reinitialize tooltip if Bootstrap is available
+                if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+                    const tooltip = bootstrap.Tooltip.getInstance(button);
+                    if (tooltip) {
+                        tooltip.dispose();
+                    }
+                    new bootstrap.Tooltip(button);
+                }
+            });
+        } else {
+            scoreRangeButtons.forEach(button => {
+                button.setAttribute('title', 'Score visible range (no plot data available)');
+            });
+        }
+    },
 
     /**
      * Update GPU button state based on GPU availability
