@@ -80,7 +80,7 @@ If you prefer to set up manually:
 3. All models should implement the following three methods in the `.py` files that defines the **Class** as well:
    - `preprocess(self, data)`
    - `run(self, preprocessed_data, device='cpu')`
-   - `postprocess(self, raw_predictions)`
+   - `postprocess(self, raw_predictions, data)`
 
 
 
@@ -143,12 +143,13 @@ def run(self, preprocessed_data, device='cpu'):
     return predictions
 ```
 
-### `postprocess(self, raw_predictions)`
+### `postprocess(self, raw_predictions, raw_data)`
 Converts raw model output to time-domain predictions.
 
 
 Parameters:
    - raw_predictions: Raw output from run() method
+   - raw_data: Raw data athat was also passed to preprocess() method
 
 Returns:
    - Time-aligned predictions ready for bout extraction
@@ -156,7 +157,7 @@ Returns:
 Example:
 ``` python 
 
-def postprocess(self, raw_predictions):
+def postprocess(self, raw_predictions, raw_data):
     """Convert predictions to time domain"""
     # Apply sigmoid and threshold
     predictions = raw_predictions.sigmoid().cpu()
