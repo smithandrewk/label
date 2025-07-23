@@ -79,6 +79,14 @@ currentLabeling: (labelingName, labelingColor) => `
         </span>
     `,
 
+    modelStatusIndicator: () => `
+        <div id="model-status-indicator" style="display: none; align-items: center; margin-right: 12px; padding: 4px 8px; background: rgba(40, 167, 69, 0.1); border: 1px solid rgba(40, 167, 69, 0.2); border-radius: 12px; font-size: 11px; color: #28a745; font-weight: 500;">
+            <i class="fa-solid fa-robot me-1"></i>
+            <span id="current-model-name"></span>
+            <kbd style="margin-left: 6px; font-size: 10px; padding: 2px 4px; background: rgba(40, 167, 69, 0.2); border-radius: 3px; color: #155724;">B</kbd>
+        </div>
+    `,
+
     /**
      * Complete action buttons container for visualization view
      * @param {Object} options - Configuration options
@@ -87,6 +95,7 @@ currentLabeling: (labelingName, labelingColor) => `
      */
     visualizationActionButtons: ({ isSplitting = false, isVerified = false, labelingName = "No Labeling", labelingColor = "#000000" } = {}) => {
         return [
+            ActionButtonTemplates.modelStatusIndicator(),
             ActionButtonTemplates.currentLabeling(labelingName, labelingColor),
             ActionButtonTemplates.darkModeButton(),
             ActionButtonTemplates.scoreButton(),
