@@ -706,7 +706,17 @@ window.selectModelForScoringInVisibleRange = function(modelId, modelName, send_c
     
     const deviceLabel = deviceType.toUpperCase();
     if (send_confirm) {
-        const confirmed = confirm(`score current session using model: ${modelName} on ${deviceLabel}?`);
+        const visibleRange = window.getVisibleRangeInNs();
+        let confirmMessage = `Score visible range using model: ${modelName} on ${deviceLabel}?`;
+        
+        if (visibleRange) {
+            const rangeText = window.formatTimeRange(visibleRange.start, visibleRange.end);
+            confirmMessage += `\n\nRange: ${rangeText}`;
+        } else {
+            confirmMessage += `\n\nWarning: No visible range detected`;
+        }
+        
+        const confirmed = confirm(confirmMessage);
         if (!confirmed) return;
     }
     // close modal
