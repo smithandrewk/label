@@ -4,6 +4,7 @@
  * - 'p': Navigate to previous session (with wraparound)
  * - 's': Toggle split mode
  * - 'r': Create new bout
+ * - 'b': Score visible range with selected model
  * - Ctrl/Cmd + 's': Split session
  * - Ctrl/Cmd + 'd': Return to table view
  * 
