@@ -54,7 +54,7 @@ class ModelProcessor:
             logger.debug("Model inference completed")
             
             # Step 3: Postprocess predictions
-            time_domain_predictions = self.model.postprocess(raw_predictions)
+            time_domain_predictions = self.model.postprocess(raw_predictions, data)
             logger.debug("Prediction postprocessing completed")
             
             return time_domain_predictions
