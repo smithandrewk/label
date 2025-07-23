@@ -809,6 +809,9 @@ window.scoreSessionWithModelInVisibleRange = async function(sessionId, modelId, 
             scoreBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
         }
         
+        // Update model status indicator to show scoring progress
+        ActionButtonHandlers.updateModelStatusIndicator(true);
+        
         // Get start and end times of visible range in ns_since_reboot
         const visibleRange = window.getVisibleRangeInNs();
         console.log('Visible range for scoring:', visibleRange);
@@ -839,11 +842,14 @@ window.scoreSessionWithModelInVisibleRange = async function(sessionId, modelId, 
         if (scoreBtn) {
             scoreBtn.innerHTML = '<i class="fa-solid fa-rocket"></i>';
         }
+        
+        // Reset model status indicator
+        ActionButtonHandlers.updateModelStatusIndicator(false);
     }
 };
 window.scoreSessionWithModelInVisibleRangeGpu = async function(sessionId, modelId, modelName) {
     try {
-        console.log('scoring session with CPU model:', { sessionId, modelId, modelName });
+        console.log('scoring session with GPU model:', { sessionId, modelId, modelName });
         
         // get session details
         const session = window.sessions?.find(s => s.session_id == sessionId);
@@ -856,6 +862,9 @@ window.scoreSessionWithModelInVisibleRangeGpu = async function(sessionId, modelI
         if (scoreBtn) {
             scoreBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
         }
+        
+        // Update model status indicator to show scoring progress
+        ActionButtonHandlers.updateModelStatusIndicator(true);
         
         // Get start and end times of visible range in ns_since_reboot
         const visibleRange = window.getVisibleRangeInNs();
@@ -887,6 +896,9 @@ window.scoreSessionWithModelInVisibleRangeGpu = async function(sessionId, modelI
         if (scoreBtn) {
             scoreBtn.innerHTML = '<i class="fa-solid fa-rocket"></i>';
         }
+        
+        // Reset model status indicator
+        ActionButtonHandlers.updateModelStatusIndicator(false);
     }
 };
 window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
@@ -931,6 +943,9 @@ window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
         if (scoreBtn) {
             scoreBtn.innerHTML = '<i class="fa-solid fa-rocket"></i>';
         }
+        
+        // Reset model status indicator
+        ActionButtonHandlers.updateModelStatusIndicator(false);
     }
 };
 
@@ -977,6 +992,9 @@ window.scoreSessionWithModelGpu = async function(sessionId, modelId, modelName) 
         if (scoreBtn) {
             scoreBtn.innerHTML = '<i class="fa-solid fa-rocket"></i>';
         }
+        
+        // Reset model status indicator
+        ActionButtonHandlers.updateModelStatusIndicator(false);
     }
 };
 
