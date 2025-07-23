@@ -329,6 +329,7 @@ class ModelService:
                 smoking_bouts.append(current_bout)
 
             # Filter by minimum duration and format as dictionaries
+            min_duration_sec = .25
             min_duration_ns = min_duration_sec * 1e9
             label = f"{model_name}"
             
