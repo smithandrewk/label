@@ -655,3 +655,80 @@ body.dark-mode .visualization-container * {
     background-color: #0b5ed7 !important;
     border-color: #0b5ed7;
 }
+
+/* Keyboard Shortcuts Modal Styling */
+#keyboardShortcutsModal .modal-body {
+    padding: 1.5rem;
+}
+
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #f1f3f4;
+}
+
+.shortcut-item:last-child {
+    border-bottom: none;
+}
+
+.shortcut-keys {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 120px;
+}
+
+.shortcut-keys kbd {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    color: #495057;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.85em;
+    font-weight: 600;
+    padding: 4px 8px;
+    box-shadow: 0 1px 0 rgba(27, 31, 35, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    text-shadow: none;
+}
+
+.shortcut-description {
+    flex: 1;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+/* Dark mode support for keyboard shortcuts modal */
+body.dark-mode #keyboardShortcutsModal .modal-content {
+    background-color: #2d3436;
+    border-color: #636e72;
+}
+
+body.dark-mode #keyboardShortcutsModal .modal-header {
+    border-bottom-color: #636e72;
+}
+
+body.dark-mode #keyboardShortcutsModal .modal-title,
+body.dark-mode #keyboardShortcutsModal h6 {
+    color: #ddd;
+}
+
+body.dark-mode .shortcut-item {
+    border-bottom-color: #636e72;
+}
+
+body.dark-mode .shortcut-keys kbd {
+    background-color: #636e72;
+    border-color: #74b9ff;
+    color: #ddd;
+    box-shadow: 0 1px 0 rgba(116, 185, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .shortcut-description {
+    color: #b2bec3;
+}
+
+body.dark-mode #keyboardShortcutsModal .text-muted {
+    color: #b2bec3 !important;
+}
