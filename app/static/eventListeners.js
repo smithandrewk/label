@@ -13,7 +13,48 @@
  */
 
 import ProjectController from "./js/controllers/projectController.js";
+
+// Variable to track keyboard shortcuts modal state
+let keyboardShortcutsModal = null;
+
 export function addEventListeners() {
+    // Initialize keyboard shortcuts modal reference
+    document.addEventListener('DOMContentLoaded', function() {
+        keyboardShortcutsModal = new bootstrap.Modal(document.getElementById('keyboardShortcutsModal'));
+    });
+
+    // Handle question mark key for keyboard shortcuts helper
+    document.addEventListener('keydown', function(event) {
+        // Check for question mark key (? or Shift + /)
+        if (event.key === '?' || (event.key === '/' && event.shiftKey)) {
+            // Don't show modal if user is typing in form inputs
+            const activeElement = document.activeElement;
+            const isInInput = activeElement && (
+                activeElement.tagName === 'INPUT' || 
+                activeElement.tagName === 'TEXTAREA' || 
+                activeElement.tagName === 'SELECT' ||
+                activeElement.contentEditable === 'true' ||
+                activeElement.closest('.modal') // ignore if another modal is already open
+            );
+            
+            if (!isInInput && keyboardShortcutsModal) {
+                event.preventDefault();
+                keyboardShortcutsModal.show();
+                return;
+            }
+        }
+    });
+
+    // Hide keyboard shortcuts modal on keyup (Google Calendar style)
+    document.addEventListener('keyup', function(event) {
+        if ((event.key === '?' || event.key === '/') && keyboardShortcutsModal) {
+            // Small delay to prevent immediate close if user releases key quickly
+            setTimeout(() => {
+                keyboardShortcutsModal.hide();
+            }, 50);
+        }
+    });
+
     document.addEventListener('keydown', function(event) {
         // ignore keydown events when user is typing in form inputs
         const activeElement = document.activeElement;
