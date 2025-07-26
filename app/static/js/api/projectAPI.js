@@ -197,6 +197,28 @@ export class ProjectAPI {
     }
 
     /**
+     * Export a specific labeling as JSON
+     * @param {string|number} projectId
+     * @param {string} labelingName
+     * @returns {Promise<Object>}
+     */
+    static async exportLabeling(projectId, labelingName) {
+        try {
+            const response = await fetch(`/api/export/labeling/${projectId}/${encodeURIComponent(labelingName)}`);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to export labeling');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error exporting labeling:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Create a new project with file upload
      * @param {FormData} uploadData - The FormData object ready for upload
      * @returns {Promise<Object>} The upload result

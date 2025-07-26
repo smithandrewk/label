@@ -1297,6 +1297,44 @@ async function exportLabelsJSON() {
     }
 }
 
+async function exportLabelingJSON(labelingName) {
+    try {
+        if (!currentProjectId) {
+            throw new Error('No project selected');
+        }
+
+        const response = await ProjectAPI.exportLabeling(currentProjectId, labelingName);
+        
+        // Create downloadable JSON file
+        const jsonString = JSON.stringify(response, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        // Create download link with project name and labeling name
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' + 
+                         new Date().toISOString().replace(/[:.]/g, '-').split('T')[1].split('-')[0];
+        const projectName = response.project_name.replace(/[^a-zA-Z0-9]/g, '_');
+        const safeLabelingName = labelingName.replace(/[^a-zA-Z0-9]/g, '_');
+        const filename = `${projectName}_${safeLabelingName}_export_${timestamp}.json`;
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // Success - file downloaded automatically
+        console.log(`Successfully exported labeling "${labelingName}" with ${response.total_sessions} sessions and ${response.total_bouts} bouts to ${filename}`);
+        showNotification(`Exported labeling "${labelingName}" successfully`, 'success');
+        
+    } catch (error) {
+        console.error('Error exporting labeling JSON:', error);
+        showNotification('Failed to export labeling: ' + error.message, 'error');
+    }
+}
+
 function updateSidebarHighlighting() {
     // Remove active-session class from all links
     document.querySelectorAll('#session-list .nav-link').forEach(link => {
@@ -1377,6 +1415,7 @@ window.showBulkUploadForm = showBulkUploadForm;
 window.updateSidebarHighlighting = updateSidebarHighlighting;
 window.updateSessionsList = updateSessionsList;
 window.exportLabelsJSON = exportLabelsJSON;
+window.exportLabelingJSON = exportLabelingJSON;
 window.showBulkUploadForm = showBulkUploadForm;
 window.pollScoringStatus = pollScoringStatus;
 window.deleteProject = ProjectController.deleteProject;
