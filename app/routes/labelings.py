@@ -7,6 +7,7 @@ import shutil
 import logging
 import traceback
 import random
+from datetime import datetime
 from app.services.project_service import ProjectService
 from app.services.session_service import SessionService
 from app.services.model_service import ModelService
@@ -185,6 +186,109 @@ class LabelController:
             logging.error(f"Unexpected error: {str(e)}")
             traceback.print_exc()
             return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+
+    def export_labeling(self, project_id, labeling_name):
+        """Export all labels for a specific labeling in a project"""
+        try:
+            # Get project details
+            try:
+                project = self.project_service.get_project_with_participant(project_id)
+                if not project:
+                    return jsonify({'error': 'Project not found'}), 404
+                    
+                all_sessions = self.session_service.get_all_sessions_with_details()
+                # Filter sessions for the specific project
+                sessions = [s for s in all_sessions if s['project_id'] == project_id]
+            except DatabaseError as e:
+                return jsonify({'error': str(e)}), 500
+            
+            # Process the data for export - filter by labeling name
+            session_list = []
+            total_labels_count = 0
+            
+            for session in sessions:
+                # Parse bouts data
+                bouts = []
+                if session['bouts']:
+                    try:
+                        bouts_data = session['bouts']
+                        if isinstance(bouts_data, str):
+                            bouts = json.loads(bouts_data)
+                        elif isinstance(bouts_data, (list, dict)):
+                            bouts = bouts_data
+                    except (json.JSONDecodeError, TypeError) as e:
+                        print(f"Error parsing bouts for session {session['session_id']}: {e}")
+                        bouts = []
+                
+                # Filter bouts by labeling name and process them
+                filtered_bouts = []
+                if isinstance(bouts, list) and len(bouts) > 0:
+                    for i, bout in enumerate(bouts):
+                        bout_label = None
+                        if isinstance(bout, list) and len(bout) > 2:
+                            bout_label = bout[2]
+                        elif isinstance(bout, dict):
+                            bout_label = bout.get('label', 'smoking')
+                        
+                        # Only include bouts that match the specified labeling
+                        if bout_label == labeling_name:
+                            if isinstance(bout, list) and len(bout) >= 2:
+                                processed_bout = {
+                                    'bout_index': len(filtered_bouts),
+                                    'start_time': bout[0] if len(bout) > 0 else None,
+                                    'end_time': bout[1] if len(bout) > 1 else None,
+                                    'duration_ns': bout[1] - bout[0] if len(bout) >= 2 else None,
+                                    'duration_seconds': (bout[1] - bout[0]) / 1e9 if len(bout) >= 2 else None,
+                                    'label': bout[2] if len(bout) > 2 else 'smoking',
+                                    'confidence': bout[3] if len(bout) > 3 else None
+                                }
+                                filtered_bouts.append(processed_bout)
+                                total_labels_count += 1
+                            elif isinstance(bout, dict):
+                                processed_bout = {
+                                    'bout_index': len(filtered_bouts),
+                                    'start_time': bout.get('start'),
+                                    'end_time': bout.get('end'),
+                                    'duration_ns': bout.get('end') - bout.get('start') if bout.get('start') and bout.get('end') else None,
+                                    'duration_seconds': (bout.get('end') - bout.get('start')) / 1e9 if bout.get('start') and bout.get('end') else None, 
+                                    'label': bout.get('label','smoking'),
+                                    'confidence': bout.get('confidence')
+                                }
+                                filtered_bouts.append(processed_bout)
+                                total_labels_count += 1
+
+                # Only include sessions that have bouts for this labeling
+                if len(filtered_bouts) > 0:
+                    session_obj = {
+                        'session_id': session['session_id'],
+                        'session_name': session['session_name'],
+                        'status': session['status'],
+                        'verified': bool(session['verified']),
+                        'bout_count': len(filtered_bouts),
+                        'bouts': filtered_bouts
+                    }
+                    session_list.append(session_obj)
+            
+            return jsonify({
+                'success': True,
+                'project_id': project['project_id'],
+                'project_name': project['project_name'],
+                'labeling_name': labeling_name,
+                'participant': {
+                    'participant_id': project['participant_id'],
+                    'participant_code': project['participant_code']
+                },
+                'total_sessions': len(session_list),
+                'total_bouts': total_labels_count,
+                'export_timestamp': datetime.now().isoformat(),
+                'sessions': session_list
+            })
+            
+        except Exception as e:
+            logging.error(f"Error in export_labeling: {str(e)}")
+            logging.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': str(e)}), 500
+
 controller = None
 
 def init_controller(project_service, session_service, model_service):
@@ -312,3 +416,8 @@ def duplicate_labeling(project_id):
 @labelings_bp.route('/api/labelings/<int:project_id>/delete', methods=['DELETE'])
 def delete_labeling(project_id):
     return controller.delete_labeling(project_id)
+
+# Export labeling
+@labelings_bp.route('/api/export/labeling/<int:project_id>/<labeling_name>')
+def export_labeling(project_id, labeling_name):
+    return controller.export_labeling(project_id, labeling_name)

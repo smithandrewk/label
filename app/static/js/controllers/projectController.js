@@ -132,6 +132,9 @@ export class ProjectController {
                             <span>${labelingName}</span>
                         </div>
                         <div class="labeling-actions d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-success" onclick="exportLabelingJSON('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Export Labeling">
+                                <i class="bi bi-download"></i>
+                            </button>
                             <button class="btn btn-sm btn-outline-secondary" onclick="editLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Edit Labeling">
                                 <i class="bi bi-pencil"></i>
                             </button>
