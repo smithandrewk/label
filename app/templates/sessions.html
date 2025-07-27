@@ -53,9 +53,14 @@
                 <div>
                     <h6 class="text-muted mb-2">Available Labelings</h6>
                     <div id="available-labelings-list">
-                        <i class="fa-solid fa-plus"></i>
+                        <div class="d-flex gap-2 mb-2">
+                            <i class="fa-solid fa-plus" title="Create new labeling"></i>
+                            <i class="fa-solid fa-upload" id="import-labeling-btn" title="Import labeling from JSON"></i>
+                        </div>
                         <!-- Populated by JavaScript -->
                     </div>
+                    <!-- Hidden file input for import -->
+                    <input type="file" id="import-labeling-file" accept=".json" style="display: none;">
                 </div>
 
                 <div class="mt-3">
