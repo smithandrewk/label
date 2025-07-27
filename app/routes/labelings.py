@@ -289,6 +289,142 @@ class LabelController:
             logging.error(f"Stack trace: {traceback.format_exc()}")
             return jsonify({'error': str(e)}), 500
 
+    def import_labeling(self, project_id):
+        """Import labeling data from JSON export format"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+            
+            # Validate required fields
+            if not data.get('labeling_name') or not data.get('sessions'):
+                return jsonify({'error': 'Invalid import format: missing labeling_name or sessions'}), 400
+                
+            labeling_name = data['labeling_name'].strip()
+            imported_sessions = data['sessions']
+            
+            if not labeling_name:
+                return jsonify({'error': 'Labeling name cannot be empty'}), 400
+                
+            if not isinstance(imported_sessions, list):
+                return jsonify({'error': 'Sessions must be an array'}), 400
+            
+            # Get current project sessions to match against
+            try:
+                all_sessions = self.session_service.get_all_sessions_with_details()
+                project_sessions = [s for s in all_sessions if s['project_id'] == project_id]
+            except DatabaseError as e:
+                return jsonify({'error': str(e)}), 500
+            
+            # Check if labeling already exists, if not create it
+            existing_labelings = self.project_service.get_labelings(project_id)
+            labeling_exists = False
+            if existing_labelings and len(existing_labelings) > 0:
+                labelings_data = json.loads(existing_labelings[0]['labelings'])
+                labeling_exists = any(l.get('name') == labeling_name for l in labelings_data)
+            
+            if not labeling_exists:
+                # Create new labeling
+                # Generate a color for the new labeling
+                pretty_colors = [
+                    '#FF6B6B',  # Coral Red
+                    '#4ECDC4',  # Turquoise
+                    '#45B7D1',  # Sky Blue
+                    '#96CEB4',  # Mint Green
+                    '#FFEAA7',  # Warm Yellow
+                    '#DDA0DD',  # Plum
+                    '#98D8C8',  # Seafoam
+                    '#F7DC6F',  # Light Gold
+                    '#BB8FCE',  # Lavender
+                    '#85C1E9',  # Light Blue
+                    '#F8C471',  # Peach
+                    '#82E0AA',  # Light Green
+                ]
+                
+                color = data.get('color', random.choice(pretty_colors))
+                labeling = {
+                    "name": labeling_name,
+                    "color": color,
+                    "is_deleted": False
+                }
+                
+                self.project_service.update_labelings(project_id, labeling)
+            
+            # Process session matching and bout importing
+            sessions_processed = 0
+            bouts_imported = 0
+            
+            # Create a mapping of session names to session IDs in the current project
+            session_name_to_id = {s['session_name']: s['session_id'] for s in project_sessions}
+            
+            for imported_session in imported_sessions:
+                session_name = imported_session.get('session_name')
+                imported_bouts = imported_session.get('bouts', [])
+                
+                if not session_name or not imported_bouts:
+                    continue
+                    
+                # Check if session exists in current project
+                if session_name in session_name_to_id:
+                    session_id = session_name_to_id[session_name]
+                    
+                    # Get current session bouts
+                    current_session = next((s for s in project_sessions if s['session_id'] == session_id), None)
+                    if current_session:
+                        current_bouts = []
+                        if current_session['bouts']:
+                            try:
+                                if isinstance(current_session['bouts'], str):
+                                    current_bouts = json.loads(current_session['bouts'])
+                                elif isinstance(current_session['bouts'], list):
+                                    current_bouts = current_session['bouts']
+                            except (json.JSONDecodeError, TypeError):
+                                current_bouts = []
+                        
+                        # Convert imported bouts to the database format and append
+                        new_bouts = []
+                        for bout in imported_bouts:
+                            # Convert from export format to database dictionary format
+                            new_bout = {
+                                "start": bout.get('start_time'),
+                                "end": bout.get('end_time'),
+                                "label": labeling_name,  # Use the final labeling name
+                                "confidence": bout.get('confidence')
+                            }
+                            new_bouts.append(new_bout)
+                            bouts_imported += 1
+                        
+                        # Merge with existing bouts
+                        merged_bouts = current_bouts + new_bouts
+                        
+                        # Convert to JSON string for database storage
+                        merged_bouts_json = json.dumps(merged_bouts)
+                        
+                        # Update session with merged bouts
+                        self.session_service.update_session(
+                            session_id,
+                            current_session['status'],
+                            current_session['keep'],
+                            merged_bouts_json,
+                            current_session['verified']
+                        )
+                        
+                        sessions_processed += 1
+            
+            return jsonify({
+                'success': True,
+                'message': f'Successfully imported labeling "{labeling_name}"',
+                'labeling_name': labeling_name,
+                'sessions_processed': sessions_processed,
+                'bouts_imported': bouts_imported,
+                'labeling_created': not labeling_exists
+            })
+            
+        except Exception as e:
+            logging.error(f"Error in import_labeling: {str(e)}")
+            logging.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': str(e)}), 500
+
 controller = None
 
 def init_controller(project_service, session_service, model_service):
@@ -421,3 +557,8 @@ def delete_labeling(project_id):
 @labelings_bp.route('/api/export/labeling/<int:project_id>/<labeling_name>')
 def export_labeling(project_id, labeling_name):
     return controller.export_labeling(project_id, labeling_name)
+
+# Import labeling
+@labelings_bp.route('/api/import/labeling/<int:project_id>', methods=['POST'])
+def import_labeling(project_id):
+    return controller.import_labeling(project_id)

@@ -103,11 +103,11 @@ export class ProjectController {
                 window.updateCurrentLabelingHeader();
             }
             
-            // Clear existing content except the plus icon
-            const plusIcon = labelingsList.querySelector('.fa-plus');
+            // Clear existing content except the control buttons
+            const controlButtons = labelingsList.querySelector('.d-flex');
             labelingsList.innerHTML = '';
-            if (plusIcon) {
-                labelingsList.appendChild(plusIcon);
+            if (controlButtons) {
+                labelingsList.appendChild(controlButtons);
             }
             
             console.log('Parsed labelings:', window.labelings);

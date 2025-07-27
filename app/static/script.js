@@ -545,17 +545,20 @@ document.addEventListener('DOMContentLoaded', function() {
     labelingsList = document.getElementById('available-labelings-list');
     
     if (labelingsList) {
-        // Handle clicks on the plus icon
+        // Handle clicks on the plus icon and import button
         labelingsList.addEventListener('click', function(event) {
             if (event.target.classList.contains('fa-plus')) {
                 event.preventDefault();
                 ProjectController.createNewLabeling();
+            } else if (event.target.id === 'import-labeling-btn') {
+                event.preventDefault();
+                document.getElementById('import-labeling-file').click();
             }
         });
         
-        // Handle hover effects on the plus icon
+        // Handle hover effects on the plus icon and import button
         labelingsList.addEventListener('mouseenter', function(event) {
-            if (event.target.classList.contains('fa-plus')) {
+            if (event.target.classList.contains('fa-plus') || event.target.id === 'import-labeling-btn') {
                 event.target.style.background = 'rgba(0,0,0,0.1)';
                 event.target.style.borderRadius = '50%';
                 event.target.style.padding = '4px';
@@ -564,10 +567,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }, true);
         
         labelingsList.addEventListener('mouseleave', function(event) {
-            if (event.target.classList.contains('fa-plus')) {
+            if (event.target.classList.contains('fa-plus') || event.target.id === 'import-labeling-btn') {
                 event.target.style.background = 'rgba(224,224,224,0)';
             }
         }, true);
+    }
+
+    // Handle file input for import
+    const importFileInput = document.getElementById('import-labeling-file');
+    if (importFileInput) {
+        importFileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                importLabelingFromFile(file);
+            }
+            // Reset the input so the same file can be selected again
+            event.target.value = '';
+        });
     }
 
 });
@@ -1332,6 +1348,89 @@ async function exportLabelingJSON(labelingName) {
     } catch (error) {
         console.error('Error exporting labeling JSON:', error);
         showNotification('Failed to export labeling: ' + error.message, 'error');
+    }
+}
+
+async function importLabelingFromFile(file) {
+    try {
+        // Validate file type
+        if (!file.name.toLowerCase().endsWith('.json')) {
+            throw new Error('Please select a JSON file');
+        }
+
+        // Check project is selected
+        if (!currentProjectId) {
+            throw new Error('No project selected');
+        }
+
+        // Read file content
+        const fileContent = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target.result);
+            reader.onerror = e => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
+
+        // Parse JSON
+        let importData;
+        try {
+            importData = JSON.parse(fileContent);
+        } catch (e) {
+            throw new Error('Invalid JSON file format');
+        }
+
+        // Validate JSON structure
+        if (!importData.success || !importData.labeling_name || !importData.sessions || !Array.isArray(importData.sessions)) {
+            throw new Error('Invalid labeling export format. Please use a file exported from the labeling export feature.');
+        }
+
+        // Check if labeling already exists
+        const existingLabeling = labelings?.find(l => l.name === importData.labeling_name);
+        let finalLabelingName = importData.labeling_name;
+        
+        if (existingLabeling) {
+            const userChoice = confirm(`A labeling named "${importData.labeling_name}" already exists. Do you want to:
+            
+OK = Import bouts into existing labeling
+Cancel = Choose a new name`);
+            
+            if (!userChoice) {
+                // User wants to rename
+                const newName = prompt(`Enter a new name for the labeling:`, `${importData.labeling_name}_imported`);
+                if (!newName || !newName.trim()) {
+                    throw new Error('Import cancelled');
+                }
+                finalLabelingName = newName.trim();
+                
+                // Check if new name also exists
+                if (labelings?.find(l => l.name === finalLabelingName)) {
+                    throw new Error(`A labeling named "${finalLabelingName}" already exists. Please choose a different name.`);
+                }
+            }
+        }
+
+        // Show progress
+        showNotification(`Importing labeling "${finalLabelingName}"...`, 'info');
+
+        // Send to backend
+        const response = await ProjectAPI.importLabeling(currentProjectId, {
+            ...importData,
+            labeling_name: finalLabelingName
+        });
+
+        // Success - refresh the labelings list
+        await ProjectController.fetchAndDisplayLabelings(currentProjectId);
+        
+        // Select the imported labeling if it's new
+        if (finalLabelingName !== importData.labeling_name || !existingLabeling) {
+            selectLabeling(finalLabelingName);
+        }
+
+        showNotification(`Successfully imported labeling "${finalLabelingName}" with ${response.sessions_processed} sessions and ${response.bouts_imported} bouts`, 'success');
+
+    } catch (error) {
+        console.error('Error importing labeling:', error);
+        showNotification('Failed to import labeling: ' + error.message, 'error');
     }
 }
 
