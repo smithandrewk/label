@@ -36,6 +36,19 @@
                         </small>
                     </div>
 
+                    <div class="mb-4">
+                        <h6 class="text-muted mb-2">Model Scoring Options</h6>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="append-to-current-labeling" checked onchange="updateLabelingOptionStatus()">
+                            <label class="form-check-label" for="append-to-current-labeling">
+                                Append to current labeling
+                            </label>
+                        </div>
+                        <small class="text-muted d-block mt-1" id="labeling-option-status">
+                            Bouts will be added to the current labeling instead of creating a new labeling with the model name
+                        </small>
+                    </div>
+
                     <div id="available-models-list" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
                         <!-- populated by javascript -->
                         <div class="text-center text-muted">

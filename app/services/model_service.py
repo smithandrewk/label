@@ -283,14 +283,14 @@ class ModelService:
             logger.error(f"error loading session data: {e}")
             raise DatabaseError(f'failed to load session data: {str(e)}')
 
-    def _extract_bouts_from_predictions(self, df, predictions, model_name, min_duration_sec=0.25):
+    def _extract_bouts_from_predictions(self, df, predictions, labeling_name, min_duration_sec=0.25):
         """
         Extract bouts from prediction timeline
         
         Args:
             df: DataFrame with time data
             predictions: Model predictions
-            model_name: Name of the model for labeling
+            labeling_name: Name for the labeling (None to use no label - append to current)
             min_duration_sec: Minimum bout duration in seconds
             
         Returns:
@@ -331,7 +331,7 @@ class ModelService:
             # Filter by minimum duration and format as dictionaries
             min_duration_sec = .25
             min_duration_ns = min_duration_sec * 1e9
-            label = f"{model_name}"
+            label = labeling_name or "smoking"
             
             filtered_bouts = [
                 {
@@ -461,7 +461,7 @@ class ModelService:
     #   Worker 
     # =======================
 
-    def _score_session_worker(self, scoring_id, project_path, session_name, session_id, model_config, device='cpu'):
+    def _score_session_worker(self, scoring_id, project_path, session_name, session_id, model_config, device='cpu', append_to_current=True, current_labeling_name=None):
         """
         Unified worker function that handles both CPU and GPU scoring through delegation
         
@@ -488,8 +488,12 @@ class ModelService:
             time_domain_predictions = processor.process(data, device)
             
             # Step 4: Extract bouts from predictions
+            if append_to_current:
+                labeling_name = current_labeling_name if current_labeling_name else "smoking"
+            else:
+                labeling_name = model_config['name']
             bouts = self._extract_bouts_from_predictions(
-                data, time_domain_predictions, model_config['name']
+                data, time_domain_predictions, labeling_name
             )
             
             # Step 5: Save bouts to database
@@ -517,7 +521,7 @@ class ModelService:
             if device == 'cuda':
                 torch.cuda.empty_cache()
 
-    def _score_range_worker(self, scoring_id, project_path, session_name, session_id, model_config, start_ns, end_ns, device='cpu'):
+    def _score_range_worker(self, scoring_id, project_path, session_name, session_id, model_config, start_ns, end_ns, device='cpu', append_to_current=True, current_labeling_name=None):
         """
         Unified worker function that handles both CPU and GPU scoring through delegation
         
@@ -544,8 +548,12 @@ class ModelService:
             time_domain_predictions = processor.process(data, device)
             
             # Step 4: Extract bouts from predictions
+            if append_to_current:
+                labeling_name = current_labeling_name if current_labeling_name else "smoking"
+            else:
+                labeling_name = model_config['name']
             bouts = self._extract_bouts_from_predictions(
-                data, time_domain_predictions, model_config['name']
+                data, time_domain_predictions, labeling_name
             )
             
             # Step 5: Save bouts to database
@@ -577,7 +585,7 @@ class ModelService:
     # Updated Public API Methods
     # =======================
 
-    def score_session_with_model(self, session_id, model_id, project_path, session_name, start_ns=None, end_ns=None, device='cpu'):
+    def score_session_with_model(self, session_id, model_id, project_path, session_name, start_ns=None, end_ns=None, device='cpu', append_to_current=True, current_labeling_name=None):
         """score a session using a specific model"""
         try:
             if device not in ['cpu', 'cuda']:
@@ -599,13 +607,13 @@ class ModelService:
                 # Range scoring
                 logger.info(f"scoring range {start_ns} to {end_ns} for session {session_id}")
                 scoring_id = self.score_range_async_with_model(
-                    project_path, session_name, session_id, model_config, start_ns, end_ns, device=device
+                    project_path, session_name, session_id, model_config, start_ns, end_ns, device=device, append_to_current=append_to_current, current_labeling_name=current_labeling_name
                 )
             else:
                 # Full session scoring
                 logger.info(f"scoring full session {session_id} with model {model_config['name']}")
                 scoring_id = self.score_session_async_with_model(
-                    project_path, session_name, session_id, model_config, device=device
+                    project_path, session_name, session_id, model_config, device=device, append_to_current=append_to_current, current_labeling_name=current_labeling_name
                 )
             
             return {'scoring_id': scoring_id}
@@ -614,7 +622,7 @@ class ModelService:
             logger.error(f"error starting CPU scoring with model {model_id}: {e}")
             raise DatabaseError(f'failed to start scoring: {str(e)}')
 
-    def score_session_async_with_model(self, project_path, session_name, session_id, model_config, device='cpu'):
+    def score_session_async_with_model(self, project_path, session_name, session_id, model_config, device='cpu', append_to_current=True, current_labeling_name=None):
         """start async scoring with specific model configuration and device"""
         scoring_id = str(uuid.uuid4())
         device_label = device.upper()
@@ -634,7 +642,7 @@ class ModelService:
         # Start async processing using unified worker
         scoring_thread = threading.Thread(
             target=self._score_session_worker,  
-            args=(scoring_id, project_path, session_name, session_id, model_config, device)
+            args=(scoring_id, project_path, session_name, session_id, model_config, device, append_to_current, current_labeling_name)
         )
         scoring_thread.daemon = True
         scoring_thread.start()
@@ -642,7 +650,7 @@ class ModelService:
         logger.info(f"started {device_label} scoring thread for {scoring_id}")
         return scoring_id
     
-    def score_range_async_with_model(self, project_path, session_name, session_id, model_config, start_ns, end_ns, device='cpu'):
+    def score_range_async_with_model(self, project_path, session_name, session_id, model_config, start_ns, end_ns, device='cpu', append_to_current=True, current_labeling_name=None):
         """start async scoring with specific model configuration and device"""
         scoring_id = str(uuid.uuid4())
         device_label = device.upper()
@@ -662,7 +670,7 @@ class ModelService:
         # Start async processing using unified worker
         scoring_thread = threading.Thread(
             target=self._score_range_worker,  
-            args=(scoring_id, project_path, session_name, session_id, model_config, start_ns, end_ns, device)
+            args=(scoring_id, project_path, session_name, session_id, model_config, start_ns, end_ns, device, append_to_current, current_labeling_name)
         )
         scoring_thread.daemon = True
         scoring_thread.start()

@@ -125,11 +125,13 @@ class ModelController:
             model_id = data.get('model_id')
             project_name = data.get('project_name')
             session_name = data.get('session_name')
+            append_to_current = data.get('append_to_current', True)  # Default to True for backward compatibility
+            current_labeling_name = data.get('current_labeling_name')
             
             if not all([session_id, model_id, project_name, session_name]):
                 return jsonify({'error': 'missing required fields: session_id, model_id, project_name, session_name'}), 400
             
-            logging.info(f"scoring session {session_id} with model {model_id}")
+            logging.info(f"scoring session {session_id} with model {model_id}, append_to_current: {append_to_current}")
             
             # Get full session info including project_path - THIS IS THE FIX
             try:
@@ -144,7 +146,7 @@ class ModelController:
             
             # delegate to model service for scoring
             scoring_result = self.model_service.score_session_with_model(
-                session_id, model_id, project_path, session_name  # Use the full project_path
+                session_id, model_id, project_path, session_name, append_to_current=append_to_current, current_labeling_name=current_labeling_name  # Use the full project_path
             )
 
             logging.info(f"scoring started with id: {scoring_result.get('scoring_id')}")
@@ -176,11 +178,13 @@ class ModelController:
             session_name = data.get('session_name')
             start_ns = data.get('start_ns')
             end_ns = data.get('end_ns')
+            append_to_current = data.get('append_to_current', True)  # Default to True for backward compatibility
+            current_labeling_name = data.get('current_labeling_name')
             
             if not all([session_id, model_id, project_name, session_name]):
                 return jsonify({'error': 'missing required fields: session_id, model_id, project_name, session_name'}), 400
             
-            logging.info(f"scoring session {session_id} with model {model_id}")
+            logging.info(f"scoring session {session_id} with model {model_id}, append_to_current: {append_to_current}")
             
             # # Get full session info including project_path - THIS IS THE FIX
             try:
@@ -195,7 +199,7 @@ class ModelController:
             
             # delegate to model service for scoring
             scoring_result = self.model_service.score_session_with_model(
-                session_id, model_id, project_path, session_name, start_ns, end_ns, device=device  # Use the full project_path
+                session_id, model_id, project_path, session_name, start_ns, end_ns, device=device, append_to_current=append_to_current, current_labeling_name=current_labeling_name  # Use the full project_path
             )
 
             logging.info(f"scoring started with id: {scoring_result.get('scoring_id')}")
@@ -256,6 +260,8 @@ class ModelController:
             model_id = data.get('model_id')
             project_name = data.get('project_name')
             session_name = data.get('session_name')
+            append_to_current = data.get('append_to_current', True)  # Default to True for backward compatibility
+            current_labeling_name = data.get('current_labeling_name')
             
             if not all([session_id, model_id, project_name, session_name]):
                 return jsonify({'error': 'missing required fields: session_id, model_id, project_name, session_name'}), 400
@@ -264,7 +270,7 @@ class ModelController:
             if not self.model_service.is_gpu_available():
                 return jsonify({'error': 'GPU is not available on this system'}), 400
             
-            logging.info(f"scoring session {session_id} with model {model_id} on GPU")
+            logging.info(f"scoring session {session_id} with model {model_id} on GPU, append_to_current: {append_to_current}")
             
             # get full session info including project_path
             try:
@@ -279,7 +285,7 @@ class ModelController:
             
             # delegate to model service for GPU scoring
             scoring_result = self.model_service.score_session_with_model(
-                session_id, model_id, project_path, session_name, device='cuda'  # Use GPU for scoring
+                session_id, model_id, project_path, session_name, device='cuda', append_to_current=append_to_current, current_labeling_name=current_labeling_name  # Use GPU for scoring
             )
             
             logging.info(f"GPU scoring started with id: {scoring_result.get('scoring_id')}")

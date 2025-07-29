@@ -126,11 +126,12 @@ export class ModelAPI {
      * @param {string|number} modelId - ID of the model to use
      * @param {string} projectName - Name of the project
      * @param {string} sessionName - Name of the session
+     * @param {boolean} appendToCurrent - Whether to append to current labeling or create new one
      * @returns {Promise<Object>} Scoring result with scoring_id
      */
-    static async scoreSession(sessionId, modelId, projectName, sessionName) {
+    static async scoreSession(sessionId, modelId, projectName, sessionName, appendToCurrent = true, currentLabelingName = null) {
         try {
-            console.log('scoring session with model:', { sessionId, modelId, projectName, sessionName });
+            console.log('scoring session with model:', { sessionId, modelId, projectName, sessionName, appendToCurrent, currentLabelingName });
             
             const response = await fetch('/api/models/score', {
                 method: 'POST',
@@ -141,7 +142,9 @@ export class ModelAPI {
                     session_id: sessionId,
                     model_id: modelId,
                     project_name: projectName,
-                    session_name: sessionName
+                    session_name: sessionName,
+                    append_to_current: appendToCurrent,
+                    current_labeling_name: currentLabelingName
                 })
             });
             
@@ -159,9 +162,9 @@ export class ModelAPI {
         }
     }
 
-    static async scoreSessionInVisibleRange(sessionId, modelId, projectName, sessionName, startNs, endNs) {
+    static async scoreSessionInVisibleRange(sessionId, modelId, projectName, sessionName, startNs, endNs, appendToCurrent = true, currentLabelingName = null) {
         try {
-            console.log('scoring session with model:', { sessionId, modelId, projectName, sessionName, startNs, endNs });
+            console.log('scoring session with model:', { sessionId, modelId, projectName, sessionName, startNs, endNs, appendToCurrent, currentLabelingName });
             
             const response = await fetch('/api/models/score_range', {
                 method: 'POST',
@@ -174,7 +177,9 @@ export class ModelAPI {
                     project_name: projectName,
                     session_name: sessionName,
                     start_ns: startNs,
-                    end_ns: endNs
+                    end_ns: endNs,
+                    append_to_current: appendToCurrent,
+                    current_labeling_name: currentLabelingName
                 })
             });
             
@@ -192,9 +197,9 @@ export class ModelAPI {
         }
     }
 
-    static async scoreSessionInVisibleRangeGpu(sessionId, modelId, projectName, sessionName, startNs, endNs) {
+    static async scoreSessionInVisibleRangeGpu(sessionId, modelId, projectName, sessionName, startNs, endNs, appendToCurrent = true, currentLabelingName = null) {
         try {
-            console.log('scoring session with model:', { sessionId, modelId, projectName, sessionName, startNs, endNs });
+            console.log('scoring session with model:', { sessionId, modelId, projectName, sessionName, startNs, endNs, appendToCurrent, currentLabelingName });
             
             const response = await fetch('/api/models/score_range_gpu', {
                 method: 'POST',
@@ -207,7 +212,9 @@ export class ModelAPI {
                     project_name: projectName,
                     session_name: sessionName,
                     start_ns: startNs,
-                    end_ns: endNs
+                    end_ns: endNs,
+                    append_to_current: appendToCurrent,
+                    current_labeling_name: currentLabelingName
                 })
             });
             
@@ -253,11 +260,12 @@ export class ModelAPI {
      * @param {string|number} modelId - ID of the model to use
      * @param {string} projectName - Name of the project
      * @param {string} sessionName - Name of the session
+     * @param {boolean} appendToCurrent - Whether to append to current labeling or create new one
      * @returns {Promise<Object>} Scoring result with scoring_id
      */
-    static async scoreSessionGpu(sessionId, modelId, projectName, sessionName) {
+    static async scoreSessionGpu(sessionId, modelId, projectName, sessionName, appendToCurrent = true, currentLabelingName = null) {
         try {
-            console.log('scoring session with model on GPU:', { sessionId, modelId, projectName, sessionName });
+            console.log('scoring session with model on GPU:', { sessionId, modelId, projectName, sessionName, appendToCurrent, currentLabelingName });
             
             const response = await fetch('/api/models/score_gpu', {
                 method: 'POST',
@@ -268,7 +276,9 @@ export class ModelAPI {
                     session_id: sessionId,
                     model_id: modelId,
                     project_name: projectName,
-                    session_name: sessionName
+                    session_name: sessionName,
+                    append_to_current: appendToCurrent,
+                    current_labeling_name: currentLabelingName
                 })
             });
             

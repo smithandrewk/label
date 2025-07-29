@@ -708,8 +708,14 @@ window.selectModelForScoring = function(modelId, modelName) {
     const deviceType = modal ? modal.dataset.deviceType || 'cpu' : 'cpu';
     console.log('🔍 Device type detected:', deviceType);
     
+    // get labeling option from toggle
+    const appendToCurrentCheckbox = document.getElementById('append-to-current-labeling');
+    const appendToCurrent = appendToCurrentCheckbox ? appendToCurrentCheckbox.checked : true;
+    console.log('🏷️ Append to current labeling:', appendToCurrent);
+    
     const deviceLabel = deviceType.toUpperCase();
-    const confirmed = confirm(`score current session using model: ${modelName} on ${deviceLabel}?`);
+    const labelingAction = appendToCurrent ? 'append to current labeling' : 'create new labeling with model name';
+    const confirmed = confirm(`score current session using model: ${modelName} on ${deviceLabel}?\n\nAction: ${labelingAction}`);
     if (!confirmed) return;
     
     // close modal
@@ -718,9 +724,9 @@ window.selectModelForScoring = function(modelId, modelName) {
     
     // start scoring with selected model and device
     if (deviceType === 'gpu') {
-        window.scoreSessionWithModelGpu(window.currentSessionId, modelId, modelName);
+        window.scoreSessionWithModelGpu(window.currentSessionId, modelId, modelName, appendToCurrent);
     } else {
-        window.scoreSessionWithModel(window.currentSessionId, modelId, modelName);
+        window.scoreSessionWithModel(window.currentSessionId, modelId, modelName, appendToCurrent);
     }
 };
 
@@ -743,10 +749,17 @@ window.selectModelForScoringInVisibleRange = function(modelId, modelName, send_c
     const deviceType = modal ? modal.dataset.deviceType || 'cpu' : 'cpu';
     console.log('🔍 Device type detected:', deviceType);
     
+    // get labeling option from toggle
+    const appendToCurrentCheckbox = document.getElementById('append-to-current-labeling');
+    const appendToCurrent = appendToCurrentCheckbox ? appendToCurrentCheckbox.checked : true;
+    console.log('🏷️ Append to current labeling:', appendToCurrent);
+    
     const deviceLabel = deviceType.toUpperCase();
+    const labelingAction = appendToCurrent ? 'append to current labeling' : 'create new labeling with model name';
+    
     if (send_confirm) {
         const visibleRange = window.getVisibleRangeInNs();
-        let confirmMessage = `Score visible range using model: ${modelName} on ${deviceLabel}?`;
+        let confirmMessage = `Score visible range using model: ${modelName} on ${deviceLabel}?\n\nAction: ${labelingAction}`;
         
         if (visibleRange) {
             const rangeText = window.formatTimeRange(visibleRange.start, visibleRange.end);
@@ -764,9 +777,9 @@ window.selectModelForScoringInVisibleRange = function(modelId, modelName, send_c
     
     // start scoring with selected model and device
     if (deviceType === 'gpu') {
-        window.scoreSessionWithModelInVisibleRangeGpu(window.currentSessionId, modelId, modelName);
+        window.scoreSessionWithModelInVisibleRangeGpu(window.currentSessionId, modelId, modelName, appendToCurrent);
     } else {
-        window.scoreSessionWithModelInVisibleRange(window.currentSessionId, modelId, modelName);
+        window.scoreSessionWithModelInVisibleRange(window.currentSessionId, modelId, modelName, appendToCurrent);
     }
 };
 
@@ -793,7 +806,7 @@ window.formatTimeRange = function(startNs, endNs) {
     return `${startSeconds}s - ${endSeconds}s (${durationSeconds}s duration)`;
 }
 
-window.scoreSessionWithModelInVisibleRange = async function(sessionId, modelId, modelName) {
+window.scoreSessionWithModelInVisibleRange = async function(sessionId, modelId, modelName, appendToCurrent = true) {
     try {
         console.log('scoring session with CPU model:', { sessionId, modelId, modelName });
         
@@ -818,7 +831,8 @@ window.scoreSessionWithModelInVisibleRange = async function(sessionId, modelId, 
 
         // import ModelAPI and start scoring
         const { default: ModelAPI } = await import('../api/modelAPI.js');
-        const result = await ModelAPI.scoreSessionInVisibleRange(sessionId, modelId, session.project_name, session.session_name, visibleRange.start, visibleRange.end);
+        const currentLabelingName = appendToCurrent ? window.currentLabelingName : null;
+        const result = await ModelAPI.scoreSessionInVisibleRange(sessionId, modelId, session.project_name, session.session_name, visibleRange.start, visibleRange.end, appendToCurrent, currentLabelingName);
         
         if (result.success) {
             console.log('scoring started successfully:', result);
@@ -847,7 +861,7 @@ window.scoreSessionWithModelInVisibleRange = async function(sessionId, modelId, 
         ActionButtonHandlers.updateModelStatusIndicator(false);
     }
 };
-window.scoreSessionWithModelInVisibleRangeGpu = async function(sessionId, modelId, modelName) {
+window.scoreSessionWithModelInVisibleRangeGpu = async function(sessionId, modelId, modelName, appendToCurrent = true) {
     try {
         console.log('scoring session with GPU model:', { sessionId, modelId, modelName });
         
@@ -872,7 +886,8 @@ window.scoreSessionWithModelInVisibleRangeGpu = async function(sessionId, modelI
 
         // import ModelAPI and start scoring
         const { default: ModelAPI } = await import('../api/modelAPI.js');
-        const result = await ModelAPI.scoreSessionInVisibleRangeGpu(sessionId, modelId, session.project_name, session.session_name, visibleRange.start, visibleRange.end);
+        const currentLabelingName = appendToCurrent ? window.currentLabelingName : null;
+        const result = await ModelAPI.scoreSessionInVisibleRangeGpu(sessionId, modelId, session.project_name, session.session_name, visibleRange.start, visibleRange.end, appendToCurrent, currentLabelingName);
         
         if (result.success) {
             console.log('scoring started successfully:', result);
@@ -901,7 +916,7 @@ window.scoreSessionWithModelInVisibleRangeGpu = async function(sessionId, modelI
         ActionButtonHandlers.updateModelStatusIndicator(false);
     }
 };
-window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
+window.scoreSessionWithModel = async function(sessionId, modelId, modelName, appendToCurrent = true) {
     try {
         console.log('scoring session with CPU model:', { sessionId, modelId, modelName });
         
@@ -919,7 +934,8 @@ window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
         
         // import ModelAPI and start scoring
         const { default: ModelAPI } = await import('../api/modelAPI.js');
-        const result = await ModelAPI.scoreSession(sessionId, modelId, session.project_name, session.session_name);
+        const currentLabelingName = appendToCurrent ? window.currentLabelingName : null;
+        const result = await ModelAPI.scoreSession(sessionId, modelId, session.project_name, session.session_name, appendToCurrent, currentLabelingName);
         
         if (result.success) {
             console.log('scoring started successfully:', result);
@@ -950,7 +966,7 @@ window.scoreSessionWithModel = async function(sessionId, modelId, modelName) {
 };
 
 
-window.scoreSessionWithModelGpu = async function(sessionId, modelId, modelName) {
+window.scoreSessionWithModelGpu = async function(sessionId, modelId, modelName, appendToCurrent = true) {
     try {
         console.log('scoring session with GPU model:', { sessionId, modelId, modelName });
         
@@ -968,7 +984,8 @@ window.scoreSessionWithModelGpu = async function(sessionId, modelId, modelName) 
         
         // import ModelAPI and start GPU scoring
         const { default: ModelAPI } = await import('../api/modelAPI.js');
-        const result = await ModelAPI.scoreSessionGpu(sessionId, modelId, session.project_name, session.session_name);
+        const currentLabelingName = appendToCurrent ? window.currentLabelingName : null;
+        const result = await ModelAPI.scoreSessionGpu(sessionId, modelId, session.project_name, session.session_name, appendToCurrent, currentLabelingName);
         
         if (result.success) {
             console.log('GPU scoring started successfully:', result);
@@ -1053,6 +1070,19 @@ window.selectDevice = function(deviceType) {
     const modal = document.getElementById('modelSelection');
     if (modal) {
         modal.dataset.deviceType = deviceType;
+    }
+};
+
+window.updateLabelingOptionStatus = function() {
+    const checkbox = document.getElementById('append-to-current-labeling');
+    const statusElement = document.getElementById('labeling-option-status');
+    
+    if (checkbox && statusElement) {
+        if (checkbox.checked) {
+            statusElement.textContent = 'Bouts will be added to the current labeling instead of creating a new labeling with the model name';
+        } else {
+            statusElement.textContent = 'A new labeling will be created with the model name, and bouts will be added to it';
+        }
     }
 };
 
