@@ -399,18 +399,30 @@ class ProjectController:
                     upload_id = str(uuid.uuid4())
                     upload_ids.append(upload_id)
                     
+                    all_labels = []
+
                     for session in sessions:
                         logger.info(f"Processing session: {session['name']}")
                         bouts = self.session_service.load_bouts_from_labels_json(new_project_path, session)
+
                         for bout in bouts:
                             if 'label' not in bout:
-                                bout['label'] = 'smoking'
+                                bout['label'] = 'SELF REPORTED SMOKING'
+
+                            if bout['label'] not in all_labels:
+                                all_labels.append(bout['label'])
+
                         created_sessions = self.session_service.preprocess_and_split_session_on_upload(
                             session_name=session['name'],
                             project_path=new_project_path,
                             project_id=project_id,
                             parent_bouts=bouts
                         )
+                    # Log all labels
+                    logger.info(f"All labels found in project {project_name}: {all_labels}")
+
+                    # Add labels to project metadata
+                    self.project_service.add_list_of_labeling_names_to_project(project_id, all_labels)
                     
                     upload_results.append({
                         'project_name': project_name,
