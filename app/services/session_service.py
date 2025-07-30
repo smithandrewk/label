@@ -460,6 +460,8 @@ class SessionService:
                     s.keep, 
                     s.verified,
                     s.bouts,
+                    s.start_ns,
+                    s.stop_ns,
                     p.project_id,
                     p.project_name, 
                     p.path AS project_path,

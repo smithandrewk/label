@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 from app.exceptions import DatabaseError
 import os
 import pandas as pd
@@ -354,63 +354,56 @@ class LabelController:
             sessions_processed = 0
             bouts_imported = 0
             
-            # Create a mapping of session names to session IDs in the current project
-            session_name_to_id = {s['session_name']: s['session_id'] for s in project_sessions}
-            
-            for imported_session in imported_sessions:
-                session_name = imported_session.get('session_name')
-                imported_bouts = imported_session.get('bouts', [])
-                
-                if not session_name or not imported_bouts:
-                    continue
-                    
-                # Check if session exists in current project
-                if session_name in session_name_to_id:
-                    session_id = session_name_to_id[session_name]
-                    
-                    # Get current session bouts
-                    current_session = next((s for s in project_sessions if s['session_id'] == session_id), None)
-                    if current_session:
-                        current_bouts = []
-                        if current_session['bouts']:
-                            try:
-                                if isinstance(current_session['bouts'], str):
-                                    current_bouts = json.loads(current_session['bouts'])
-                                elif isinstance(current_session['bouts'], list):
-                                    current_bouts = current_session['bouts']
-                            except (json.JSONDecodeError, TypeError):
-                                current_bouts = []
-                        
-                        # Convert imported bouts to the database format and append
-                        new_bouts = []
-                        for bout in imported_bouts:
-                            # Convert from export format to database dictionary format
+            # for existing_session in project_sessions:
+            for existing_session in project_sessions:
+                root_existing_session_name = existing_session['session_name'].split('.')[0] if existing_session['session_name'] else None
+
+                current_bouts = []
+                try:
+                    if isinstance(existing_session['bouts'], str):
+                        current_bouts = json.loads(existing_session['bouts'])
+                    elif isinstance(existing_session['bouts'], list):
+                        current_bouts = existing_session['bouts']
+                except (json.JSONDecodeError, TypeError):
+                    current_bouts = []
+
+                imported_sessions_with_same_root = [
+                    s for s in imported_sessions if s['session_name'].startswith(root_existing_session_name)
+                ]
+
+                for imported_session in imported_sessions_with_same_root:
+                    imported_bouts = imported_session.get('bouts', [])
+
+                    for bout in imported_bouts:
+                        bout_start_ns = bout.get('start_time')
+                        bout_end_ns = bout.get('end_time')
+
+                        # Check if bout start and end times are within the session bounds
+                        if (bout_start_ns is not None and bout_end_ns is not None and
+                            existing_session['start_ns'] <= bout_start_ns < existing_session['stop_ns'] and
+                            existing_session['start_ns'] < bout_end_ns <= existing_session['stop_ns']):
+                            
                             new_bout = {
                                 "start": bout.get('start_time'),
                                 "end": bout.get('end_time'),
-                                "label": labeling_name,  # Use the final labeling name
+                                "label": labeling_name,
                                 "confidence": bout.get('confidence')
                             }
-                            new_bouts.append(new_bout)
+
+                            current_bouts.append(new_bout)
                             bouts_imported += 1
-                        
-                        # Merge with existing bouts
-                        merged_bouts = current_bouts + new_bouts
-                        
-                        # Convert to JSON string for database storage
-                        merged_bouts_json = json.dumps(merged_bouts)
-                        
-                        # Update session with merged bouts
-                        self.session_service.update_session(
-                            session_id,
-                            current_session['status'],
-                            current_session['keep'],
-                            merged_bouts_json,
-                            current_session['verified']
-                        )
-                        
-                        sessions_processed += 1
-            
+                            
+                merged_bouts_json = json.dumps(current_bouts)
+
+                # Update session with merged bouts
+                self.session_service.update_session(
+                    existing_session['session_id'],
+                    existing_session['status'],
+                    existing_session['keep'],
+                    merged_bouts_json,
+                    existing_session['verified']
+                )
+
             return jsonify({
                 'success': True,
                 'message': f'Successfully imported labeling "{labeling_name}"',
