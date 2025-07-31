@@ -77,10 +77,20 @@ If you prefer to set up manually:
 
 1. Add the `.py` and `.pt` file to the `MODEL_DIR` specified in the `.env` file
 2. Add model `.py` file path, `.pt` file path, display name, and model class name to the UI 
-3. All models should implement the following three methods in the `.py` files that defines the **Class** as well:
+3. Configure model-specific settings (threshold and minimum bout duration) via the settings panel
+4. All models should implement the following three methods in the `.py` files that defines the **Class** as well:
    - `preprocess(self, data)`
    - `run(self, preprocessed_data, device='cpu')`
-   - `postprocess(self, raw_predictions, data)`
+   - `postprocess(self, raw_predictions, data, threshold=None)`
+
+## Model-Specific Settings
+
+Each model can have customizable settings that affect how predictions are processed:
+
+- **Threshold (0.0-1.0)**: Passed as a parameter to the model's `postprocess` method, allowing models to apply custom thresholding logic.
+- **Minimum Bout Duration**: Filters out detected smoking bouts shorter than the specified duration (in seconds).
+
+These settings can be configured per model through the web interface settings panel.
 
 
 
@@ -126,7 +136,7 @@ Parameters:
    - device: Target device string ('cpu' or 'cuda')
 
 Returns:
-   - Raw model predictions (typically logits or probabilities)
+   - Raw model predictions (typically logits)
 
 Example:
 ```python 
@@ -143,13 +153,15 @@ def run(self, preprocessed_data, device='cpu'):
     return predictions
 ```
 
-### `postprocess(self, raw_predictions, raw_data)`
+### `postprocess(self, raw_predictions, raw_data, threshold=None)`
 Converts raw model output to time-domain predictions.
 
+**Important**: When a custom threshold is configured for the model, it will be passed as the optional `threshold` parameter. Models should handle both cases: default behavior when `threshold=None` and custom thresholding when a threshold is provided.
 
 Parameters:
    - raw_predictions: Raw output from run() method
-   - raw_data: Raw data athat was also passed to preprocess() method
+   - raw_data: Raw data that was also passed to preprocess() method  
+   - threshold: Optional threshold value (0.0-1.0) for custom thresholding
 
 Returns:
    - Time-aligned predictions ready for bout extraction
@@ -157,11 +169,14 @@ Returns:
 Example:
 ``` python 
 
-def postprocess(self, raw_predictions, raw_data):
-    """Convert predictions to time domain"""
-    # Apply sigmoid and threshold
-    predictions = raw_predictions.sigmoid().cpu()
-    predictions = (predictions > 0.6).float()
+def postprocess(self, raw_predictions, raw_data, threshold=None):
+    """Convert predictions to time domain with optional threshold"""
+    # Apply sigmoid to convert logits to probabilities
+    probabilities = raw_predictions.sigmoid().cpu()
+    
+    # Use custom threshold if provided, otherwise default
+    thresh = threshold if threshold is not None else 0.6
+    predictions = (probabilities > thresh).float()
     predictions = predictions.numpy().flatten()
     
     # Expand to match original time resolution
@@ -171,3 +186,5 @@ def postprocess(self, raw_predictions, raw_data):
     return expanded_predictions
 
 ```
+
+**Note**: Models should implement their `postprocess()` method to accept an optional `threshold` parameter. This allows the system to pass custom threshold values while maintaining backward compatibility.

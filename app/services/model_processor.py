@@ -31,19 +31,20 @@ class ModelProcessor:
                 f"See the model interface documentation for details."
             )
     
-    def process(self, data, device='cpu'):
+    def process(self, data, device='cpu', threshold=None):
         """
         Process data through the complete model pipeline.
         
         Args:
             data: Raw session data (DataFrame or other format)
             device: Target device ('cpu' or 'cuda')
+            threshold: Optional threshold for binary conversion. Passed to model's postprocess method.
             
         Returns:
             Time-domain predictions ready for bout extraction
         """
         try:
-            logger.info(f"Processing data through model on device: {device}")
+            logger.info(f"Processing data through model on device: {device}, threshold: {threshold}")
             
             # Step 1: Preprocess data
             preprocessed_data = self.model.preprocess(data)
@@ -53,8 +54,14 @@ class ModelProcessor:
             raw_predictions = self.model.run(preprocessed_data, device)
             logger.debug("Model inference completed")
             
-            # Step 3: Postprocess predictions
-            time_domain_predictions = self.model.postprocess(raw_predictions, data)
+            # Step 3: Postprocess predictions with optional threshold
+            if threshold is not None:
+                # Pass threshold to model's postprocess method
+                logger.info(f"Passing threshold {threshold} to model's postprocess method")
+                time_domain_predictions = self.model.postprocess(raw_predictions, data, threshold=threshold)
+            else:
+                # Use model's default postprocessing
+                time_domain_predictions = self.model.postprocess(raw_predictions, data)
             logger.debug("Prediction postprocessing completed")
             
             return time_domain_predictions
@@ -62,3 +69,4 @@ class ModelProcessor:
         except Exception as e:
             logger.error(f"Error in model processing pipeline: {e}")
             raise
+

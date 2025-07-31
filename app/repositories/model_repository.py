@@ -8,7 +8,7 @@ class ModelRepository(BaseRepository):
         """Get all active models"""
         query = """
             SELECT model_id, name, description, py_filename, pt_filename, 
-                   class_name, is_active, created_at, updated_at
+                   class_name, model_settings, is_active, created_at, updated_at
             FROM models 
             WHERE is_active = 1
             ORDER BY created_at DESC
@@ -19,7 +19,7 @@ class ModelRepository(BaseRepository):
         """Get all models including inactive ones"""
         query = """
             SELECT model_id, name, description, py_filename, pt_filename, 
-                   class_name, is_active, created_at, updated_at
+                   class_name, model_settings, is_active, created_at, updated_at
             FROM models 
             ORDER BY created_at DESC
         """
@@ -29,7 +29,7 @@ class ModelRepository(BaseRepository):
         """Find model by ID"""
         query = """
             SELECT model_id, name, description, py_filename, pt_filename, 
-                   class_name, is_active, created_at, updated_at
+                   class_name, model_settings, is_active, created_at, updated_at
             FROM models 
             WHERE model_id = %s
         """
@@ -37,9 +37,18 @@ class ModelRepository(BaseRepository):
     
     def create(self, model_data):
         """Create a new model"""
+        import json
+        
+        # Set default model settings if not provided
+        default_settings = {
+            "threshold": 0.5,
+            "min_bout_duration_ns": 250000000  # 0.25 seconds in nanoseconds
+        }
+        model_settings = model_data.get('model_settings', default_settings)
+        
         query = """
-            INSERT INTO models (name, description, py_filename, pt_filename, class_name, is_active) 
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO models (name, description, py_filename, pt_filename, class_name, model_settings, is_active) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -51,6 +60,7 @@ class ModelRepository(BaseRepository):
                 model_data['py_filename'],
                 model_data['pt_filename'],
                 model_data['class_name'],
+                json.dumps(model_settings) if model_settings else None,
                 model_data.get('is_active', True)
             ))
             conn.commit()
@@ -67,15 +77,21 @@ class ModelRepository(BaseRepository):
     
     def update(self, model_id, model_data):
         """Update an existing model"""
+        import json
+        
         # build dynamic update query based on provided fields
         update_fields = []
         params = []
         
-        updatable_fields = ['name', 'description', 'py_filename', 'pt_filename', 'class_name', 'is_active']
+        updatable_fields = ['name', 'description', 'py_filename', 'pt_filename', 'class_name', 'model_settings', 'is_active']
         for field in updatable_fields:
             if field in model_data:
                 update_fields.append(f"{field} = %s")
-                params.append(model_data[field])
+                # Handle JSON serialization for model_settings
+                if field == 'model_settings' and model_data[field] is not None:
+                    params.append(json.dumps(model_data[field]))
+                else:
+                    params.append(model_data[field])
         
         if not update_fields:
             raise DatabaseError('no fields to update')
@@ -118,7 +134,7 @@ class ModelRepository(BaseRepository):
         """Find model by name"""
         query = """
             SELECT model_id, name, description, py_filename, pt_filename, 
-                   class_name, is_active, created_at, updated_at
+                   class_name, model_settings, is_active, created_at, updated_at
             FROM models 
             WHERE name = %s AND is_active = 1
         """

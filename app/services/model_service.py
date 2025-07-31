@@ -30,6 +30,14 @@ class ModelService:
             # convert to dict format for json serialization
             formatted_models = []
             for model in models:
+                import json
+                model_settings = None
+                if model.get('model_settings'):
+                    try:
+                        model_settings = json.loads(model['model_settings'])
+                    except (json.JSONDecodeError, TypeError):
+                        model_settings = None
+                
                 formatted_models.append({
                     'id': model['model_id'],
                     'name': model['name'],
@@ -37,6 +45,7 @@ class ModelService:
                     'py_filename': model['py_filename'],
                     'pt_filename': model['pt_filename'],
                     'class_name': model['class_name'],
+                    'model_settings': model_settings,
                     'is_active': bool(model['is_active']),
                     'created_at': model['created_at'].isoformat() if model['created_at'] else None
                 })
@@ -101,7 +110,15 @@ class ModelService:
             # create model record in database
             created_model = self.model_repo.create(model_data)
             
-            # format for json response
+            # format for json response with model_settings parsing
+            import json
+            model_settings = None
+            if created_model.get('model_settings'):
+                try:
+                    model_settings = json.loads(created_model['model_settings'])
+                except (json.JSONDecodeError, TypeError):
+                    model_settings = None
+            
             formatted_model = {
                 'id': created_model['model_id'],
                 'name': created_model['name'],
@@ -109,6 +126,7 @@ class ModelService:
                 'py_filename': created_model['py_filename'],
                 'pt_filename': created_model['pt_filename'],
                 'class_name': created_model['class_name'],
+                'model_settings': model_settings,
                 'is_active': bool(created_model['is_active']),
                 'created_at': created_model['created_at'].isoformat() if created_model['created_at'] else None
             }
@@ -149,7 +167,15 @@ class ModelService:
             if not updated_model:
                 return None
             
-            # format for json response
+            # format for json response with model_settings parsing
+            import json
+            model_settings = None
+            if updated_model.get('model_settings'):
+                try:
+                    model_settings = json.loads(updated_model['model_settings'])
+                except (json.JSONDecodeError, TypeError):
+                    model_settings = None
+            
             formatted_model = {
                 'id': updated_model['model_id'],
                 'name': updated_model['name'],
@@ -157,6 +183,7 @@ class ModelService:
                 'py_filename': updated_model['py_filename'],
                 'pt_filename': updated_model['pt_filename'],
                 'class_name': updated_model['class_name'],
+                'model_settings': model_settings,
                 'is_active': bool(updated_model['is_active']),
                 'created_at': updated_model['created_at'].isoformat() if updated_model['created_at'] else None
             }
@@ -195,6 +222,14 @@ class ModelService:
             if not model or not model['is_active']:
                 return None
             
+            import json
+            model_settings = None
+            if model.get('model_settings'):
+                try:
+                    model_settings = json.loads(model['model_settings'])
+                except (json.JSONDecodeError, TypeError):
+                    model_settings = None
+            
             # format for internal use
             return {
                 'id': model['model_id'],
@@ -202,7 +237,8 @@ class ModelService:
                 'description': model['description'] or '',
                 'py_filename': model['py_filename'],
                 'pt_filename': model['pt_filename'],
-                'class_name': model['class_name']
+                'class_name': model['class_name'],
+                'model_settings': model_settings
             }
         except Exception as e:
             logger.error(f"error getting model {model_id}: {e}")
@@ -289,7 +325,7 @@ class ModelService:
         
         Args:
             df: DataFrame with time data
-            predictions: Model predictions
+            predictions: Model predictions (already thresholded binary values)
             labeling_name: Name for the labeling (None to use no label - append to current)
             min_duration_sec: Minimum bout duration in seconds
             
@@ -297,7 +333,7 @@ class ModelService:
             list: List of bout dictionaries
         """
         try:
-            # Add predictions to dataframe
+            # Add predictions to dataframe with configurable threshold
             if len(predictions) < len(df):
                 # Extend predictions if needed
                 extended_predictions = np.concatenate([
@@ -305,17 +341,17 @@ class ModelService:
                     np.zeros(len(df) - len(predictions))
                 ])
                 df = df.copy()
-                df['y_pred'] = extended_predictions * 20
+                df['y_pred'] = extended_predictions
             else:
                 df = df.copy()
-                df['y_pred'] = predictions[:len(df)] * 20
+                df['y_pred'] = predictions[:len(df)]
 
-            # Extract bouts
+            # Extract bouts (predictions are already thresholded by processor)
             smoking_bouts = []
             current_bout = None
             
             for i in range(len(df)):
-                if df['y_pred'].iloc[i] > 0:
+                if df['y_pred'].iloc[i] > 0:  # Already binary from processor
                     if current_bout is None:
                         current_bout = [int(df['ns_since_reboot'].iloc[i]), None]
                     current_bout[1] = int(df['ns_since_reboot'].iloc[i])
@@ -329,9 +365,11 @@ class ModelService:
                 smoking_bouts.append(current_bout)
 
             # Filter by minimum duration and format as dictionaries
-            min_duration_sec = .25
             min_duration_ns = min_duration_sec * 1e9
             label = labeling_name or "smoking"
+            
+            logger.info(f"Filtering bouts: min_duration_sec={min_duration_sec}, min_duration_ns={min_duration_ns}")
+            logger.info(f"Found {len(smoking_bouts)} raw bouts before filtering")
             
             filtered_bouts = [
                 {
@@ -342,6 +380,12 @@ class ModelService:
                 for bout in smoking_bouts 
                 if ((bout[1] - bout[0]) >= min_duration_ns)
             ]
+            
+            # Log some debug info about filtering
+            if len(smoking_bouts) > 0:
+                durations = [(bout[1] - bout[0]) / 1e9 for bout in smoking_bouts]
+                logger.info(f"Bout durations (seconds): {durations[:10]}...")  # Show first 10
+                logger.info(f"Min required duration: {min_duration_sec}s ({min_duration_ns}ns)")
             
             logger.info(f"extracted {len(filtered_bouts)} bouts with label: {label} "
                        f"(filtered from {len(smoking_bouts)} raw bouts)")
@@ -480,23 +524,33 @@ class ModelService:
             # Step 1: Load session data
             data = self.load_session_data(project_path, session_name)
 
-            # Step 2: Load and wrap model with processor
+            # Step 2: Get model settings or use defaults
+            model_settings = model_config.get('model_settings', {})
+            threshold = model_settings.get('threshold', 0.5)
+            min_bout_duration_ns = model_settings.get('min_bout_duration_ns', 250000000)  # 0.25 seconds
+            min_bout_duration_sec = min_bout_duration_ns / 1e9
+            
+            logger.info(f"Model config model_settings: {model_config.get('model_settings')}")
+            logger.info(f"Using model settings: threshold={threshold}, min_bout_duration_ns={min_bout_duration_ns}, min_bout_duration_sec={min_bout_duration_sec}")
+            
+            # Step 3: Load and wrap model with processor
             model_instance = self._load_model_instance(model_config, device)
             processor = ModelProcessor(model_instance)
             
-            # Step 3: Process through model pipeline
-            time_domain_predictions = processor.process(data, device)
+            # Step 4: Process through model pipeline with custom threshold
+            time_domain_predictions = processor.process(data, device, threshold)
             
-            # Step 4: Extract bouts from predictions
+            # Step 5: Extract bouts from predictions using model settings
             if append_to_current:
                 labeling_name = current_labeling_name if current_labeling_name else "smoking"
             else:
                 labeling_name = model_config['name']
+            
             bouts = self._extract_bouts_from_predictions(
-                data, time_domain_predictions, labeling_name
+                data, time_domain_predictions, labeling_name, min_bout_duration_sec
             )
             
-            # Step 5: Save bouts to database
+            # Step 6: Save bouts to database
             self._save_bouts_to_session(session_id, bouts)
             
             # Update status on completion
@@ -540,23 +594,33 @@ class ModelService:
             # Step 1: Load session data
             data = self.load_range_data(project_path, session_name, start_ns, end_ns)
             
-            # Step 2: Load and wrap model with processor
+            # Step 2: Get model settings or use defaults
+            model_settings = model_config.get('model_settings', {})
+            threshold = model_settings.get('threshold', 0.5)
+            min_bout_duration_ns = model_settings.get('min_bout_duration_ns', 250000000)  # 0.25 seconds
+            min_bout_duration_sec = min_bout_duration_ns / 1e9
+            
+            logger.info(f"Model config model_settings: {model_config.get('model_settings')}")
+            logger.info(f"Using model settings: threshold={threshold}, min_bout_duration_ns={min_bout_duration_ns}, min_bout_duration_sec={min_bout_duration_sec}")
+            
+            # Step 3: Load and wrap model with processor
             model_instance = self._load_model_instance(model_config, device)
             processor = ModelProcessor(model_instance)
             
-            # Step 3: Process through model pipeline
-            time_domain_predictions = processor.process(data, device)
+            # Step 4: Process through model pipeline with custom threshold
+            time_domain_predictions = processor.process(data, device, threshold)
             
-            # Step 4: Extract bouts from predictions
+            # Step 5: Extract bouts from predictions using model settings
             if append_to_current:
                 labeling_name = current_labeling_name if current_labeling_name else "smoking"
             else:
                 labeling_name = model_config['name']
+            
             bouts = self._extract_bouts_from_predictions(
-                data, time_domain_predictions, labeling_name
+                data, time_domain_predictions, labeling_name, min_bout_duration_sec
             )
             
-            # Step 5: Save bouts to database
+            # Step 6: Save bouts to database
             self._save_bouts_to_session(session_id, bouts)
             
             # Update status on completion

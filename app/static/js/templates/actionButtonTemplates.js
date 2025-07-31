@@ -412,6 +412,9 @@ export const ActionButtonHandlers = {
                                 </div>
                             </div>
                             <div class="d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-info" onclick="showModelSettings('${model.id}', '${model.name}')" title="configure model settings">
+                                    <i class="fa-solid fa-sliders"></i>
+                                </button>
                                 <button class="btn btn-sm btn-outline-primary score-range-btn" 
                                         onclick="selectModelForScoringInVisibleRange('${model.id}', '${model.name}')" 
                                         data-bs-toggle="tooltip" 
@@ -675,7 +678,7 @@ window.handleAddModel = async function(event) {
             `The model will not work until both files are in the correct directory.\n` +
             `Check your .env file for the MODEL_DIR setting.`;
         
-        alert(successMessage);
+        window.alert(successMessage);
         
     } catch (error) {
         console.error('error adding model:', error);
@@ -693,7 +696,7 @@ window.selectModelForScoring = function(modelId, modelName) {
     console.log('selected model for scoring:', { modelId, modelName });
     
     if (!window.currentSessionId) {
-        alert('no session selected');
+        window.alert('no session selected');
         return;
     }
     
@@ -715,7 +718,7 @@ window.selectModelForScoring = function(modelId, modelName) {
     
     const deviceLabel = deviceType.toUpperCase();
     const labelingAction = appendToCurrent ? 'append to current labeling' : 'create new labeling with model name';
-    const confirmed = confirm(`score current session using model: ${modelName} on ${deviceLabel}?\n\nAction: ${labelingAction}`);
+    const confirmed = window.confirm(`score current session using model: ${modelName} on ${deviceLabel}?\n\nAction: ${labelingAction}`);
     if (!confirmed) return;
     
     // close modal
@@ -734,7 +737,7 @@ window.selectModelForScoringInVisibleRange = function(modelId, modelName, send_c
     console.log('selected model for scoring:', { modelId, modelName });
     
     if (!window.currentSessionId) {
-        alert('no session selected');
+        window.alert('no session selected');
         return;
     }
 
@@ -768,7 +771,7 @@ window.selectModelForScoringInVisibleRange = function(modelId, modelName, send_c
             confirmMessage += `\n\nWarning: No visible range detected`;
         }
         
-        const confirmed = confirm(confirmMessage);
+        const confirmed = window.confirm(confirmMessage);
         if (!confirmed) return;
     }
     // close modal
@@ -849,7 +852,7 @@ window.scoreSessionWithModelInVisibleRange = async function(sessionId, modelId, 
         
     } catch (error) {
         console.error('error scoring session with model:', error);
-        alert('failed to start scoring: ' + error.message);
+        window.alert('failed to start scoring: ' + error.message);
         
         // reset score button
         const scoreBtn = document.getElementById('score-btn-overlay');
@@ -904,7 +907,7 @@ window.scoreSessionWithModelInVisibleRangeGpu = async function(sessionId, modelI
         
     } catch (error) {
         console.error('error scoring session with model:', error);
-        alert('failed to start scoring: ' + error.message);
+        window.alert('failed to start scoring: ' + error.message);
         
         // reset score button
         const scoreBtn = document.getElementById('score-btn-overlay');
@@ -952,7 +955,7 @@ window.scoreSessionWithModel = async function(sessionId, modelId, modelName, app
         
     } catch (error) {
         console.error('error scoring session with model:', error);
-        alert('failed to start scoring: ' + error.message);
+        window.alert('failed to start scoring: ' + error.message);
         
         // reset score button
         const scoreBtn = document.getElementById('score-btn-overlay');
@@ -1002,7 +1005,7 @@ window.scoreSessionWithModelGpu = async function(sessionId, modelId, modelName, 
         
     } catch (error) {
         console.error('error scoring session with GPU model:', error);
-        alert('failed to start GPU scoring: ' + error.message);
+        window.alert('failed to start GPU scoring: ' + error.message);
         
         // reset score button
         const scoreBtn = document.getElementById('score-btn-overlay');
@@ -1017,11 +1020,11 @@ window.scoreSessionWithModelGpu = async function(sessionId, modelId, modelName, 
 
 window.editModel = function(modelId) {
     console.log('editing model:', modelId);
-    alert('edit model functionality coming soon');
+    window.alert('edit model functionality coming soon');
 };
 
 window.deleteModel = async function(modelId, modelName) {
-    const confirmed = confirm(`are you sure you want to delete model: ${modelName}?`);
+    const confirmed = window.confirm(`are you sure you want to delete model: ${modelName}?`);
     if (!confirmed) return;
     
     try {
@@ -1035,11 +1038,11 @@ window.deleteModel = async function(modelId, modelName) {
         // refresh models list
         ActionButtonHandlers.loadAvailableModels();
         
-        alert('model deleted successfully');
+        window.alert('model deleted successfully');
         
     } catch (error) {
         console.error('error deleting model:', error);
-        alert('failed to delete model: ' + error.message);
+        window.alert('failed to delete model: ' + error.message);
     }
 };
 
@@ -1083,6 +1086,154 @@ window.updateLabelingOptionStatus = function() {
         } else {
             statusElement.textContent = 'A new labeling will be created with the model name, and bouts will be added to it';
         }
+    }
+};
+
+// Global variables for model settings
+window.currentEditingModelId = null;
+window.currentEditingModelName = null;
+window.loadedModels = {};
+
+window.showModelSettings = async function(modelId, modelName) {
+    console.log('showing model settings for:', { modelId, modelName });
+    
+    window.currentEditingModelId = modelId;
+    window.currentEditingModelName = modelName;
+    
+    try {
+        // Import ModelAPI and get current model details
+        const { default: ModelAPI } = await import('../api/modelAPI.js');
+        const models = await ModelAPI.fetchModels();
+        const model = models.find(m => m.id == modelId);
+        
+        if (!model) {
+            window.alert('Model not found');
+            return;
+        }
+        
+        // Store model data for reference
+        window.loadedModels[modelId] = model;
+        
+        // Update panel title
+        document.getElementById('selected-model-name').textContent = modelName;
+        
+        // Load current settings or defaults
+        const settings = model.model_settings || {
+            threshold: 0.5,
+            min_bout_duration_ns: 250000000  // 0.25 seconds
+        };
+        
+        // Update UI elements
+        const thresholdSlider = document.getElementById('threshold-slider');
+        const thresholdValue = document.getElementById('threshold-value');
+        const minDurationInput = document.getElementById('min-duration-input');
+        
+        if (thresholdSlider && thresholdValue) {
+            thresholdSlider.value = settings.threshold;
+            thresholdValue.textContent = settings.threshold;
+        }
+        
+        if (minDurationInput) {
+            const minDurationSec = (settings.min_bout_duration_ns || 250000000) / 1e9;
+            minDurationInput.value = minDurationSec;
+        }
+        
+        // Show the settings panel
+        document.getElementById('model-settings-panel').style.display = 'block';
+        
+    } catch (error) {
+        console.error('error loading model settings:', error);
+        window.alert('Failed to load model settings: ' + error.message);
+    }
+};
+
+window.hideModelSettingsPanel = function() {
+    document.getElementById('model-settings-panel').style.display = 'none';
+    window.currentEditingModelId = null;
+    window.currentEditingModelName = null;
+};
+
+window.updateThresholdValue = function() {
+    const slider = document.getElementById('threshold-slider');
+    const valueSpan = document.getElementById('threshold-value');
+    
+    if (slider && valueSpan) {
+        valueSpan.textContent = slider.value;
+    }
+};
+
+window.saveModelSettings = async function() {
+    if (!window.currentEditingModelId) {
+        window.alert('No model selected');
+        return;
+    }
+    
+    try {
+        const thresholdSlider = document.getElementById('threshold-slider');
+        const minDurationInput = document.getElementById('min-duration-input');
+        
+        if (!thresholdSlider || !minDurationInput) {
+            throw new Error('Settings form elements not found');
+        }
+        
+        const threshold = parseFloat(thresholdSlider.value);
+        const minDurationSec = parseFloat(minDurationInput.value);
+        const minDurationNs = Math.round(minDurationSec * 1e9);
+        
+        // Validate inputs
+        if (threshold < 0 || threshold > 1) {
+            throw new Error('Threshold must be between 0 and 1');
+        }
+        
+        if (minDurationSec < 0.1 || minDurationSec > 60) {
+            throw new Error('Minimum duration must be between 0.1 and 60 seconds');
+        }
+        
+        const settings = {
+            threshold: threshold,
+            min_bout_duration_ns: minDurationNs
+        };
+        
+        // Import ModelAPI and update model settings
+        const { default: ModelAPI } = await import('../api/modelAPI.js');
+        await ModelAPI.updateModelSettings(window.currentEditingModelId, settings);
+        
+        console.log('model settings saved successfully:', settings);
+        window.alert(`Settings saved for ${window.currentEditingModelName}!\n\nThreshold: ${threshold}\nMin Duration: ${minDurationSec}s`);
+        
+        // Hide the panel
+        window.hideModelSettingsPanel();
+        
+        // Refresh the models list to show updated settings
+        ActionButtonHandlers.loadAvailableModels();
+        
+    } catch (error) {
+        console.error('error saving model settings:', error);
+        window.alert('Failed to save settings: ' + error.message);
+    }
+};
+
+window.resetModelSettings = function() {
+    if (!window.currentEditingModelId) {
+        window.alert('No model selected');
+        return;
+    }
+    
+    const confirmed = window.confirm(`Reset ${window.currentEditingModelName} to default settings?\n\nThreshold: 0.5\nMin Duration: 0.25s`);
+    if (!confirmed) return;
+    
+    // Update UI to defaults
+    const thresholdSlider = document.getElementById('threshold-slider');
+    const thresholdValue = document.getElementById('threshold-value');
+    const minDurationInput = document.getElementById('min-duration-input');
+    
+    if (thresholdSlider && thresholdValue) {
+        thresholdSlider.value = 0.5;
+        thresholdValue.textContent = '0.5';
+    }
+    
+    if (minDurationInput) {
+        minDurationInput.value = 0.25;
     }
 };
 

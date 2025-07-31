@@ -47,10 +47,16 @@ Core tables: participants, projects, sessions, models, session_lineage
 ### Model Integration System
 Custom ML models must implement three methods:
 - `preprocess(self, data)` - Convert raw DataFrame to model input
-- `run(self, preprocessed_data, device='cpu')` - Execute inference
-- `postprocess(self, raw_predictions, raw_data)` - Convert output to time-domain predictions
+- `run(self, preprocessed_data, device='cpu')` - Execute inference (typically returns logits)
+- `postprocess(self, raw_predictions, raw_data, threshold=None)` - Convert output to time-domain predictions
 
 Models are dynamically loaded via `model_processor.py` and managed through the models service.
+
+#### Model-Specific Settings
+Each model supports configurable settings stored in the database:
+- **Threshold (0.0-1.0)**: When set, passed as parameter to model's postprocess method for custom thresholding
+- **Min Bout Duration (nanoseconds)**: Filters detected bouts shorter than specified duration
+- Settings are managed via frontend settings panel and stored as JSON in `models.model_settings` column
 
 ## Environment Configuration
 - Uses `.env` file for configuration (MySQL credentials, data directories)

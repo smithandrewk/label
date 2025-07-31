@@ -314,6 +314,42 @@ export class ModelAPI {
             throw error;
         }
     }
+
+    /**
+     * Update model settings (threshold and min_bout_duration_ns)
+     * @param {string|number} modelId - ID of the model to update
+     * @param {Object} settings - Model settings object
+     * @param {number} settings.threshold - Prediction threshold (0-1)
+     * @param {number} settings.min_bout_duration_ns - Minimum bout duration in nanoseconds
+     * @returns {Promise<Object>} Updated model data
+     */
+    static async updateModelSettings(modelId, settings) {
+        try {
+            console.log('updating model settings:', modelId, settings);
+            
+            const response = await fetch(`/api/models/${modelId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model_settings: settings
+                })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'failed to update model settings');
+            }
+            
+            const result = await response.json();
+            console.log('model settings updated successfully:', result);
+            return result;
+        } catch (error) {
+            console.error('error updating model settings:', error);
+            throw error;
+        }
+    }
 }
 
 export default ModelAPI;
