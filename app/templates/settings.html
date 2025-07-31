@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Label{% endblock %}
+
+{% block head %}
+<style>
+    .settings-section {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid #dee2e6;
+    }
+    
+    .settings-section h3 {
+        color: #495057;
+        margin-bottom: 1rem;
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+    
+    .shortcut-list {
+        background: white;
+        border-radius: 6px;
+        padding: 1rem;
+        border: 1px solid #dee2e6;
+    }
+    
+    .shortcut-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #f1f3f4;
+    }
+    
+    .shortcut-item:last-child {
+        border-bottom: none;
+    }
+    
+    .shortcut-keys {
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    }
+    
+    .shortcut-keys kbd {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 3px;
+        padding: 2px 6px;
+        font-size: 0.85em;
+        margin: 0 2px;
+    }
+    
+    .shortcut-description {
+        flex-grow: 1;
+        margin-left: 1rem;
+        color: #6c757d;
+    }
+    
+    .settings-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .settings-header i {
+        color: #0d6efd;
+        margin-right: 0.75rem;
+        font-size: 1.75rem;
+    }
+    
+    .toggle-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem;
+        background: white;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+        margin-bottom: 1rem;
+    }
+    
+    .help-text {
+        color: #6c757d;
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-4">
+    <div class="row">
+        <div class="col-lg-4 col-md-6 col-sm-8">
+            <div class="settings-header">
+        <i class="fa-solid fa-gear"></i>
+        <h1 class="mb-0">Settings</h1>
+    </div>
+    
+    <!-- Keyboard Shortcuts Section -->
+    <div class="settings-section">
+        <h3>
+            <i class="bi bi-keyboard me-2"></i>
+            Keyboard Shortcuts
+        </h3>
+        
+        <div class="toggle-container">
+            <div>
+                <strong>Enable Keyboard Shortcuts</strong>
+                <div class="help-text">Turn on/off all keyboard shortcuts globally</div>
+            </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="keyboardShortcutsToggle" checked>
+            </div>
+        </div>
+        
+        <div class="help-text mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            Press <kbd>?</kbd> to show/hide the keyboard shortcuts modal
+        </div>
+    </div>
+    
+    <!-- Additional Settings Sections can be added here -->
+    <div class="settings-section">
+        <h3>
+            <i class="fa-solid fa-palette me-2"></i>
+            Appearance
+        </h3>
+        <div class="help-text">
+            <i class="bi bi-info-circle me-1"></i>
+            Additional appearance settings will be added in future updates
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Load saved setting
+    const shortcutsEnabled = localStorage.getItem('keyboardShortcutsEnabled') !== 'false';
+    document.getElementById('keyboardShortcutsToggle').checked = shortcutsEnabled;
+    
+    // Handle toggle change
+    document.getElementById('keyboardShortcutsToggle').addEventListener('change', function() {
+        const enabled = this.checked;
+        localStorage.setItem('keyboardShortcutsEnabled', enabled.toString());
+        
+        // Dispatch custom event to notify other scripts
+        window.dispatchEvent(new CustomEvent('keyboardShortcutsToggled', {
+            detail: { enabled: enabled }
+        }));
+        
+        // Show confirmation
+        const toast = document.createElement('div');
+        toast.className = 'toast position-fixed top-0 end-0 m-3';
+        toast.innerHTML = `
+            <div class="toast-body bg-success text-white">
+                <i class="bi bi-check-circle me-2"></i>
+                Keyboard shortcuts ${enabled ? 'enabled' : 'disabled'}
+            </div>
+        `;
+        document.body.appendChild(toast);
+        
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+        
+        toast.addEventListener('hidden.bs.toast', function() {
+            document.body.removeChild(toast);
+        });
+    });
+});
+</script>
+{% endblock %}

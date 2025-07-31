@@ -17,6 +17,60 @@ import ProjectController from "./js/controllers/projectController.js";
 // Variable to track keyboard shortcuts modal state
 let keyboardShortcutsModal = null;
 
+// Function to check if keyboard shortcuts are enabled
+function areKeyboardShortcutsEnabled() {
+    return localStorage.getItem('keyboardShortcutsEnabled') !== 'false';
+}
+
+// Function to show notification about disabled shortcuts
+function showShortcutsDisabledNotification() {
+    console.log('showShortcutsDisabledNotification called');
+    // Prevent showing multiple notifications
+    if (document.querySelector('.shortcuts-disabled-toast')) {
+        console.log('Toast already exists, not showing another');
+        return;
+    }
+    
+    const toast = document.createElement('div');
+    toast.className = 'toast shortcuts-disabled-toast position-fixed top-0 end-0 m-3';
+    toast.setAttribute('role', 'alert');
+    toast.style.zIndex = '10000'; // Higher than visualization view (z-index: 500)
+    toast.innerHTML = `
+        <div class="toast-header">
+            <i class="bi bi-keyboard-fill text-warning me-2"></i>
+            <strong class="me-auto">Keyboard Shortcuts Disabled</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body">
+            Keyboard shortcuts are currently disabled. 
+            <a href="/settings" class="text-decoration-none fw-bold">Enable them in Settings</a>
+        </div>
+    `;
+    
+    // Try to append to visualization view if it exists and is active, otherwise body
+    const visualizationView = document.getElementById("visualization-view");
+    const isVizActive = visualizationView && visualizationView.style.display === "flex";
+    
+    if (isVizActive) {
+        console.log('Appending toast to visualization view');
+        visualizationView.appendChild(toast);
+    } else {
+        console.log('Appending toast to document body');
+        document.body.appendChild(toast);
+    }
+    
+    console.log('Creating toast element and showing it');
+    const bsToast = new bootstrap.Toast(toast, { delay: 5000 });
+    bsToast.show();
+    console.log('Toast show() called');
+    
+    toast.addEventListener('hidden.bs.toast', function() {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    });
+}
+
 export function addEventListeners() {
     // Initialize keyboard shortcuts modal reference
     document.addEventListener('DOMContentLoaded', function() {
@@ -37,7 +91,7 @@ export function addEventListeners() {
                 activeElement.closest('.modal') // ignore if another modal is already open
             );
             
-            if (!isInInput && keyboardShortcutsModal) {
+            if (!isInInput && keyboardShortcutsModal && areKeyboardShortcutsEnabled()) {
                 event.preventDefault();
                 keyboardShortcutsModal.show();
                 return;
@@ -71,12 +125,29 @@ export function addEventListeners() {
             return;
         }
         
+        // Check if user is trying to use a shortcut
+        const shortcutKeys = ['n', 'p', 's', 'r', 'b', 'v'];
+        const isShortcutAttempt = shortcutKeys.includes(event.key.toLowerCase()) || 
+                                ((event.metaKey || event.ctrlKey) && ['s', 'd'].includes(event.key.toLowerCase()));
+        
+        // Check if keyboard shortcuts are enabled
+        const shortcutsEnabled = areKeyboardShortcutsEnabled();
+        if (!shortcutsEnabled && isShortcutAttempt) {
+            console.log('Showing shortcuts disabled notification for key:', event.key);
+            console.log('Current page URL:', window.location.pathname);
+            console.log('Visualization view element:', document.getElementById("visualization-view"));
+            console.log('Visualization view display:', document.getElementById("visualization-view")?.style.display);
+            showShortcutsDisabledNotification();
+            // Don't prevent default - let browser shortcuts like Cmd+R work
+            return;
+        }
+        
         // Check if visualization view is active
         const visualizationView = document.getElementById("visualization-view");
         const visualizationViewActive = visualizationView && visualizationView.style.display === "flex";
         
-        // Only process keyboard shortcuts if in visualization view
-        if (visualizationViewActive) {
+        // Only process keyboard shortcuts if in visualization view and shortcuts are enabled
+        if (visualizationViewActive && shortcutsEnabled) {
         // For Mac: event.metaKey is Command, for Windows/Linux: event.ctrlKey is Control
         if ((event.metaKey || event.ctrlKey) && (event.key.toLowerCase() === 's')) {
             event.preventDefault(); // Prevent browser save dialog
