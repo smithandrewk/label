@@ -718,7 +718,7 @@ window.selectModelForScoring = function(modelId, modelName) {
     
     const deviceLabel = deviceType.toUpperCase();
     const labelingAction = appendToCurrent ? 'append to current labeling' : 'create new labeling with model name';
-    const confirmed = window.confirm(`score current session using model: ${modelName} on ${deviceLabel}?\n\nAction: ${labelingAction}`);
+    const confirmed = (typeof confirm !== 'undefined' ? confirm : window.confirm)(`score current session using model: ${modelName} on ${deviceLabel}?\n\nAction: ${labelingAction}`);
     if (!confirmed) return;
     
     // close modal
@@ -771,7 +771,7 @@ window.selectModelForScoringInVisibleRange = function(modelId, modelName, send_c
             confirmMessage += `\n\nWarning: No visible range detected`;
         }
         
-        const confirmed = window.confirm(confirmMessage);
+        const confirmed = (typeof confirm !== 'undefined' ? confirm : window.confirm)(confirmMessage);
         if (!confirmed) return;
     }
     // close modal
@@ -1024,7 +1024,7 @@ window.editModel = function(modelId) {
 };
 
 window.deleteModel = async function(modelId, modelName) {
-    const confirmed = window.confirm(`are you sure you want to delete model: ${modelName}?`);
+    const confirmed = (typeof confirm !== 'undefined' ? confirm : window.confirm)(`are you sure you want to delete model: ${modelName}?`);
     if (!confirmed) return;
     
     try {
@@ -1219,7 +1219,7 @@ window.resetModelSettings = function() {
         return;
     }
     
-    const confirmed = window.confirm(`Reset ${window.currentEditingModelName} to default settings?\n\nThreshold: 0.5\nMin Duration: 0.25s`);
+    const confirmed = (typeof confirm !== 'undefined' ? confirm : window.confirm)(`Reset ${window.currentEditingModelName} to default settings?\n\nThreshold: 0.5\nMin Duration: 0.25s`);
     if (!confirmed) return;
     
     // Update UI to defaults
