@@ -690,31 +690,13 @@ function createBoutOverlays(index, container) {
     // Add double-click event to remove the bout
     dragOverlay.addEventListener('dblclick', function() {
         const boutIndex = parseInt(dragOverlay.dataset.boutIndex);
-        if (dragContext.currentSession && dragContext.currentSession.bouts) {
-            // Get current zoom level before removing bout
-            const plotDiv = document.getElementById('timeSeriesPlot');
-            let viewState = null;
-            if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
-                viewState = {
-                    xrange: plotDiv._fullLayout.xaxis.range.slice(),
-                    yrange: plotDiv._fullLayout.yaxis.range.slice()
-                };
-            }
-            
-            dragContext.currentSession.bouts.splice(boutIndex, 1);
-            console.log(`Removed bout ${boutIndex}`);
-            SessionAPI.updateSessionMetadata(dragContext.currentSession);
-            
-            // Refresh the plot and restore zoom level
-            visualizeSession(currentSessionId).then(() => {
-                if (viewState && plotDiv) {
-                    Plotly.relayout(plotDiv, {
-                        'xaxis.range': viewState.xrange,
-                        'yaxis.range': viewState.yrange
-                    });
-                }
-            });
-        }
+        deleteBout(boutIndex);
+    });
+
+    // Add right-click context menu
+    dragOverlay.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        showBoutContextMenu(e, index);
     });
     // Element-specific mouse events for dragging
     dragOverlay.addEventListener('mousedown', function(e) {
@@ -939,6 +921,206 @@ function createBoutOverlays(index, container) {
     }
 
     return { dragOverlay, leftOverlay, rightOverlay };
+}
+
+// Bout context menu functionality
+function showBoutContextMenu(event, boutIndex) {
+    // Remove any existing context menu
+    const existingMenu = document.getElementById('bout-context-menu');
+    if (existingMenu) {
+        existingMenu.remove();
+    }
+
+    // Create context menu
+    const contextMenu = document.createElement('div');
+    contextMenu.id = 'bout-context-menu';
+    contextMenu.className = 'dropdown-menu show';
+    contextMenu.style.position = 'fixed';
+    contextMenu.style.left = `${event.clientX}px`;
+    contextMenu.style.top = `${event.clientY}px`;
+    contextMenu.style.zIndex = '10000';
+
+    // Get current bout
+    const currentBout = dragContext.currentSession?.bouts?.[boutIndex];
+    if (!currentBout) {
+        console.error('Bout not found at index:', boutIndex);
+        return;
+    }
+
+    // Create "Move to" submenu item
+    const moveToItem = document.createElement('div');
+    moveToItem.className = 'dropdown-item dropdown-toggle';
+    moveToItem.innerHTML = '<i class="bi bi-arrow-right-circle me-2"></i>Move to';
+    moveToItem.style.cursor = 'pointer';
+
+    // Create submenu container
+    const submenu = document.createElement('div');
+    submenu.className = 'dropdown-menu';
+    submenu.style.position = 'absolute';
+    submenu.style.left = '100%';
+    submenu.style.top = '0';
+    submenu.style.display = 'none';
+
+    // Fetch available labelings and populate submenu
+    if (currentProjectId && labelings) {
+        labelings.forEach(labeling => {
+            // Skip current labeling
+            if (labeling.name === currentBout.label) {
+                return;
+            }
+
+            const labelingItem = document.createElement('a');
+            labelingItem.className = 'dropdown-item d-flex align-items-center';
+            labelingItem.href = '#';
+            labelingItem.innerHTML = `
+                <div class="labeling-color-indicator me-2" style="width: 12px; height: 12px; background-color: ${labeling.color}; border-radius: 2px;"></div>
+                <span>${labeling.name}</span>
+            `;
+            
+            labelingItem.addEventListener('click', (e) => {
+                e.preventDefault();
+                moveBoutToLabeling(boutIndex, labeling.name);
+                contextMenu.remove();
+            });
+
+            submenu.appendChild(labelingItem);
+        });
+    }
+
+    // Show/hide submenu on hover
+    moveToItem.addEventListener('mouseenter', () => {
+        submenu.style.display = 'block';
+    });
+
+    moveToItem.addEventListener('mouseleave', (e) => {
+        // Only hide if not moving to submenu
+        setTimeout(() => {
+            if (!submenu.matches(':hover') && !moveToItem.matches(':hover')) {
+                submenu.style.display = 'none';
+            }
+        }, 100);
+    });
+
+    submenu.addEventListener('mouseleave', () => {
+        submenu.style.display = 'none';
+    });
+
+    // Append submenu to move item
+    moveToItem.appendChild(submenu);
+    contextMenu.appendChild(moveToItem);
+
+    // Add separator
+    const separator = document.createElement('hr');
+    separator.className = 'dropdown-divider';
+    contextMenu.appendChild(separator);
+
+    // Add delete option
+    const deleteItem = document.createElement('a');
+    deleteItem.className = 'dropdown-item text-danger';
+    deleteItem.href = '#';
+    deleteItem.innerHTML = '<i class="bi bi-trash me-2"></i>Delete bout';
+    deleteItem.addEventListener('click', (e) => {
+        e.preventDefault();
+        deleteBout(boutIndex);
+        contextMenu.remove();
+    });
+    contextMenu.appendChild(deleteItem);
+
+    // Add to document
+    document.body.appendChild(contextMenu);
+
+    // Close menu when clicking outside
+    const closeMenu = (e) => {
+        if (!contextMenu.contains(e.target)) {
+            contextMenu.remove();
+            document.removeEventListener('click', closeMenu);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 10);
+}
+
+// Move bout to different labeling
+async function moveBoutToLabeling(boutIndex, targetLabelingName) {
+    if (!dragContext.currentSession?.bouts?.[boutIndex]) {
+        console.error('Bout not found at index:', boutIndex);
+        return;
+    }
+
+    const bout = dragContext.currentSession.bouts[boutIndex];
+    const originalLabeling = bout.label;
+
+    // Update bout labeling
+    bout.label = targetLabelingName;
+
+    try {
+        // Update session metadata
+        await SessionAPI.updateSessionMetadata(dragContext.currentSession);
+        console.log(`Moved bout ${boutIndex} from "${originalLabeling}" to "${targetLabelingName}"`);
+
+        // Update plot to reflect changes
+        await refreshCurrentSessionPlot();
+        
+    } catch (error) {
+        console.error('Error moving bout:', error);
+        // Revert the change
+        bout.label = originalLabeling;
+        alert('Failed to move bout. Please try again.');
+    }
+}
+
+// Delete bout function (extracted from double-click handler for reuse)
+function deleteBout(boutIndex) {
+    if (dragContext.currentSession && dragContext.currentSession.bouts) {
+        // Get current zoom level before removing bout
+        const plotDiv = document.getElementById('timeSeriesPlot');
+        let viewState = null;
+        if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
+            viewState = {
+                xrange: plotDiv._fullLayout.xaxis.range.slice(),
+                yrange: plotDiv._fullLayout.yaxis.range.slice()
+            };
+        }
+        
+        dragContext.currentSession.bouts.splice(boutIndex, 1);
+        console.log(`Removed bout ${boutIndex}`);
+        SessionAPI.updateSessionMetadata(dragContext.currentSession);
+        
+        // Refresh the plot and restore zoom level
+        visualizeSession(currentSessionId).then(() => {
+            if (viewState && plotDiv) {
+                Plotly.relayout(plotDiv, {
+                    'xaxis.range': viewState.xrange,
+                    'yaxis.range': viewState.yrange
+                });
+            }
+        });
+    }
+}
+
+// Helper function to refresh current session plot
+async function refreshCurrentSessionPlot() {
+    if (!currentSessionId) return;
+    
+    // Get current zoom level
+    const plotDiv = document.getElementById('timeSeriesPlot');
+    let viewState = null;
+    if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
+        viewState = {
+            xrange: plotDiv._fullLayout.xaxis.range.slice(),
+            yrange: plotDiv._fullLayout.yaxis.range.slice()
+        };
+    }
+
+    // Refresh visualization
+    await visualizeSession(currentSessionId);
+    
+    // Restore zoom level
+    if (viewState && plotDiv) {
+        Plotly.relayout(plotDiv, {
+            'xaxis.range': viewState.xrange,
+            'yaxis.range': viewState.yrange
+        });
+    }
 }
 
 
