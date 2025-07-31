@@ -682,6 +682,7 @@ function createBoutOverlays(index, container) {
     let isResizingLeft = false;
     let isResizingRight = false;
     let startX = 0;
+    let startY = 0; // Track Y position for center resizing
     let originalLeft = 0;
     let originalWidth = 0;
     let hasMovedBout = false; // Track if bout was actually moved
@@ -720,6 +721,7 @@ function createBoutOverlays(index, container) {
         isDragging = true;
         hasMovedBout = false; // Reset movement flag
         startX = e.clientX;
+        startY = e.clientY; // Track Y position for center resizing
         originalLeft = parseInt(dragOverlay.style.left) || 0;
         originalWidth = parseInt(dragOverlay.style.width) || 0;
         e.preventDefault();
@@ -733,6 +735,7 @@ function createBoutOverlays(index, container) {
         isResizingLeft = true;
         hasMovedBout = false; // Reset movement flag
         startX = e.clientX;
+        startY = e.clientY;
         originalLeft = parseInt(dragOverlay.style.left) || 0;
         originalWidth = parseInt(dragOverlay.style.width) || 0;
         e.preventDefault();
@@ -746,6 +749,7 @@ function createBoutOverlays(index, container) {
         isResizingRight = true;
         hasMovedBout = false; // Reset movement flag
         startX = e.clientX;
+        startY = e.clientY;
         originalLeft = parseInt(dragOverlay.style.left) || 0;
         originalWidth = parseInt(dragOverlay.style.width) || 0;
         e.preventDefault();
@@ -763,25 +767,55 @@ function createBoutOverlays(index, container) {
             const plotDiv = document.getElementById('timeSeriesPlot');
             const xAxis = plotDiv._fullLayout.xaxis;
             
-            // Regular dragging - move entire overlay
+            // Regular dragging - simultaneous translation and center-based resizing
             if (isDragging) {
                 const dx = e.clientX - startX;
-                dragOverlay.style.left = `${originalLeft + dx}px`;
+                const dy = e.clientY - startY;
+                
+                let newWidth = originalWidth;
+                let newLeft = originalLeft + dx;
+                
+                // Check if shift key is held - if so, only translate (no resizing)
+                if (!e.shiftKey) {
+                    // Vertical movement - center-based resizing
+                    // Dragging up expands the bout, dragging down contracts it
+                    const resizeFactor = -dy / 100; // Negative because up is negative Y
+                    const widthChange = originalWidth * resizeFactor * 0.5; // 50% max change per 100px movement
+                    
+                    newWidth = originalWidth + widthChange;
+                    
+                    // Prevent width from becoming too small
+                    if (newWidth < 10) newWidth = 10;
+                    
+                    // Horizontal movement - translate the bout
+                    // Calculate center position with horizontal translation
+                    const originalCenter = originalLeft + originalWidth / 2;
+                    const newCenter = originalCenter + dx;
+                    newLeft = newCenter - newWidth / 2;
+                } else {
+                    // Shift held - only translate, maintain original width
+                    newLeft = originalLeft + dx;
+                    newWidth = originalWidth;
+                }
                 
                 // Mark that the bout has moved if there's significant movement
-                if (Math.abs(dx) > 2) {
+                if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
                     hasMovedBout = true;
                 }
                 
+                // Update overlay styles
+                dragOverlay.style.left = `${newLeft}px`;
+                dragOverlay.style.width = `${newWidth}px`;
+                
                 // Convert pixel position back to data coordinates
-                const newX0 = pixelToData(originalLeft + dx, xAxis);
-                const newX1 = pixelToData(originalLeft + originalWidth + dx, xAxis);
+                const newX0 = pixelToData(newLeft, xAxis);
+                const newX1 = pixelToData(newLeft + newWidth, xAxis);
                 
                 updateBoutData(boutIndex, newX0, newX1);
                 
                 // Update left and right handle positions
-                leftOverlay.style.left = `${originalLeft + dx}px`;
-                rightOverlay.style.left = `${originalLeft + originalWidth + dx - parseInt(rightOverlay.style.width || 10)}px`;
+                leftOverlay.style.left = `${newLeft}px`;
+                rightOverlay.style.left = `${newLeft + newWidth - parseInt(rightOverlay.style.width || 10)}px`;
             }
             
             // Left resize - adjust left side of overlay
