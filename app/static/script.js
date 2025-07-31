@@ -383,7 +383,7 @@ async function visualizeSession(sessionId) {
     
     // Setup event listeners using the template handlers
     ActionButtonHandlers.setupVisualizationButtons({
-        onDeleteBouts: () => deleteAllBouts(),
+        onDeleteBouts: () => deleteCurrentLabelingBouts(currentSessionId),
         onDelete: () => decideSession(currentSessionId, false),
         onVerify: () => toggleVerifiedStatus(),
         onSplit: () => toggleSplitMode(),
@@ -1264,7 +1264,7 @@ function getCurrentSession() {
     return SessionService.findSessionById(sessions, currentSessionId);
 }
 
- function deleteAllBouts(currentSessionId) {
+ function deleteCurrentLabelingBouts(currentSessionId) {
         if (dragContext.currentSession && dragContext.currentSession.bouts) {
             // Get current zoom level before removing bout
             const plotDiv = document.getElementById('timeSeriesPlot');
@@ -1276,8 +1276,19 @@ function getCurrentSession() {
                 };
             }
             
-            dragContext.currentSession.bouts.splice(0);
-            console.log("Removed all bouts");
+            // Only delete bouts that match the current labeling name, not all bouts
+            if (currentLabelingName && currentLabelingName !== "No Labeling") {
+                const initialBoutCount = dragContext.currentSession.bouts.length;
+                dragContext.currentSession.bouts = dragContext.currentSession.bouts.filter(bout => {
+                    return !(bout.label === currentLabelingName);
+                });
+                const deletedCount = initialBoutCount - dragContext.currentSession.bouts.length;
+                console.log(`Removed ${deletedCount} bouts for labeling: ${currentLabelingName}`);
+            } else {
+                console.log("No active labeling selected - no bouts deleted");
+                return;
+            }
+            
             SessionAPI.updateSessionMetadata(dragContext.currentSession);
             
             // Refresh the plot and restore zoom level
@@ -1717,7 +1728,7 @@ window.editLabeling = ProjectController.editLabeling;
 window.duplicateLabeling = ProjectController.duplicateLabeling;
 window.deleteLabeling = ProjectController.deleteLabeling;
 window.selectLabeling = selectLabeling;
-window.deleteAllBouts = deleteAllBouts;
+window.deleteCurrentLabelingBouts = deleteCurrentLabelingBouts;
 window.scoreSession = SessionController.scoreSession;
 window.showTableView = showTableView;
 window.decideSession = decideSession;
