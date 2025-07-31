@@ -167,8 +167,12 @@ body.dark-mode .visualization-container * {
     cursor: grab;
     z-index: 10;
 }
+.drag-overlay:hover {
+    filter: brightness(0.85);
+}
 .drag-overlay:active {
     cursor: grabbing;
+    filter: brightness(0.75);
 }
 /* Dropzone styles */
 .dropzone {

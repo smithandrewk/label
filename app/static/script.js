@@ -962,6 +962,8 @@ function updateOverlayPositions(plotDiv, bout, index) {
     dragOverlay.style.height = `${handleHeight}px`;
     dragOverlay.style.backgroundColor = labelingColor + "77"
     dragOverlay.style.border = '2px solid black';
+    dragOverlay.style.borderRadius = '8px';
+    dragOverlay.style.transition = 'filter 0.2s ease';
     
     // Set left handle position and size
     leftOverlay.style.position = 'absolute';
