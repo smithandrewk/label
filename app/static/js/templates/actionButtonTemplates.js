@@ -733,6 +733,13 @@ window.selectModelForScoring = function(modelId, modelName) {
     }
 };
 
+window.formatTimeRange = function(startNs, endNs) {
+    const startSeconds = (startNs / 1e9).toFixed(1);
+    const endSeconds = (endNs / 1e9).toFixed(1);
+    const durationSeconds = ((endNs - startNs) / 1e9).toFixed(1);
+    return `${startSeconds}s - ${endSeconds}s (${durationSeconds}s duration)`;
+}
+
 window.selectModelForScoringInVisibleRange = function(modelId, modelName, send_confirm = true) {
     console.log('selected model for scoring:', { modelId, modelName });
     
@@ -771,7 +778,7 @@ window.selectModelForScoringInVisibleRange = function(modelId, modelName, send_c
             confirmMessage += `\n\nWarning: No visible range detected`;
         }
         
-        const confirmed = (typeof confirm !== 'undefined' ? confirm : window.confirm)(confirmMessage);
+        const confirmed = confirm(confirmMessage);
         if (!confirmed) return;
     }
     // close modal
@@ -800,13 +807,6 @@ window.getVisibleRangeInNs = function() {
         start: viewState.xrange[0],
         end: viewState.xrange[1]
     } : null;
-}
-
-window.formatTimeRange = function(startNs, endNs) {
-    const startSeconds = (startNs / 1e9).toFixed(1);
-    const endSeconds = (endNs / 1e9).toFixed(1);
-    const durationSeconds = ((endNs - startNs) / 1e9).toFixed(1);
-    return `${startSeconds}s - ${endSeconds}s (${durationSeconds}s duration)`;
 }
 
 window.scoreSessionWithModelInVisibleRange = async function(sessionId, modelId, modelName, appendToCurrent = true) {
