@@ -667,22 +667,44 @@ function updateCurrentLabelingHeader(labelingName = null) {
     }
 }
 function createBoutOverlays(index, container) {
+    // Check if this is a self-reported bout
+    const currentBout = dragContext.currentSession?.bouts?.[index];
+    const isSelfReported = currentBout && currentBout.label === 'SELF REPORTED SMOKING';
+    
     const dragOverlay = document.createElement('div');
     dragOverlay.id = `drag-overlay-${index}`;
     dragOverlay.className = 'drag-overlay';
     dragOverlay.dataset.boutIndex = index; // Store index for reference
+    
+    // Add styling for self-reported bouts
+    if (isSelfReported) {
+        dragOverlay.classList.add('self-reported-bout');
+    }
+    
     container.appendChild(dragOverlay);
     
     const leftOverlay = document.createElement('div');
     leftOverlay.id = `left-overlay-${index}`;
     leftOverlay.className = 'left-overlay';
     leftOverlay.dataset.boutIndex = index;
+    
+    // Disable resize handles for self-reported bouts
+    if (isSelfReported) {
+        leftOverlay.style.display = 'none';
+    }
+    
     container.appendChild(leftOverlay);
 
     const rightOverlay = document.createElement('div');
     rightOverlay.id = `right-overlay-${index}`;
     rightOverlay.className = 'right-overlay';
     rightOverlay.dataset.boutIndex = index;
+    
+    // Disable resize handles for self-reported bouts
+    if (isSelfReported) {
+        rightOverlay.style.display = 'none';
+    }
+    
     container.appendChild(rightOverlay);
     
     // Dragging state variables
@@ -695,10 +717,12 @@ function createBoutOverlays(index, container) {
     let originalWidth = 0;
     let hasMovedBout = false; // Track if bout was actually moved
     
-    // Add double-click event to remove the bout
+    // Add double-click event to remove the bout (disabled for self-reported)
     dragOverlay.addEventListener('dblclick', function() {
-        const boutIndex = parseInt(dragOverlay.dataset.boutIndex);
-        deleteBout(boutIndex);
+        if (!isSelfReported) {
+            const boutIndex = parseInt(dragOverlay.dataset.boutIndex);
+            deleteBout(boutIndex);
+        }
     });
 
     // Add right-click context menu
@@ -706,47 +730,53 @@ function createBoutOverlays(index, container) {
         e.preventDefault();
         showBoutContextMenu(e, index);
     });
-    // Element-specific mouse events for dragging
+    // Element-specific mouse events for dragging (disabled for self-reported)
     dragOverlay.addEventListener('mousedown', function(e) {
-        isDragging = true;
-        hasMovedBout = false; // Reset movement flag
-        startX = e.clientX;
-        startY = e.clientY; // Track Y position for center resizing
-        originalLeft = parseInt(dragOverlay.style.left) || 0;
-        originalWidth = parseInt(dragOverlay.style.width) || 0;
-        e.preventDefault();
-        
-        // Add temporary handlers
-        addTemporaryMouseHandlers();
+        if (!isSelfReported) {
+            isDragging = true;
+            hasMovedBout = false; // Reset movement flag
+            startX = e.clientX;
+            startY = e.clientY; // Track Y position for center resizing
+            originalLeft = parseInt(dragOverlay.style.left) || 0;
+            originalWidth = parseInt(dragOverlay.style.width) || 0;
+            e.preventDefault();
+            
+            // Add temporary handlers
+            addTemporaryMouseHandlers();
+        }
     });
     
-    // Mouse handlers for left and right resizing
+    // Mouse handlers for left and right resizing (disabled for self-reported)
     leftOverlay.addEventListener('mousedown', function(e) {
-        isResizingLeft = true;
-        hasMovedBout = false; // Reset movement flag
-        startX = e.clientX;
-        startY = e.clientY;
-        originalLeft = parseInt(dragOverlay.style.left) || 0;
-        originalWidth = parseInt(dragOverlay.style.width) || 0;
-        e.preventDefault();
-        dragOverlay.style.cursor = 'w-resize';
-        
-        // Add temporary handlers
-        addTemporaryMouseHandlers();
+        if (!isSelfReported) {
+            isResizingLeft = true;
+            hasMovedBout = false; // Reset movement flag
+            startX = e.clientX;
+            startY = e.clientY;
+            originalLeft = parseInt(dragOverlay.style.left) || 0;
+            originalWidth = parseInt(dragOverlay.style.width) || 0;
+            e.preventDefault();
+            dragOverlay.style.cursor = 'w-resize';
+            
+            // Add temporary handlers
+            addTemporaryMouseHandlers();
+        }
     });
     
     rightOverlay.addEventListener('mousedown', function(e) {
-        isResizingRight = true;
-        hasMovedBout = false; // Reset movement flag
-        startX = e.clientX;
-        startY = e.clientY;
-        originalLeft = parseInt(dragOverlay.style.left) || 0;
-        originalWidth = parseInt(dragOverlay.style.width) || 0;
-        e.preventDefault();
-        dragOverlay.style.cursor = 'e-resize';
-        
-        // Add temporary handlers
-        addTemporaryMouseHandlers();
+        if (!isSelfReported) {
+            isResizingRight = true;
+            hasMovedBout = false; // Reset movement flag
+            startX = e.clientX;
+            startY = e.clientY;
+            originalLeft = parseInt(dragOverlay.style.left) || 0;
+            originalWidth = parseInt(dragOverlay.style.width) || 0;
+            e.preventDefault();
+            dragOverlay.style.cursor = 'e-resize';
+            
+            // Add temporary handlers
+            addTemporaryMouseHandlers();
+        }
     });
     // Add temporary mousemove and mouseup handlers that clean themselves up
     function addTemporaryMouseHandlers() {
@@ -955,11 +985,21 @@ function showBoutContextMenu(event, boutIndex) {
         return;
     }
 
+    // Check if this is a self-reported bout
+    const isSelfReported = currentBout.label === 'SELF REPORTED SMOKING';
+
     // Create "Move to" submenu item
     const moveToItem = document.createElement('div');
     moveToItem.className = 'dropdown-item dropdown-toggle';
     moveToItem.innerHTML = '<i class="bi bi-arrow-right-circle me-2"></i>Move to';
-    moveToItem.style.cursor = 'pointer';
+    moveToItem.style.cursor = isSelfReported ? 'not-allowed' : 'pointer';
+    
+    // Grey out and disable for self-reported bouts
+    if (isSelfReported) {
+        moveToItem.style.opacity = '0.5';
+        moveToItem.style.pointerEvents = 'none';
+        moveToItem.title = 'Cannot move self-reported smoking bouts';
+    }
 
     // Create submenu container
     const submenu = document.createElement('div');
@@ -1022,16 +1062,48 @@ function showBoutContextMenu(event, boutIndex) {
     separator.className = 'dropdown-divider';
     contextMenu.appendChild(separator);
 
+    // Add duplicate option (disabled for self-reported)
+    const duplicateItem = document.createElement('a');
+    duplicateItem.className = 'dropdown-item';
+    duplicateItem.href = '#';
+    duplicateItem.innerHTML = '<i class="bi bi-files me-2"></i>Duplicate bout';
+    
+    // Grey out and disable for self-reported bouts
+    if (isSelfReported) {
+        duplicateItem.style.opacity = '0.5';
+        duplicateItem.style.pointerEvents = 'none';
+        duplicateItem.style.cursor = 'not-allowed';
+        duplicateItem.title = 'Cannot duplicate self-reported smoking bouts';
+    } else {
+        duplicateItem.addEventListener('click', (e) => {
+            e.preventDefault();
+            duplicateBout(boutIndex);
+            contextMenu.remove();
+        });
+    }
+    
+    contextMenu.appendChild(duplicateItem);
+
     // Add delete option
     const deleteItem = document.createElement('a');
     deleteItem.className = 'dropdown-item text-danger';
     deleteItem.href = '#';
     deleteItem.innerHTML = '<i class="bi bi-trash me-2"></i>Delete bout';
-    deleteItem.addEventListener('click', (e) => {
-        e.preventDefault();
-        deleteBout(boutIndex);
-        contextMenu.remove();
-    });
+    
+    // Grey out and disable for self-reported bouts
+    if (isSelfReported) {
+        deleteItem.style.opacity = '0.5';
+        deleteItem.style.pointerEvents = 'none';
+        deleteItem.style.cursor = 'not-allowed';
+        deleteItem.title = 'Cannot delete self-reported smoking bouts';
+    } else {
+        deleteItem.addEventListener('click', (e) => {
+            e.preventDefault();
+            deleteBout(boutIndex);
+            contextMenu.remove();
+        });
+    }
+    
     contextMenu.appendChild(deleteItem);
 
     // Add to document
@@ -1056,6 +1128,20 @@ async function moveBoutToLabeling(boutIndex, targetLabelingName) {
 
     const bout = dragContext.currentSession.bouts[boutIndex];
     const originalLabeling = bout.label;
+
+    // Prevent moving self-reported bouts
+    if (originalLabeling === 'SELF REPORTED SMOKING') {
+        console.warn('Cannot move self-reported smoking bout');
+        alert('Cannot move self-reported smoking bouts');
+        return;
+    }
+
+    // Prevent moving bouts to self-reported labeling
+    if (targetLabelingName === 'SELF REPORTED SMOKING') {
+        console.warn('Cannot move bout to self-reported smoking labeling');
+        alert('Cannot move bouts to self-reported smoking labeling');
+        return;
+    }
 
     // Update bout labeling
     bout.label = targetLabelingName;
@@ -1091,6 +1177,52 @@ function deleteBout(boutIndex) {
         
         dragContext.currentSession.bouts.splice(boutIndex, 1);
         console.log(`Removed bout ${boutIndex}`);
+        SessionAPI.updateSessionMetadata(dragContext.currentSession);
+        
+        // Refresh the plot and restore zoom level
+        visualizeSession(currentSessionId).then(() => {
+            if (viewState && plotDiv) {
+                Plotly.relayout(plotDiv, {
+                    'xaxis.range': viewState.xrange,
+                    'yaxis.range': viewState.yrange
+                });
+            }
+        });
+    }
+}
+
+// Duplicate bout function
+function duplicateBout(boutIndex) {
+    if (dragContext.currentSession && dragContext.currentSession.bouts) {
+        const originalBout = dragContext.currentSession.bouts[boutIndex];
+        if (!originalBout) {
+            console.error('Bout not found at index:', boutIndex);
+            return;
+        }
+        
+        // Create a copy of the bout with the same properties
+        const duplicatedBout = {
+            ...originalBout,
+            // Add small offset to avoid exact overlap
+            start: originalBout.start + (originalBout.end - originalBout.start) * 1.1,
+            end: originalBout.end + (originalBout.end - originalBout.start) * 1.1
+        };
+        
+        // Get current zoom level before adding bout
+        const plotDiv = document.getElementById('timeSeriesPlot');
+        let viewState = null;
+        if (plotDiv && plotDiv._fullLayout && plotDiv._fullLayout.xaxis) {
+            viewState = {
+                xrange: plotDiv._fullLayout.xaxis.range.slice(),
+                yrange: plotDiv._fullLayout.yaxis.range.slice()
+            };
+        }
+        
+        // Add the duplicated bout to the session
+        dragContext.currentSession.bouts.push(duplicatedBout);
+        console.log(`Duplicated bout ${boutIndex} with label "${originalBout.label}"`);
+        
+        // Update session metadata
         SessionAPI.updateSessionMetadata(dragContext.currentSession);
         
         // Refresh the plot and restore zoom level

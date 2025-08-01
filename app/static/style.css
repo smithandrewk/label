@@ -764,3 +764,14 @@ body.dark-mode .shortcut-description {
 body.dark-mode #keyboardShortcutsModal .text-muted {
     color: #b2bec3 !important;
 }
+
+/* Self-reported bout styling */
+.self-reported-bout {
+    border: 2px dashed #6c757d !important;
+    opacity: 0.8;
+    cursor: not-allowed !important;
+}
+
+.self-reported-bout:hover {
+    opacity: 0.9;
+}
