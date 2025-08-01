@@ -130,7 +130,7 @@ export function addEventListeners() {
         }
         
         // Check if user is trying to use a shortcut
-        const shortcutKeys = ['n', 'p', 'l', 'k', 's', 'r', 'b', 'v', 'f'];
+        const shortcutKeys = ['n', 'p', 'l', 'k', 's', 'r', 'b', 'v', 'f','d'];
         const isShortcutAttempt = shortcutKeys.includes(event.key.toLowerCase()) || 
                                 ((event.metaKey || event.ctrlKey) && ['s', 'd'].includes(event.key.toLowerCase()));
         
@@ -191,7 +191,16 @@ export function addEventListeners() {
             // Navigate to first session
             event.preventDefault();
             selectModelForScoringInVisibleRange(window.currentModelId,window.currentModelName, confirm = false);
-            
+        } else if (event.key.toLowerCase() === 'd' && !(event.metaKey || event.ctrlKey)) {
+            // Navigate to first session
+            event.preventDefault();
+            console.log('Clicking trash can in visualization view');
+            const trashCan = document.getElementById('trash-btn-overlay');
+            if (trashCan) {
+                trashCan.click();
+            } else {
+                console.warn('No delete bout button found');
+            }
         } else if (event.key.toLowerCase() === 'f' && !(event.metaKey || event.ctrlKey)) {
             // Fullscreen/zoom out to show all data
             event.preventDefault();
