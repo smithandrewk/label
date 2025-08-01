@@ -7,6 +7,7 @@
  * - 's': Toggle split mode
  * - 'r': Create new bout
  * - 'b': Score visible range with selected model
+ * - 'f': Fullscreen/zoom out to show all data
  * - Ctrl/Cmd + 's': Split session
  * - Ctrl/Cmd + 'd': Return to table view
  * 
@@ -129,7 +130,7 @@ export function addEventListeners() {
         }
         
         // Check if user is trying to use a shortcut
-        const shortcutKeys = ['n', 'p', 'l', 'k', 's', 'r', 'b', 'v'];
+        const shortcutKeys = ['n', 'p', 'l', 'k', 's', 'r', 'b', 'v', 'f'];
         const isShortcutAttempt = shortcutKeys.includes(event.key.toLowerCase()) || 
                                 ((event.metaKey || event.ctrlKey) && ['s', 'd'].includes(event.key.toLowerCase()));
         
@@ -191,6 +192,16 @@ export function addEventListeners() {
             event.preventDefault();
             selectModelForScoringInVisibleRange(window.currentModelId,window.currentModelName, confirm = false);
             
+        } else if (event.key.toLowerCase() === 'f' && !(event.metaKey || event.ctrlKey)) {
+            // Fullscreen/zoom out to show all data
+            event.preventDefault();
+            const plotDiv = document.getElementById('timeSeriesPlot');
+            if (plotDiv) {
+                Plotly.relayout(plotDiv, {
+                    'xaxis.autorange': true,
+                    'yaxis.autorange': true
+                });
+            }
         }
     }
     });
