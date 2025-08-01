@@ -1583,7 +1583,12 @@ async function splitSession() {
 }
 
 function createNewBout() {
-    // Get current labeling name
+    const isSelfReported = window.currentLabelingName === 'SELF REPORTED SMOKING';
+    if (isSelfReported) {
+        console.warn('Cannot create new bout for self-reported smoking');
+        alert('Cannot create new bouts for self-reported smoking');
+        return;
+    }
     const currentLabelingElement = document.getElementById('current-labeling-name');
     let currentLabelingName = '';
     
@@ -1591,6 +1596,9 @@ function createNewBout() {
         // Extract text content, removing any HTML elements
         const textContent = currentLabelingElement.textContent || currentLabelingElement.innerText;
         currentLabelingName = textContent.trim();
+        // Split by ' ' and take everything except the last part and join it back
+        currentLabelingName = currentLabelingName.split(' ').slice(0, -1).join(' ');
+        
     }
 
     // Check if currentLabelingName is "No Labeling" and do nothing
