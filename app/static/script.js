@@ -1359,11 +1359,17 @@ function toggleSplitMode() {
     const split_btn_overlay = document.getElementById('split-btn-overlay');
     split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(0, 0, 0, 0)';
 }
-async function toggleVerifiedStatus() {
-    // Get current session
-    const session = getCurrentSession();
+async function toggleVerifiedStatus(sessionId = null) {
+    // Get the session to toggle - use provided sessionId or current session
+    let session;
+    if (sessionId) {
+        session = SessionService.findSessionById(sessions, sessionId);
+    } else {
+        session = getCurrentSession();
+    }
+    
     if (!session) {
-        console.error('No current session to toggle verified status');
+        console.error('No session found to toggle verified status');
         return;
     }
     
@@ -1384,6 +1390,17 @@ async function toggleVerifiedStatus() {
     // Update the visual state immediately
     verified_btn_viz.style.color = session.verified ? '#28a745' : '#dee2e6';
     
+    // Also update the button class in table view
+    if (verified_btn_viz.classList) {
+        if (session.verified) {
+            verified_btn_viz.classList.remove('btn-outline-secondary');
+            verified_btn_viz.classList.add('btn-success');
+        } else {
+            verified_btn_viz.classList.remove('btn-success');
+            verified_btn_viz.classList.add('btn-outline-secondary');
+        }
+    }
+    
     // Save to backend
     try {
         await SessionAPI.updateSessionMetadata(session);
@@ -1397,6 +1414,17 @@ async function toggleVerifiedStatus() {
         // Revert the visual change on error
         session.verified = session.verified ? 0 : 1;
         verified_btn_viz.style.color = session.verified ? '#28a745' : '#dee2e6';
+        
+        // Revert button class change
+        if (verified_btn_viz.classList) {
+            if (session.verified) {
+                verified_btn_viz.classList.remove('btn-outline-secondary');
+                verified_btn_viz.classList.add('btn-success');
+            } else {
+                verified_btn_viz.classList.remove('btn-success');
+                verified_btn_viz.classList.add('btn-outline-secondary');
+            }
+        }
     }
 }
 
