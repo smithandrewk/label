@@ -626,6 +626,38 @@ export class ProjectController {
         console.log(`Navigating to previous session: ${prevSession.session_name}`);
         window.visualizeSession(prevSession.session_id);
     }
+
+    static navigateToNextLabeling() {
+        if (!window.labelings || window.labelings.length === 0) {
+            console.log('No labelings available');
+            return;
+        }
+        
+        const currentIndex = window.labelings.findIndex(labeling => labeling.name === window.currentLabelingName);
+        const nextIndex = (currentIndex + 1) % window.labelings.length;
+        const nextLabeling = window.labelings[nextIndex];
+        
+        console.log(`Navigating to next labeling: ${nextLabeling.name}`);
+        if (window.selectLabeling) {
+            window.selectLabeling(nextLabeling.name);
+        }
+    }
+
+    static navigateToPreviousLabeling() {
+        if (!window.labelings || window.labelings.length === 0) {
+            console.log('No labelings available');
+            return;
+        }
+        
+        const currentIndex = window.labelings.findIndex(labeling => labeling.name === window.currentLabelingName);
+        const prevIndex = currentIndex <= 0 ? window.labelings.length - 1 : currentIndex - 1;
+        const prevLabeling = window.labelings[prevIndex];
+        
+        console.log(`Navigating to previous labeling: ${prevLabeling.name}`);
+        if (window.selectLabeling) {
+            window.selectLabeling(prevLabeling.name);
+        }
+    }
 }
 
 export default ProjectController;

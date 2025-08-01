@@ -2,6 +2,8 @@
  * KEYBOARD NAVIGATION SHORTCUTS (Visualization View Only):
  * - 'n': Navigate to next session (with wraparound)
  * - 'p': Navigate to previous session (with wraparound)
+ * - 'l': Navigate to next labeling (with wraparound)
+ * - 'k': Navigate to previous labeling (with wraparound)
  * - 's': Toggle split mode
  * - 'r': Create new bout
  * - 'b': Score visible range with selected model
@@ -10,6 +12,7 @@
  * 
  * Navigation automatically saves any pending bout changes before switching sessions.
  * Only non-discarded sessions (keep != 0) are included in navigation.
+ * Labeling navigation cycles through available labelings for the current project.
  */
 
 import ProjectController from "./js/controllers/projectController.js";
@@ -126,7 +129,7 @@ export function addEventListeners() {
         }
         
         // Check if user is trying to use a shortcut
-        const shortcutKeys = ['n', 'p', 's', 'r', 'b', 'v'];
+        const shortcutKeys = ['n', 'p', 'l', 'k', 's', 'r', 'b', 'v'];
         const isShortcutAttempt = shortcutKeys.includes(event.key.toLowerCase()) || 
                                 ((event.metaKey || event.ctrlKey) && ['s', 'd'].includes(event.key.toLowerCase()));
         
@@ -174,6 +177,14 @@ export function addEventListeners() {
             // Navigate to previous session
             event.preventDefault();
             ProjectController.navigateToPreviousSession();
+        } else if (event.key.toLowerCase() === 'l' && !(event.metaKey || event.ctrlKey)) {
+            // Navigate to next labeling
+            event.preventDefault();
+            ProjectController.navigateToNextLabeling();
+        } else if (event.key.toLowerCase() === 'k' && !(event.metaKey || event.ctrlKey)) {
+            // Navigate to previous labeling
+            event.preventDefault();
+            ProjectController.navigateToPreviousLabeling();
         } else if (event.key.toLowerCase() === 'b' && !(event.metaKey || event.ctrlKey)) {
             console.log(window.currentModelId, window.currentModelName);
             // Navigate to first session
