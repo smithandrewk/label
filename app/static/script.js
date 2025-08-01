@@ -373,12 +373,16 @@ async function visualizeSession(sessionId) {
         Plotly.react('timeSeriesPlot', traces, layout, config);
     }
 
+    // Calculate bout count for current labeling
+    const boutCount = session.bouts ? session.bouts.filter(bout => bout.label === currentLabelingName).length : 0;
+    
     // Use template for action buttons
     actionButtons.innerHTML = ActionButtonTemplates.visualizationActionButtons({
         isSplitting: isSplitting,
         isVerified: session.verified,
         labelingName: currentLabelingName,
         labelingColor: currentLabelingJSON ? currentLabelingJSON.color : '#000000',
+        boutCount: boutCount,
     });
     
     // Setup event listeners using the template handlers
@@ -612,11 +616,15 @@ function selectLabeling(labelingName) {
     if (currentLabelingNameElement) {
 
         const currentLabeling = getLabelingFromLabelingName(labelingName);
-        const labelingColor = currentLabeling.color
+        const labelingColor = currentLabeling.color;
+        
+        // Calculate bout count for current labeling
+        const boutCount = dragContext.currentSession?.bouts ? 
+            dragContext.currentSession.bouts.filter(bout => bout.label === labelingName).length : 0;
         
         currentLabelingNameElement.innerHTML = `
             <div class="color-circle me-1" style="width: 12px; height: 12px; border-radius: 50%; background-color: ${labelingColor}; border: 1px solid #ccc; display: inline-block;"></div>
-            ${labelingName}
+            ${labelingName} (${boutCount})
         `;
         
         // Maintain the cursor pointer and transition styles
