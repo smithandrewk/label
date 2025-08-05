@@ -1826,6 +1826,33 @@ Cancel = Choose a new name`);
         // Success - refresh the labelings list
         await ProjectController.fetchAndDisplayLabelings(currentProjectId);
         
+        // If we're currently viewing a session, refresh its data to include any imported bouts
+        // This prevents the old local data from overwriting imported bouts when navigating
+        if (currentSessionId) {
+            const currentSession = sessions.find(s => s.session_id == currentSessionId);
+            if (currentSession) {
+                console.log('Refreshing current session data after labeling import to prevent overwrite');
+                try {
+                    // Reload the session data from the server to get the most up-to-date bouts
+                    const { bouts, data } = await SessionAPI.loadSessionData(currentSessionId);
+                    currentSession.bouts = bouts;
+                    currentSession.data = data;
+                    
+                    // Update the drag context as well
+                    if (dragContext.currentSession && dragContext.currentSession.session_id == currentSessionId) {
+                        dragContext.currentSession.bouts = bouts;
+                        dragContext.currentSession.data = data;
+                    }
+                    
+                    // Refresh the visualization to show any imported bouts
+                    await visualizeSession(currentSessionId);
+                } catch (error) {
+                    console.error('Error refreshing current session after import:', error);
+                    // Continue with the import process even if refresh fails
+                }
+            }
+        }
+        
         // Select the imported labeling if it's new
         if (finalLabelingName !== importData.labeling_name || !existingLabeling) {
             selectLabeling(finalLabelingName);
