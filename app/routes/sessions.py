@@ -62,6 +62,10 @@ class SessionController:
     @api_performance_monitor
     def get_session_data(self, session_id):
         try:
+            # Parse pagination parameters
+            offset = request.args.get('offset', 0, type=int)
+            limit = request.args.get('limit', 0, type=int)  # 0 means no limit (backward compatibility)
+            
             session_info = self.session_service.get_session_details(session_id)
 
             if not session_info:
@@ -79,12 +83,54 @@ class SessionController:
             file_size_mb = os.path.getsize(csv_path) / 1024 / 1024
             logging.info(f"PERFORMANCE: Loading CSV file size: {file_size_mb:.2f}MB")
             
-            df = pd.read_csv(csv_path)
-            original_rows = len(df)
-            df = df.iloc[::10]  # Downsample by 10:1
-            downsampled_rows = len(df)
+            # Read CSV with chunking if pagination is requested
+            if limit > 0:
+                # Calculate chunk parameters for efficient reading
+                downsample_ratio = 10
+                csv_offset = offset * downsample_ratio
+                csv_limit = limit * downsample_ratio
+                
+                logging.info(f"PERFORMANCE: Paginated read - offset:{offset}, limit:{limit} (CSV offset:{csv_offset}, limit:{csv_limit})")
+                
+                # Read only the required chunk + some buffer for downsampling
+                df = pd.read_csv(csv_path, skiprows=range(1, csv_offset + 1), nrows=csv_limit)
+                original_rows = len(df)
+                
+                # Apply downsampling to the chunk
+                df = df.iloc[::downsample_ratio]
+                downsampled_rows = len(df)
+                
+                # Get total row count for pagination metadata (cached or estimated)
+                total_rows_estimate = int(file_size_mb * 1024 * 1024 / 50)  # Rough estimate: ~50 bytes per row
+                total_downsampled_estimate = total_rows_estimate // downsample_ratio
+                
+                has_more = (offset + limit) < total_downsampled_estimate
+                
+                pagination_info = {
+                    'offset': offset,
+                    'limit': limit,
+                    'returned_count': downsampled_rows,
+                    'has_more': has_more,
+                    'estimated_total': total_downsampled_estimate
+                }
+                
+            else:
+                # Legacy behavior - load entire file
+                df = pd.read_csv(csv_path)
+                original_rows = len(df)
+                df = df.iloc[::10]  # Downsample by 10:1
+                downsampled_rows = len(df)
+                
+                pagination_info = {
+                    'offset': 0,
+                    'limit': 0,
+                    'returned_count': downsampled_rows,
+                    'has_more': False,
+                    'total_count': downsampled_rows
+                }
             
-            logging.info(f"PERFORMANCE: Downsampled from {original_rows} to {downsampled_rows} rows ({downsampled_rows/original_rows*100:.1f}%)")
+            percentage = (downsampled_rows/original_rows*100) if original_rows > 0 else 0
+            logging.info(f"PERFORMANCE: Processed {original_rows} -> {downsampled_rows} rows ({percentage:.1f}%)")
 
             bouts = session_info['bouts']
             expected_columns = ['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']
@@ -96,14 +142,15 @@ class SessionController:
             if not all(col in df.columns for col in expected_columns):
                 return jsonify({'error': f'Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}'}), 400
 
-            data = df[expected_columns].to_dict(orient='records')
-            data = {
+            data_records = df[expected_columns].to_dict(orient='records')
+            response_data = {
                 'bouts': bouts,
-                'data': data,
-                'session_info': session_info
+                'data': data_records,
+                'session_info': session_info,
+                'pagination': pagination_info
             }
             
-            return jsonify(data)
+            return jsonify(response_data)
         except Exception as e:
             print(f"Error retrieving session data: {e}")
             return jsonify({'error': f'Server error: {str(e)}'}), 500

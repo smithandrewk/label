@@ -39,11 +39,12 @@ class PerformanceBenchmark:
                     data = response.json()
                     response_size = len(response.content) / 1024  # KB
                     data_points = len(data.get('data', []))
+                    pagination = data.get('pagination', {})
                     
                     times.append(elapsed)
                     response_sizes.append(response_size)
                     
-                    print(f"  Iteration {i+1}: {elapsed:.3f}s, {response_size:.1f}KB, {data_points} data points")
+                    print(f"  Iteration {i+1}: {elapsed:.3f}s, {response_size:.1f}KB, {data_points} data points, pagination: {pagination.get('has_more', 'N/A')}")
                 else:
                     print(f"  Iteration {i+1}: Failed - HTTP {response.status_code}")
                     
@@ -70,6 +71,55 @@ class PerformanceBenchmark:
             print(f"📊 Session Data Loading Results:")
             print(f"   Average: {avg_time:.3f}s")
             print(f"   Range: {min_time:.3f}s - {max_time:.3f}s") 
+            print(f"   Avg Response Size: {avg_size:.1f}KB")
+        else:
+            print("❌ No successful requests completed")
+            
+    def test_paginated_session_loading(self, session_id=1, limit=1000, iterations=3):
+        """Test paginated session data loading"""
+        print(f"🔄 Testing paginated session data loading (limit={limit}, {iterations} iterations)...")
+        
+        times = []
+        response_sizes = []
+        
+        for i in range(iterations):
+            start_time = time.time()
+            try:
+                response = requests.get(f"{self.base_url}/api/session/{session_id}?offset=0&limit={limit}")
+                elapsed = time.time() - start_time
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    response_size = len(response.content) / 1024  # KB
+                    data_points = len(data.get('data', []))
+                    pagination = data.get('pagination', {})
+                    
+                    times.append(elapsed)
+                    response_sizes.append(response_size)
+                    
+                    print(f"  Iteration {i+1}: {elapsed:.3f}s, {response_size:.1f}KB, {data_points} points, has_more: {pagination.get('has_more')}")
+                else:
+                    print(f"  Iteration {i+1}: Failed - HTTP {response.status_code}")
+                    
+            except Exception as e:
+                print(f"  Iteration {i+1}: Error - {e}")
+                
+            time.sleep(0.2)
+            
+        if times:
+            avg_time = statistics.mean(times)
+            avg_size = statistics.mean(response_sizes)
+            
+            self.results['paginated_session_loading'] = {
+                'avg_response_time': avg_time,
+                'avg_response_size_kb': avg_size,
+                'limit_used': limit,
+                'total_iterations': len(times),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            print(f"📊 Paginated Session Loading Results (limit={limit}):")
+            print(f"   Average: {avg_time:.3f}s")
             print(f"   Avg Response Size: {avg_size:.1f}KB")
         else:
             print("❌ No successful requests completed")
@@ -224,6 +274,8 @@ class PerformanceBenchmark:
         self.test_sessions_list_loading()
         print()
         self.test_session_data_loading()
+        print()
+        self.test_paginated_session_loading()
         
         print("\n✅ Benchmark completed!")
 
