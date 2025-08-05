@@ -2,6 +2,8 @@ import pandas as pd
 import time
 import functools
 import os
+import sys
+import json
 from app.logging_config import get_logger
 
 # Get logger for this module
@@ -21,6 +23,58 @@ def timeit(func):
         
         return result
     return wrapper
+
+def performance_monitor(track_memory=False):
+    """Enhanced performance monitoring decorator with memory tracking and data size measurement"""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            start_memory = None
+            
+            if track_memory:
+                import psutil
+                process = psutil.Process(os.getpid())
+                start_memory = process.memory_info().rss / 1024 / 1024  # MB
+            
+            result = func(*args, **kwargs)
+            
+            elapsed_time = time.time() - start_time
+            end_memory = None
+            memory_delta = None
+            
+            if track_memory:
+                end_memory = process.memory_info().rss / 1024 / 1024  # MB
+                memory_delta = end_memory - start_memory
+            
+            # Estimate response size for API endpoints
+            response_size = 0
+            if hasattr(result, 'get_data'):
+                # Flask response object
+                response_size = len(result.get_data()) / 1024  # KB
+            elif isinstance(result, (dict, list)):
+                # JSON serializable data
+                response_size = len(json.dumps(result).encode('utf-8')) / 1024  # KB
+            
+            # Log performance metrics
+            perf_info = {
+                'function': func.__name__,
+                'elapsed_time': f"{elapsed_time:.3f}s",
+                'response_size_kb': f"{response_size:.2f}KB" if response_size else "N/A"
+            }
+            
+            if track_memory and memory_delta is not None:
+                perf_info['memory_delta_mb'] = f"{memory_delta:.2f}MB"
+            
+            logger.info(f"PERFORMANCE: {json.dumps(perf_info)}")
+            
+            return result
+        return wrapper
+    return decorator
+
+def api_performance_monitor(func):
+    """Specialized performance monitor for API endpoints"""
+    return performance_monitor(track_memory=True)(func)
     
 def resample(df,target_hz=50):
     df = df.copy()

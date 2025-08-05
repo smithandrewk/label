@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.services.session_service import SessionService
 from app.exceptions import DatabaseError
+from app.services.utils import api_performance_monitor, performance_monitor
 import os
 import pandas as pd
 import json
@@ -58,6 +59,7 @@ class SessionController:
             print(f"Error starting session scoring: {e}")
             return jsonify({'error': f'Failed to start scoring: {str(e)}'}), 500
         
+    @api_performance_monitor
     def get_session_data(self, session_id):
         try:
             session_info = self.session_service.get_session_details(session_id)
@@ -73,8 +75,16 @@ class SessionController:
             if not os.path.exists(csv_path):
                 return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
             
+            # Log original file size for performance comparison
+            file_size_mb = os.path.getsize(csv_path) / 1024 / 1024
+            logging.info(f"PERFORMANCE: Loading CSV file size: {file_size_mb:.2f}MB")
+            
             df = pd.read_csv(csv_path)
-            df = df.iloc[::50]
+            original_rows = len(df)
+            df = df.iloc[::10]  # Downsample by 10:1
+            downsampled_rows = len(df)
+            
+            logging.info(f"PERFORMANCE: Downsampled from {original_rows} to {downsampled_rows} rows ({downsampled_rows/original_rows*100:.1f}%)")
 
             bouts = session_info['bouts']
             expected_columns = ['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']
