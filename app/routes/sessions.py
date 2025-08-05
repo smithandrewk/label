@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.services.session_service import SessionService
 from app.exceptions import DatabaseError
-from app.services.utils import api_performance_monitor, performance_monitor
+from app.services.utils import api_performance_monitor, performance_monitor, create_downsampled_cache, get_cached_csv_path
 import os
 import pandas as pd
 import json
@@ -83,26 +83,58 @@ class SessionController:
             file_size_mb = os.path.getsize(csv_path) / 1024 / 1024
             logging.info(f"PERFORMANCE: Loading CSV file size: {file_size_mb:.2f}MB")
             
+            # Use cached downsampled file for better performance
+            downsample_ratio = 10
+            cache_path = get_cached_csv_path(csv_path, downsample_ratio)
+            
+            # Create or update cache if needed
+            cache_created = create_downsampled_cache(csv_path, cache_path, downsample_ratio)
+            
+            if cache_created and os.path.exists(cache_path):
+                # Use cached downsampled file - much faster!
+                working_csv_path = cache_path
+                cache_size_mb = os.path.getsize(cache_path) / 1024 / 1024
+                logging.info(f"PERFORMANCE: Using cached downsampled file: {cache_size_mb:.2f}MB (was {file_size_mb:.2f}MB)")
+                is_using_cache = True
+                effective_downsample_ratio = 1  # Already downsampled in cache
+            else:
+                # Fallback to original file with in-memory downsampling
+                working_csv_path = csv_path
+                logging.info(f"PERFORMANCE: Cache unavailable, using original file with in-memory downsampling")
+                is_using_cache = False
+                effective_downsample_ratio = downsample_ratio
+            
             # Read CSV with chunking if pagination is requested
             if limit > 0:
-                # Calculate chunk parameters for efficient reading
-                downsample_ratio = 10
-                csv_offset = offset * downsample_ratio
-                csv_limit = limit * downsample_ratio
+                csv_offset = offset * effective_downsample_ratio
+                csv_limit = limit * effective_downsample_ratio
                 
                 logging.info(f"PERFORMANCE: Paginated read - offset:{offset}, limit:{limit} (CSV offset:{csv_offset}, limit:{csv_limit})")
                 
-                # Read only the required chunk + some buffer for downsampling
-                df = pd.read_csv(csv_path, skiprows=range(1, csv_offset + 1), nrows=csv_limit)
+                if csv_offset > 0:
+                    # Skip rows efficiently 
+                    df = pd.read_csv(working_csv_path, skiprows=range(1, csv_offset + 1), nrows=csv_limit)
+                else:
+                    # Read from beginning
+                    df = pd.read_csv(working_csv_path, nrows=csv_limit)
+                
                 original_rows = len(df)
                 
-                # Apply downsampling to the chunk
-                df = df.iloc[::downsample_ratio]
+                # Apply downsampling only if not using cache
+                if not is_using_cache:
+                    df = df.iloc[::effective_downsample_ratio]
+                
                 downsampled_rows = len(df)
                 
-                # Get total row count for pagination metadata (cached or estimated)
-                total_rows_estimate = int(file_size_mb * 1024 * 1024 / 50)  # Rough estimate: ~50 bytes per row
-                total_downsampled_estimate = total_rows_estimate // downsample_ratio
+                # Estimate total count more accurately
+                if is_using_cache:
+                    # For cached file, we can get exact count efficiently
+                    with open(working_csv_path, 'r') as f:
+                        total_downsampled_estimate = sum(1 for _ in f) - 1  # Subtract header
+                else:
+                    # Estimate from file size
+                    total_rows_estimate = int(file_size_mb * 1024 * 1024 / 50)
+                    total_downsampled_estimate = total_rows_estimate // downsample_ratio
                 
                 has_more = (offset + limit) < total_downsampled_estimate
                 
@@ -111,14 +143,19 @@ class SessionController:
                     'limit': limit,
                     'returned_count': downsampled_rows,
                     'has_more': has_more,
-                    'estimated_total': total_downsampled_estimate
+                    'estimated_total': total_downsampled_estimate,
+                    'using_cache': is_using_cache
                 }
                 
             else:
                 # Legacy behavior - load entire file
-                df = pd.read_csv(csv_path)
+                df = pd.read_csv(working_csv_path)
                 original_rows = len(df)
-                df = df.iloc[::10]  # Downsample by 10:1
+                
+                # Apply downsampling only if not using cache
+                if not is_using_cache:
+                    df = df.iloc[::effective_downsample_ratio]
+                
                 downsampled_rows = len(df)
                 
                 pagination_info = {
@@ -126,11 +163,12 @@ class SessionController:
                     'limit': 0,
                     'returned_count': downsampled_rows,
                     'has_more': False,
-                    'total_count': downsampled_rows
+                    'total_count': downsampled_rows,
+                    'using_cache': is_using_cache
                 }
             
             percentage = (downsampled_rows/original_rows*100) if original_rows > 0 else 0
-            logging.info(f"PERFORMANCE: Processed {original_rows} -> {downsampled_rows} rows ({percentage:.1f}%)")
+            logging.info(f"PERFORMANCE: Processed {original_rows} -> {downsampled_rows} rows ({percentage:.1f}%), cache: {is_using_cache}")
 
             bouts = session_info['bouts']
             expected_columns = ['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']

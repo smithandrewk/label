@@ -40,11 +40,12 @@ class PerformanceBenchmark:
                     response_size = len(response.content) / 1024  # KB
                     data_points = len(data.get('data', []))
                     pagination = data.get('pagination', {})
+                    using_cache = pagination.get('using_cache', 'N/A')
                     
                     times.append(elapsed)
                     response_sizes.append(response_size)
                     
-                    print(f"  Iteration {i+1}: {elapsed:.3f}s, {response_size:.1f}KB, {data_points} data points, pagination: {pagination.get('has_more', 'N/A')}")
+                    print(f"  Iteration {i+1}: {elapsed:.3f}s, {response_size:.1f}KB, {data_points} points, cache: {using_cache}, has_more: {pagination.get('has_more', 'N/A')}")
                 else:
                     print(f"  Iteration {i+1}: Failed - HTTP {response.status_code}")
                     
@@ -93,11 +94,12 @@ class PerformanceBenchmark:
                     response_size = len(response.content) / 1024  # KB
                     data_points = len(data.get('data', []))
                     pagination = data.get('pagination', {})
+                    using_cache = pagination.get('using_cache', 'N/A')
                     
                     times.append(elapsed)
                     response_sizes.append(response_size)
                     
-                    print(f"  Iteration {i+1}: {elapsed:.3f}s, {response_size:.1f}KB, {data_points} points, has_more: {pagination.get('has_more')}")
+                    print(f"  Iteration {i+1}: {elapsed:.3f}s, {response_size:.1f}KB, {data_points} points, cache: {using_cache}, has_more: {pagination.get('has_more')}")
                 else:
                     print(f"  Iteration {i+1}: Failed - HTTP {response.status_code}")
                     

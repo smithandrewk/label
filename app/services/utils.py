@@ -95,6 +95,50 @@ def performance_monitor(track_memory=False):
 def api_performance_monitor(func):
     """Specialized performance monitor for API endpoints"""
     return performance_monitor(track_memory=True)(func)
+
+@performance_monitor(track_memory=False)
+def create_downsampled_cache(csv_path, cache_path, downsample_ratio=10):
+    """Create a downsampled cache file for faster subsequent reads"""
+    try:
+        # Check if cache exists and is newer than source
+        if os.path.exists(cache_path):
+            cache_mtime = os.path.getmtime(cache_path)
+            source_mtime = os.path.getmtime(csv_path)
+            if cache_mtime > source_mtime:
+                logger.debug(f"Cache file {cache_path} is up to date")
+                return True
+        
+        logger.info(f"Creating downsampled cache: {cache_path}")
+        
+        # Read source file in chunks to avoid memory issues
+        chunk_size = 50000  # Process 50k rows at a time
+        first_chunk = True
+        
+        with open(cache_path, 'w') as cache_file:
+            for chunk in pd.read_csv(csv_path, chunksize=chunk_size):
+                # Downsample the chunk
+                downsampled_chunk = chunk.iloc[::downsample_ratio]
+                
+                # Write header only for first chunk
+                downsampled_chunk.to_csv(
+                    cache_file, 
+                    mode='a' if not first_chunk else 'w',
+                    header=first_chunk,
+                    index=False
+                )
+                first_chunk = False
+        
+        logger.info(f"Successfully created cache: {cache_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error creating downsampled cache: {e}")
+        return False
+
+def get_cached_csv_path(original_path, downsample_ratio=10):
+    """Generate cache file path for downsampled CSV"""
+    base, ext = os.path.splitext(original_path)
+    return f"{base}_downsampled_{downsample_ratio}x{ext}"
     
 def resample(df,target_hz=50):
     df = df.copy()
