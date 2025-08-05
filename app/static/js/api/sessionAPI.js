@@ -1,64 +1,130 @@
 /**
  * Session API Module
- * Handles all session-related API calls
+ * Handles all session-related API calls with intelligent caching
  */
+
+import { cacheService } from '../services/cacheService.js';
 
 export class SessionAPI {
     /**
-     * Load session data for a specific session
+     * Load session data for a specific session with intelligent caching
      * @param {string} sessionId - The ID of the session to load
+     * @param {Object} options - Loading options (useCache, offset, limit)
      * @returns {Promise<{bouts: Array, data: Array}>} Session data
      */
-    static async loadSessionData(sessionId) {
+    static async loadSessionData(sessionId, options = {}) {
+        const { useCache = true, offset = null, limit = null } = options;
+        const isPaginated = offset !== null || limit !== null;
+        
+        // Check cache first if enabled
+        if (useCache) {
+            const cached = cacheService.getCachedSessionData(sessionId, isPaginated);
+            if (cached) {
+                console.log(`🎯 Using cached session data for session ${sessionId}`);
+                return this.processSessionData(cached);
+            }
+        }
+        
         try {
-            console.log(`Loading session data for session ID: ${sessionId}`);
+            console.log(`🌐 Loading session data from API for session ID: ${sessionId}`);
             
-            const response = await fetch(`/api/session/${sessionId}`);
+            // Build URL with pagination parameters
+            let url = `/api/session/${sessionId}`;
+            const params = new URLSearchParams();
+            if (offset !== null) params.append('offset', offset);
+            if (limit !== null) params.append('limit', limit);
+            if (params.toString()) url += `?${params.toString()}`;
+            
+            const startTime = performance.now();
+            const response = await fetch(url);
+            const loadTime = performance.now() - startTime;
+            
             if (!response.ok) {
                 throw new Error(`Failed to fetch session data: ${response.status} ${response.statusText}`);
             }
             
             const data = await response.json();
-            console.log('Received session data:', data);
-                    
-            // Ensure bouts is an array
-            let bouts = data.bouts;
-            if (typeof bouts === 'string') {
-                try {
-                    bouts = JSON.parse(bouts);
-                } catch (e) {
-                    console.error('Error parsing bouts in loadSessionData:', e);
-                    bouts = [];
-                }
-            } else if (!Array.isArray(bouts)) {
-                bouts = [];
+            const dataSize = JSON.stringify(data).length / 1024; // KB
+            
+            console.log(`📊 API Response: ${loadTime.toFixed(0)}ms, ${dataSize.toFixed(1)}KB, ${data.data?.length || 0} points`);
+            
+            // Cache the response if caching is enabled
+            if (useCache) {
+                cacheService.cacheSessionData(sessionId, data, isPaginated);
             }
             
-            console.log(`Successfully loaded session data: ${bouts.length} bouts, ${data.data?.length || 0} data points`);
-            
-            return { bouts: bouts, data: data.data };
+            return this.processSessionData(data);
         } catch (error) {
             console.error('Error loading session data:', error);
             throw error;
         }
     }
+    
     /**
-     * Fetch all sessions or sessions for a specific project
+     * Process and normalize session data
+     */
+    static processSessionData(data) {
+        // Ensure bouts is an array
+        let bouts = data.bouts;
+        if (typeof bouts === 'string') {
+            try {
+                bouts = JSON.parse(bouts);
+            } catch (e) {
+                console.error('Error parsing bouts in processSessionData:', e);
+                bouts = [];
+            }
+        } else if (!Array.isArray(bouts)) {
+            bouts = [];
+        }
+        
+        const result = { 
+            bouts: bouts, 
+            data: data.data,
+            pagination: data.pagination,
+            session_info: data.session_info
+        };
+        
+        console.log(`✅ Processed session data: ${bouts.length} bouts, ${data.data?.length || 0} data points`);
+        
+        return result;
+    }
+    /**
+     * Fetch all sessions or sessions for a specific project with caching
      * @param {number|null} projectId - The project ID (optional)
+     * @param {boolean} useCache - Whether to use cache (default: true)
      * @returns {Promise<Array>} List of sessions
      */
-    static async fetchSessions(projectId = null) {
+    static async fetchSessions(projectId = null, useCache = true) {
+        const cacheKey = projectId ? `sessions_project_${projectId}` : 'sessions_all';
+        
+        // Check cache first
+        if (useCache) {
+            const cached = cacheService.getCachedList(cacheKey);
+            if (cached) {
+                console.log(`🎯 Using cached sessions list${projectId ? ` for project ${projectId}` : ''}`);
+                return cached;
+            }
+        }
+        
         try {
             // Build URL with query parameter if projectId is provided
             const url = projectId ? `/api/sessions?project_id=${projectId}` : '/api/sessions';
             
+            const startTime = performance.now();
             const response = await fetch(url);
+            const loadTime = performance.now() - startTime;
+            
             if (!response.ok) {
                 throw new Error(`Failed to fetch sessions: ${response.status} ${response.statusText}`);
             }
             
             const sessions = await response.json();
-            console.log(`Fetched ${sessions.length} sessions${projectId ? ` for project ${projectId}` : ''}`);
+            console.log(`📊 Fetched ${sessions.length} sessions${projectId ? ` for project ${projectId}` : ''} in ${loadTime.toFixed(0)}ms`);
+            
+            // Cache the results
+            if (useCache) {
+                cacheService.cacheList(cacheKey, sessions);
+            }
             
             return sessions;
         } catch (error) {
@@ -82,9 +148,30 @@ export class SessionAPI {
             if (!response.ok) throw new Error('Failed to update metadata');
             const result = await response.json();
             console.log('Metadata update result:', result);
+            
+            // Invalidate related caches since session data changed
+            this.invalidateSessionCaches(session.session_id);
+            
         } catch (error) {
             console.error('Error updating metadata:', error);
         }
+    }
+    
+    /**
+     * Invalidate caches related to a session
+     */
+    static invalidateSessionCaches(sessionId) {
+        // Remove session-specific caches
+        cacheService.remove(`session_${sessionId}_full`);
+        cacheService.remove(`session_${sessionId}_paginated`);
+        
+        // Remove sessions list caches (they might show updated metadata)
+        cacheService.remove('sessions_all');
+        // Also remove project-specific session lists (we don't know which project this session belongs to)
+        const allKeys = Object.keys(localStorage).filter(key => key.includes('sessions_project_'));
+        allKeys.forEach(key => localStorage.removeItem(key));
+        
+        console.log(`🧹 Invalidated caches for session ${sessionId}`);
     }
 
     static async scoreSession(session_id, project_name, session_name) {

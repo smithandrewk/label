@@ -1,9 +1,32 @@
+import { cacheService } from '../services/cacheService.js';
+
 export class ProjectAPI {
-    static async fetchProjects() {
+    static async fetchProjects(useCache = true) {
+        // Check cache first
+        if (useCache) {
+            const cached = cacheService.getCachedList('projects');
+            if (cached) {
+                console.log('🎯 Using cached projects list');
+                return cached;
+            }
+        }
+        
         try {
+            const startTime = performance.now();
             const response = await fetch('/api/projects');
+            const loadTime = performance.now() - startTime;
+            
             if (!response.ok) throw new Error('Network response was not ok');
-            return await response.json();
+            
+            const projects = await response.json();
+            console.log(`📊 Fetched ${projects.length} projects in ${loadTime.toFixed(0)}ms`);
+            
+            // Cache the results
+            if (useCache) {
+                cacheService.cacheList('projects', projects);
+            }
+            
+            return projects;
         } catch (error) {
             console.error('Error fetching projects:', error);
             throw error;

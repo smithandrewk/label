@@ -1,5 +1,6 @@
 import ProjectAPI from './api/projectAPI.js';
 import './ui/overlayManager.js'; // Import overlay manager to make it available globally
+import './ui/cacheDebugPanel.js'; // Import cache debug panel for development
 
 // Global state and functions used across pages
 window.projects = [];
