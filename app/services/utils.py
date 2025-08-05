@@ -49,12 +49,31 @@ def performance_monitor(track_memory=False):
             
             # Estimate response size for API endpoints
             response_size = 0
+            uncompressed_size = 0
+            
             if hasattr(result, 'get_data'):
                 # Flask response object
-                response_size = len(result.get_data()) / 1024  # KB
+                response_data = result.get_data()
+                response_size = len(response_data) / 1024  # KB
+                
+                # Check if response is compressed by looking for gzip header
+                is_compressed = response_data.startswith(b'\x1f\x8b') if response_data else False
+                
+                if is_compressed:
+                    # For compressed responses, we can't easily get original size without decompressing
+                    # But we can log that compression was applied
+                    perf_info_extra = {'compression_applied': True}
+                else:
+                    perf_info_extra = {'compression_applied': False}
+                    
             elif isinstance(result, (dict, list)):
-                # JSON serializable data
-                response_size = len(json.dumps(result).encode('utf-8')) / 1024  # KB
+                # JSON serializable data - measure uncompressed size
+                json_data = json.dumps(result).encode('utf-8')
+                uncompressed_size = len(json_data) / 1024  # KB
+                response_size = uncompressed_size  # Will be compressed by Flask-Compress
+                perf_info_extra = {'uncompressed_size_kb': f"{uncompressed_size:.2f}KB"}
+            else:
+                perf_info_extra = {}
             
             # Log performance metrics
             perf_info = {
@@ -62,6 +81,7 @@ def performance_monitor(track_memory=False):
                 'elapsed_time': f"{elapsed_time:.3f}s",
                 'response_size_kb': f"{response_size:.2f}KB" if response_size else "N/A"
             }
+            perf_info.update(perf_info_extra)
             
             if track_memory and memory_delta is not None:
                 perf_info['memory_delta_mb'] = f"{memory_delta:.2f}MB"

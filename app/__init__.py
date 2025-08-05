@@ -1,5 +1,6 @@
 from flask import Flask
 from flask_cors import CORS
+from flask_compress import Compress
 import os
 from dotenv import load_dotenv
 
@@ -23,7 +24,25 @@ def create_app():
     # Configuration
     app.config['DEBUG'] = True
     
+    # Enable CORS
     CORS(app)
+    
+    # Enable gzip compression for all responses
+    # This will significantly reduce bandwidth usage for remote connections
+    app.config['COMPRESS_MIMETYPES'] = [
+        'application/json',
+        'text/html',
+        'text/css',
+        'text/javascript',
+        'application/javascript',
+        'text/xml',
+        'application/xml'
+    ]
+    app.config['COMPRESS_LEVEL'] = 6  # Good balance of compression vs CPU usage
+    app.config['COMPRESS_MIN_SIZE'] = 500  # Only compress responses larger than 500 bytes
+    
+    Compress(app)
+    logger.info("Enabled gzip compression for API responses")
     
     # Initialize database connection function
     from app.services.database_service import get_db_connection
