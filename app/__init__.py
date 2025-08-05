@@ -79,7 +79,7 @@ def create_app():
     )
 
     # Register blueprints
-    from app.routes import main, models, projects, sessions, labelings
+    from app.routes import main, models, projects, sessions, labelings, cache
 
     main.init_controller(session_service=session_service, project_service=project_service)
     app.register_blueprint(main.main_bp)
@@ -95,5 +95,8 @@ def create_app():
 
     labelings.init_controller(session_service=session_service, project_service=project_service, model_service=model_service)
     app.register_blueprint(labelings.labelings_bp)
+
+    cache.init_controller()
+    app.register_blueprint(cache.cache_bp)
 
     return app
