@@ -4,6 +4,8 @@
  */
 
 import { cacheService } from '../services/cacheService.js';
+import { lazyLoadService } from '../services/lazyLoadService.js';
+import { paginationService } from '../services/paginationService.js';
 
 export class CacheDebugPanel {
     constructor() {
@@ -58,43 +60,84 @@ export class CacheDebugPanel {
     updatePanel() {
         if (!this.panel) return;
         
-        const stats = cacheService.getStats();
+        const cacheStats = cacheService.getStats();
+        const lazyStats = lazyLoadService.getStats();
+        const paginationStats = paginationService.getStats();
         
         this.panel.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <h3 style="margin: 0; color: #4CAF50;">🗄️ Cache Stats</h3>
-                <button id="cache-clear-btn" style="background: #f44336; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Clear</button>
+                <h3 style="margin: 0; color: #4CAF50;">⚡ Performance Monitor</h3>
+                <button id="cache-clear-btn" style="background: #f44336; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Clear All</button>
             </div>
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                <div>
-                    <div style="color: #81C784;">Hits: ${stats.hits}</div>
-                    <div style="color: #FFAB91;">Misses: ${stats.misses}</div>
-                    <div style="color: #90CAF9;">Hit Rate: ${stats.hitRate}</div>
+            <!-- Cache Stats -->
+            <div style="margin-bottom: 12px;">
+                <h4 style="margin: 0 0 6px 0; color: #81C784; font-size: 12px;">🗄️ CACHE</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <div>
+                        <div style="color: #81C784;">Hits: ${cacheStats.hits}</div>
+                        <div style="color: #FFAB91;">Misses: ${cacheStats.misses}</div>
+                        <div style="color: #90CAF9;">Rate: ${cacheStats.hitRate}</div>
+                    </div>
+                    <div>
+                        <div style="color: #CE93D8;">Stores: ${cacheStats.stores}</div>
+                        <div style="color: #A5D6A7;">Entries: ${cacheStats.entryCount}</div>
+                        <div style="color: #B39DDB;">Size: ${cacheStats.totalSize}</div>
+                    </div>
                 </div>
-                <div>
-                    <div style="color: #CE93D8;">Stores: ${stats.stores}</div>
-                    <div style="color: #FFCC02;">Evictions: ${stats.evictions}</div>
-                    <div style="color: #A5D6A7;">Entries: ${stats.entryCount}</div>
+            </div>
+            
+            <!-- Lazy Loading Stats -->
+            <div style="margin-bottom: 12px;">
+                <h4 style="margin: 0 0 6px 0; color: #FFC107; font-size: 12px;">🔄 LAZY LOADING</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <div>
+                        <div style="color: #FFC107;">Lazy: ${lazyStats.lazyLoads}</div>
+                        <div style="color: #FF9800;">Prefetch: ${lazyStats.prefetches}</div>
+                        <div style="color: #4CAF50;">Cache Rate: ${lazyStats.cacheHitRate}</div>
+                    </div>
+                    <div>
+                        <div style="color: #2196F3;">Active: ${lazyStats.activeLoads}</div>
+                        <div style="color: #9C27B0;">Queue: ${lazyStats.prefetchQueue}</div>
+                        <div style="color: #00BCD4;">Saved: ${lazyStats.bandwidthSavedKB}</div>
+                    </div>
                 </div>
             </div>
             
-            <div style="margin-bottom: 10px;">
-                <div style="color: #B39DDB;">Total Size: ${stats.totalSize}</div>
-                <div style="background: #333; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 4px;">
-                    <div style="background: linear-gradient(90deg, #4CAF50, #FFC107, #F44336); height: 100%; width: ${Math.min(100, parseFloat(stats.totalSize) / 50 * 100)}%;"></div>
+            <!-- Pagination Stats -->
+            <div style="margin-bottom: 12px;">
+                <h4 style="margin: 0 0 6px 0; color: #E91E63; font-size: 12px;">📄 PAGINATION</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+                    <div>
+                        <div style="color: #E91E63;">Pages: ${paginationStats.pagesLoaded}</div>
+                        <div style="color: #FF5722;">Items: ${paginationStats.totalItemsLoaded}</div>
+                        <div style="color: #795548;">Avg Time: ${paginationStats.averageLoadTime}</div>
+                    </div>
+                    <div>
+                        <div style="color: #607D8B;">Active: ${paginationStats.activePaginators}</div>
+                        <div style="color: #9E9E9E;">Per Page: ${paginationStats.avgItemsPerPage}</div>
+                        <div></div>
+                    </div>
                 </div>
-                <div style="font-size: 10px; color: #999; margin-top: 2px;">Max: 50MB</div>
             </div>
             
-            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
-                <button id="cache-stats-btn" style="background: #2196F3; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px;">Log Stats</button>
-                <button id="cache-cleanup-btn" style="background: #FF9800; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px;">Cleanup</button>
-                <button id="cache-disable-btn" style="background: #9E9E9E; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 10px;">Disable</button>
+            <!-- Cache Size Bar -->
+            <div style="margin-bottom: 12px;">
+                <div style="background: #333; height: 6px; border-radius: 3px; overflow: hidden;">
+                    <div style="background: linear-gradient(90deg, #4CAF50, #FFC107, #F44336); height: 100%; width: ${Math.min(100, parseFloat(cacheStats.totalSize) / 50 * 100)}%;"></div>
+                </div>
+                <div style="font-size: 9px; color: #999; margin-top: 2px;">Cache Usage (Max: 50MB)</div>
             </div>
             
-            <div style="margin-top: 10px; font-size: 10px; color: #999;">
-                Ctrl+Shift+C to toggle panel
+            <!-- Controls -->
+            <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px;">
+                <button id="cache-stats-btn" style="background: #2196F3; color: white; border: none; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 9px;">Log Stats</button>
+                <button id="cache-cleanup-btn" style="background: #FF9800; color: white; border: none; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 9px;">Cleanup</button>
+                <button id="lazy-clear-btn" style="background: #9C27B0; color: white; border: none; padding: 3px 6px; border-radius: 3px; cursor: pointer; font-size: 9px;">Clear Lazy</button>
+            </div>
+            
+            <div style="font-size: 9px; color: #666; text-align: center;">
+                Ctrl+Shift+C to toggle
             </div>
         `;
         
@@ -106,19 +149,23 @@ export class CacheDebugPanel {
         const clearBtn = document.getElementById('cache-clear-btn');
         const statsBtn = document.getElementById('cache-stats-btn');
         const cleanupBtn = document.getElementById('cache-cleanup-btn');
-        const disableBtn = document.getElementById('cache-disable-btn');
+        const lazyClearBtn = document.getElementById('lazy-clear-btn');
         
         if (clearBtn) {
             clearBtn.onclick = () => {
                 cacheService.clear();
+                lazyLoadService.clear();
+                paginationService.clear();
                 this.updatePanel();
-                console.log('🧹 Cache cleared via debug panel');
+                console.log('🧹 All caches and services cleared via debug panel');
             };
         }
         
         if (statsBtn) {
             statsBtn.onclick = () => {
-                cacheService.logStats();
+                console.log('📊 Cache Stats:', cacheService.getStats());
+                console.log('📊 Lazy Loading Stats:', lazyLoadService.getStats());
+                console.log('📊 Pagination Stats:', paginationService.getStats());
             };
         }
         
@@ -130,10 +177,11 @@ export class CacheDebugPanel {
             };
         }
         
-        if (disableBtn) {
-            disableBtn.onclick = () => {
-                this.hide();
-                console.log('🐛 Cache debug panel disabled');
+        if (lazyClearBtn) {
+            lazyClearBtn.onclick = () => {
+                lazyLoadService.clear();
+                this.updatePanel();
+                console.log('🧹 Lazy loading service cleared via debug panel');
             };
         }
     }
