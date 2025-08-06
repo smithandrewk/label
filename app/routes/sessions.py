@@ -216,7 +216,6 @@ class SessionController:
             verified = data.get('verified')
             
             try:
-                print(f"Updating session {session_id} with status={status}, keep={keep}, bouts={bouts}, verified={verified}")
                 rows_affected = self.session_service.update_session(session_id, status, keep, bouts, verified)
                 
             except DatabaseError as e:
