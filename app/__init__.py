@@ -55,32 +55,27 @@ def create_app():
             original_data = response.get_data()
             original_size = len(original_data)
             
-            # Log all large responses for debugging
-            if original_size > 10240:  # >10KB
-                is_compressed = response.headers.get('Content-Encoding') == 'gzip'
-                logger.info(f"AFTER_REQUEST DEBUG: {original_size/1024:.1f}KB response, compressed: {is_compressed}")
+            # Force compression for large responses (>10KB)  
+            if original_size > 10240 and not response.headers.get('Content-Encoding'):
+                import gzip
                 
-                # Force compression if not already compressed
-                if not is_compressed:
-                    import gzip
+                try:
+                    # Compress the response data
+                    compressed_data = gzip.compress(original_data, compresslevel=6)
                     
-                    try:
-                        # Compress the response data
-                        compressed_data = gzip.compress(original_data, compresslevel=6)
-                        
-                        # Update response with compressed data
-                        response.set_data(compressed_data)
-                        response.headers['Content-Encoding'] = 'gzip'
-                        response.headers['Content-Length'] = str(len(compressed_data))
-                        response.headers['Vary'] = 'Accept-Encoding'
-                        
-                        # Log compression results
-                        compression_ratio = len(compressed_data) / original_size * 100
-                        savings = (1 - len(compressed_data) / original_size) * 100
-                        logger.info(f"MANUAL COMPRESSION APPLIED: {original_size/1024:.1f}KB -> {len(compressed_data)/1024:.1f}KB ({compression_ratio:.1f}%, saved {savings:.1f}%)")
-                        
-                    except Exception as e:
-                        logger.error(f"Compression failed: {e}")
+                    # Update response with compressed data
+                    response.set_data(compressed_data)
+                    response.headers['Content-Encoding'] = 'gzip'
+                    response.headers['Content-Length'] = str(len(compressed_data))
+                    response.headers['Vary'] = 'Accept-Encoding'
+                    
+                    # Log compression results
+                    compression_ratio = len(compressed_data) / original_size * 100
+                    savings = (1 - len(compressed_data) / original_size) * 100
+                    logger.info(f"Compression: {original_size/1024:.1f}KB -> {len(compressed_data)/1024:.1f}KB (saved {savings:.1f}%)")
+                    
+                except Exception as e:
+                    logger.error(f"Compression failed: {e}")
         
         return response
     
