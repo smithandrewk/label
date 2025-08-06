@@ -38,14 +38,17 @@ def create_app():
         'text/xml',
         'application/xml'
     ]
-    app.config['COMPRESS_LEVEL'] = 6  # Good balance of compression vs CPU usage
+    app.config['COMPRESS_LEVEL'] = 6  # Good balance of compression vs CPU usage  
     app.config['COMPRESS_MIN_SIZE'] = 500  # Only compress responses larger than 500 bytes
     app.config['COMPRESS_ALGORITHM'] = 'gzip'
     
-    # Force compression for large JSON responses
+    # Initialize compression first
+    compress = Compress(app)
+    
+    # Add manual compression fallback for cases where auto-compression doesn't work
     @app.after_request
-    def force_compression_for_large_responses(response):
-        # Force compression for large JSON responses even if client doesn't request it
+    def ensure_compression(response):
+        # Check if we have a large JSON response that isn't compressed
         if (response.content_type and 
             'application/json' in response.content_type and
             not response.headers.get('Content-Encoding')):
@@ -53,32 +56,31 @@ def create_app():
             original_data = response.get_data()
             original_size = len(original_data)
             
-            # Only compress large responses
-            if original_size > 5000:  # 5KB threshold
+            # Force compression for large responses (>10KB)
+            if original_size > 10240:
                 import gzip
-                import io
                 
-                # Compress the response
-                gzip_buffer = io.BytesIO()
-                with gzip.GzipFile(fileobj=gzip_buffer, mode='wb', compresslevel=6) as gzip_file:
-                    gzip_file.write(original_data)
-                
-                # Update response
-                compressed_data = gzip_buffer.getvalue()
-                response.set_data(compressed_data)
-                response.headers['Content-Encoding'] = 'gzip'
-                response.headers['Content-Length'] = len(compressed_data)
-                response.headers['Vary'] = 'Accept-Encoding'
-                
-                # Log compression effectiveness
-                compression_ratio = len(compressed_data) / original_size * 100
-                savings = (1 - len(compressed_data) / original_size) * 100
-                logger.info(f"FORCED COMPRESSION: {original_size/1024:.1f}KB -> {len(compressed_data)/1024:.1f}KB ({compression_ratio:.1f}%, saved {savings:.1f}%)")
+                try:
+                    # Compress the response data
+                    compressed_data = gzip.compress(original_data, compresslevel=6)
+                    
+                    # Update response with compressed data
+                    response.set_data(compressed_data)
+                    response.headers['Content-Encoding'] = 'gzip'
+                    response.headers['Content-Length'] = str(len(compressed_data))
+                    response.headers['Vary'] = 'Accept-Encoding'
+                    
+                    # Log compression results
+                    compression_ratio = len(compressed_data) / original_size * 100
+                    savings = (1 - len(compressed_data) / original_size) * 100
+                    logger.info(f"MANUAL COMPRESSION: {original_size/1024:.1f}KB -> {len(compressed_data)/1024:.1f}KB ({compression_ratio:.1f}%, saved {savings:.1f}%)")
+                    
+                except Exception as e:
+                    logger.error(f"Compression failed: {e}")
         
         return response
     
-    Compress(app)
-    logger.info("Enabled gzip compression with forced compression for large responses")
+    logger.info("Enabled gzip compression with manual fallback for large responses")
     
     # Initialize database connection function
     from app.services.database_service import get_db_connection
