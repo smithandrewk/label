@@ -13,9 +13,29 @@ export class SessionAPI {
      * @returns {Promise<{bouts: Array, data: Array}>} Session data
      */
     static async loadSessionData(sessionId, options = {}) {
-        // Default to paginated loading for better remote performance
-        const { useCache = true, offset = 0, limit = 5000 } = options;
+        // Load full dataset by default - pagination is opt-in for special cases
+        const { useCache = true, offset = null, limit = null, progressiveLoad = false } = options;
         const isPaginated = offset !== null || limit !== null;
+        
+        // Progressive loading: load preview first, then full dataset
+        if (progressiveLoad && !isPaginated) {
+            console.log(`🔄 Progressive loading for session ${sessionId}: loading preview first`);
+            
+            // Load preview (first 5000 points) for immediate display
+            const preview = await this.loadSessionData(sessionId, {
+                useCache,
+                offset: 0,
+                limit: 5000
+            });
+            
+            // Trigger full load in background
+            setTimeout(async () => {
+                console.log(`📊 Loading full dataset for session ${sessionId} in background`);
+                await this.loadSessionData(sessionId, { useCache, offset: null, limit: null });
+            }, 100);
+            
+            return preview;
+        }
         
         // Check cache first if enabled
         if (useCache) {
