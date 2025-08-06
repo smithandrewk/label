@@ -50,33 +50,37 @@ def create_app():
     def ensure_compression(response):
         # Check if we have a large JSON response that isn't compressed
         if (response.content_type and 
-            'application/json' in response.content_type and
-            not response.headers.get('Content-Encoding')):
+            'application/json' in response.content_type):
             
             original_data = response.get_data()
             original_size = len(original_data)
             
-            # Force compression for large responses (>10KB)
-            if original_size > 10240:
-                import gzip
+            # Log all large responses for debugging
+            if original_size > 10240:  # >10KB
+                is_compressed = response.headers.get('Content-Encoding') == 'gzip'
+                logger.info(f"AFTER_REQUEST DEBUG: {original_size/1024:.1f}KB response, compressed: {is_compressed}")
                 
-                try:
-                    # Compress the response data
-                    compressed_data = gzip.compress(original_data, compresslevel=6)
+                # Force compression if not already compressed
+                if not is_compressed:
+                    import gzip
                     
-                    # Update response with compressed data
-                    response.set_data(compressed_data)
-                    response.headers['Content-Encoding'] = 'gzip'
-                    response.headers['Content-Length'] = str(len(compressed_data))
-                    response.headers['Vary'] = 'Accept-Encoding'
-                    
-                    # Log compression results
-                    compression_ratio = len(compressed_data) / original_size * 100
-                    savings = (1 - len(compressed_data) / original_size) * 100
-                    logger.info(f"MANUAL COMPRESSION: {original_size/1024:.1f}KB -> {len(compressed_data)/1024:.1f}KB ({compression_ratio:.1f}%, saved {savings:.1f}%)")
-                    
-                except Exception as e:
-                    logger.error(f"Compression failed: {e}")
+                    try:
+                        # Compress the response data
+                        compressed_data = gzip.compress(original_data, compresslevel=6)
+                        
+                        # Update response with compressed data
+                        response.set_data(compressed_data)
+                        response.headers['Content-Encoding'] = 'gzip'
+                        response.headers['Content-Length'] = str(len(compressed_data))
+                        response.headers['Vary'] = 'Accept-Encoding'
+                        
+                        # Log compression results
+                        compression_ratio = len(compressed_data) / original_size * 100
+                        savings = (1 - len(compressed_data) / original_size) * 100
+                        logger.info(f"MANUAL COMPRESSION APPLIED: {original_size/1024:.1f}KB -> {len(compressed_data)/1024:.1f}KB ({compression_ratio:.1f}%, saved {savings:.1f}%)")
+                        
+                    except Exception as e:
+                        logger.error(f"Compression failed: {e}")
         
         return response
     
