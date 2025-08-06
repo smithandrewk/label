@@ -13,7 +13,8 @@ export class SessionAPI {
      * @returns {Promise<{bouts: Array, data: Array}>} Session data
      */
     static async loadSessionData(sessionId, options = {}) {
-        const { useCache = true, offset = null, limit = null } = options;
+        // Default to paginated loading for better remote performance
+        const { useCache = true, offset = 0, limit = 5000 } = options;
         const isPaginated = offset !== null || limit !== null;
         
         // Check cache first if enabled
