@@ -86,6 +86,17 @@ export function addEventListeners() {
         exportLabelsJSON();
     });
 
+    const loginButton = document.getElementById('login-btn-overlay');
+    if (loginButton) {
+        loginButton.addEventListener('click', showLoginForm);
+        loginButton.addEventListener('mouseenter', () => {
+            loginButton.style.background = 'rgba(0, 0, 0, 0.1)';
+        });
+        loginButton.addEventListener('mouseleave', () => {
+            loginButton.style.background = 'rgba(0, 0, 0, 0)';
+        });
+    }
+
     const uploadButton = document.getElementById('upload-btn-overlay');
     if (uploadButton) {
         uploadButton.addEventListener('click', showCreateProjectForm);

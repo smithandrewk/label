@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}User Profile{% endblock %}
+
+{% block content %}
+    <!-- Table View -->
+    <div id="table-view">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="profile-table-body">
+                <!-- Populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <style>
+        /* Fix dropdown z-index issues in tables */
+        .table .dropdown-menu {
+            z-index: 1050;
+        }
+        
+        /* Ensure table doesn't clip dropdowns */
+        #table-view {
+            overflow: visible;
+        }
+        
+        .table {
+            overflow: visible;
+        }
+    </style>
+{% endblock %}
+
+{% block scripts %}
+    <script type="module" src="/static/profile.js"></script>
+    <script type="module" src="/static/js/pages/profile.js"></script>
+{% endblock %}

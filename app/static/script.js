@@ -5,6 +5,7 @@ import ProjectController from './js/controllers/projectController.js';
 import { 
     updateCurrentProjectPill, 
     resetScoreButton, 
+    showLoginForm,
     showCreateProjectForm, 
     showTableView, 
     showNotification,
@@ -1339,6 +1340,61 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
+document.addEventListener("DOMContentLoaded", function() {
+    const form = document.getElementById("auth-form");
+  
+    if (form) {
+        let action = null;
+        // Listen for clicks on buttons to set action as login or signup
+        form.querySelector("#login-btn").addEventListener("click", () => {
+        action = "login";
+        });
+
+        form.querySelector("#signup-btn").addEventListener("click", () => {
+        action = "signup";
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            if (!action) {
+                alert("Please click Login or Sign Up.");
+                return;
+            }
+
+            const username = document.getElementById("user-name").value;
+            const password = document.getElementById("user-password").value;
+
+            const url = action === "login" ? "/api/users/login" : "/api/users/signup";
+
+            try {
+                const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                alert(`${action.charAt(0).toUpperCase() + action.slice(1)} successful!`);
+                location.reload();
+                } else {
+                alert(data.error || `${action.charAt(0).toUpperCase() + action.slice(1)} failed.`);
+                }
+            } catch (error) {
+                console.error(`${action} error:`, error);
+                alert("Something went wrong. Try again later.");
+            }
+
+            action = null;
+        });
+    }
+});
+  
+
 // Make functions available globally for inline event handlers
 window.visualizeSession = visualizeSession;
 window.openColorPicker = openColorPicker;
@@ -1355,6 +1411,7 @@ window.toggleSplitMode = toggleSplitMode;
 window.toggleVerifiedStatus = toggleVerifiedStatus;
 window.splitSession = splitSession;
 window.createNewBout = createNewBout;
+window.showLoginForm = showLoginForm;
 window.showCreateProjectForm = showCreateProjectForm;
 window.createNewProject = ProjectController.createNewProject;
 window.createBulkUpload = ProjectController.createBulkUpload;

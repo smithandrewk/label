@@ -131,6 +131,11 @@ def serve_index():
     print("Serving index page for sessions")
     return render_template('sessions.html', active_view='sessions')
 
+@main_bp.route('/profile')
+def serve_profile():
+    print("Serving index page for user profile")
+    return render_template('profile.html', active_view='profile')
+
 # Export labels for all projects and sessions
 @main_bp.route('/api/export/labels')
 def export_labels():

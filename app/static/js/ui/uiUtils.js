@@ -31,6 +31,19 @@ export function resetScoreButton(sessionId) {
 }
 
 /**
+ * Show login form modal
+ */
+export function showLoginForm() {
+    const modalElement = document.getElementById('loginModal');
+    if (modalElement) {
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+    } else {
+        console.error('Login Modal not found');
+    }
+}
+
+/**
  * Show create project form modal
  */
 export function showCreateProjectForm() {

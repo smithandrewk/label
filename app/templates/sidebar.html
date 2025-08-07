@@ -19,7 +19,14 @@
                 <span>Sessions</span>
             </a>
         </li>
-
+        {% if session.current_user_id %}
+        <li class="nav-item mb-1">
+            <a href="/profile" class="nav-link d-flex align-items-center {{ 'active' if active_view == 'profile' else 'link-body-emphasis' }}">
+                <i class="fa-solid fa-user me-3" style="width: 18px;"></i>
+                <span>Profile</span>
+            </a>
+        </li>
+        {% endif %}
         
         <hr class="my-3">
         
@@ -34,6 +41,14 @@
         <hr class="my-3">
         
         <!-- Project Controls as Nav Pills -->
+        {% if not session.current_user_id %}
+        <li class="nav-item mb-1">
+        <button id="login-btn-overlay" class="nav-link d-flex align-items-center link-body-emphasis border-0 bg-transparent w-100 text-start" title="Login">
+            <i class="fa-solid fa-right-to-bracket me-3" style="width: 18px;"></i>
+            <span>Login</span>
+        </button>
+        </li>
+        {% endif %}
         <li class="nav-item mb-1">
             <button id="upload-btn-overlay" class="nav-link d-flex align-items-center link-body-emphasis border-0 bg-transparent w-100 text-start" title="Upload Project">
                 <i class="fa-solid fa-cloud-arrow-up me-3" style="width: 18px;"></i>

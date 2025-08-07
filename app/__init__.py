@@ -19,7 +19,10 @@ def create_app():
     logger.info("Starting Flask application...")
     
     app = Flask(__name__)
-    
+
+    #set secret key for sessions
+    app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
+
     # Configuration
     app.config['DEBUG'] = True
     
@@ -33,16 +36,19 @@ def create_app():
     from app.repositories.session_repository import SessionRepository
     from app.repositories.participant_repository import ParticipantRepository
     from app.repositories.model_repository import ModelRepository
+    from app.repositories.users_repository import UserRepository
     
     project_repository = ProjectRepository(get_db_connection=get_db_connection)
     session_repository = SessionRepository(get_db_connection=get_db_connection)
     participant_repository = ParticipantRepository(get_db_connection=get_db_connection)
     model_repository = ModelRepository(get_db_connection=get_db_connection)
+    users_repository = UserRepository(get_db_connection=get_db_connection)
     
     # Initialize services with repositories
     from app.services.project_service import ProjectService
     from app.services.session_service import SessionService
     from app.services.model_service import ModelService
+    from app.services.users_service import UserService
     
     session_service = SessionService(
         get_db_connection=get_db_connection, # TODO: get rid of eventually when repository layer is fully implemented
@@ -58,9 +64,12 @@ def create_app():
         session_repository=session_repository,
         model_repository=model_repository  # Add this line
     )
+    users_service = UserService(
+        user_repository=users_repository
+    )
 
     # Register blueprints
-    from app.routes import main, models, projects, sessions, labelings
+    from app.routes import main, models, projects, sessions, labelings, users
 
     main.init_controller(session_service=session_service, project_service=project_service)
     app.register_blueprint(main.main_bp)
@@ -77,4 +86,7 @@ def create_app():
     labelings.init_controller(session_service=session_service, project_service=project_service, model_service=model_service)
     app.register_blueprint(labelings.labelings_bp)
 
+    users.init_controller(user_service=users_service)
+    app.register_blueprint(users.users_bp)
+    
     return app
