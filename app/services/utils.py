@@ -33,8 +33,25 @@ def resample(df,target_hz=50):
     df = df_resampled.drop('timestamp', axis=1)
     return df
 
-def load_dataframe_from_csv(csv_path, column_prefix='accel', target_hz=50):
-    df = pd.read_csv(csv_path).iloc[:-1]
+def load_dataframe_from_csv(csv_path, column_prefix='accel', target_hz=50, start_offset=None, end_offset=None):
+    # Efficient loading using pandas skiprows and nrows for virtual splits
+    if start_offset is not None or end_offset is not None:
+        # For virtual splits, use skiprows and nrows for efficient loading
+        skiprows = list(range(1, start_offset + 1)) if start_offset and start_offset > 0 else None
+        
+        if end_offset is not None:
+            if start_offset is not None:
+                nrows = end_offset - start_offset
+            else:
+                nrows = end_offset
+        else:
+            nrows = None
+            
+        df = pd.read_csv(csv_path, skiprows=skiprows, nrows=nrows)
+    else:
+        # Regular loading for non-virtual splits
+        df = pd.read_csv(csv_path).iloc[:-1]
+    
     df = df.rename(columns={'x': f'{column_prefix}_x', 'y': f'{column_prefix}_y', 'z': f'{column_prefix}_z'})
     df['ns_since_reboot'] = df['ns_since_reboot'].astype(float)
     df[f'{column_prefix}_x'] = df[f'{column_prefix}_x'].astype(float)
@@ -53,3 +70,50 @@ def check_sample_rate_consistency(sample_rate1, sample_rate2):
         raise ValueError(f"Sample rates differ significantly: {sample_rate1:.2f} Hz vs {sample_rate2:.2f} Hz")
     
     return True
+
+def load_session_data_with_virtual_splits(project_path, session_name, parent_data_path=None, start_offset=None, end_offset=None):
+    """
+    Load session data supporting virtual splits via pandas offset slicing.
+    
+    Args:
+        project_path: Path to the project directory
+        session_name: Name of the session (for regular sessions)
+        parent_data_path: Path to parent data file (for virtual splits)
+        start_offset: Starting row index for virtual splits
+        end_offset: Ending row index for virtual splits
+        
+    Returns:
+        dict: Contains 'accel' dataframe and optionally 'gyro' dataframe
+    """
+    import os
+    
+    # Determine which data path to use
+    if parent_data_path:
+        # Virtual split - use parent data path with offsets
+        accel_csv_path = os.path.join(parent_data_path, 'accelerometer_data.csv')
+        gyro_csv_path = os.path.join(parent_data_path, 'gyroscope_data.csv')
+    else:
+        # Regular session - use session path
+        accel_csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
+        gyro_csv_path = os.path.join(project_path, session_name, 'gyroscope_data.csv')
+    
+    result = {}
+    
+    # Load accelerometer data
+    result['accel'] = load_dataframe_from_csv(
+        accel_csv_path, 
+        column_prefix='accel', 
+        start_offset=start_offset, 
+        end_offset=end_offset
+    )
+    
+    # Load gyroscope data if it exists
+    if os.path.exists(gyro_csv_path):
+        result['gyro'] = load_dataframe_from_csv(
+            gyro_csv_path, 
+            column_prefix='gyro', 
+            start_offset=start_offset, 
+            end_offset=end_offset
+        )
+    
+    return result

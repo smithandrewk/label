@@ -41,7 +41,8 @@ class SessionRepository(BaseRepository):
         query = "UPDATE sessions SET bouts = %s WHERE session_id = %s"
         return self._execute_query(query, (bouts, session_id), commit=True)
 
-    def insert_single_session(self, session_name, project_id, bouts_json, start_ns, stop_ns):
+    def insert_single_session(self, session_name, project_id, bouts_json, start_ns, stop_ns, 
+                             parent_data_path=None, data_start_offset=None, data_end_offset=None):
         """
         Insert a single session into the database.
         
@@ -51,17 +52,22 @@ class SessionRepository(BaseRepository):
             bouts_json: JSON string of bouts data
             start_ns: Start timestamp in nanoseconds since reboot
             stop_ns: Stop timestamp in nanoseconds since reboot
+            parent_data_path: Path to parent data file for virtual splits (optional)
+            data_start_offset: Start row index for pandas slicing (optional)
+            data_end_offset: End row index for pandas slicing (optional)
             
         Returns:
             list: List containing the session name if successful, empty list if failed
         """
         try:
             query = """
-                INSERT INTO sessions (project_id, session_name, status, keep, bouts, start_ns, stop_ns)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO sessions (project_id, session_name, status, keep, bouts, start_ns, stop_ns, 
+                                    parent_session_data_path, data_start_offset, data_end_offset)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
-            self._execute_query(query, (project_id, session_name, 'Initial', None, bouts_json, start_ns, stop_ns), commit=True)
-            logger.debug(f"Successfully inserted single session '{session_name}' for project {project_id} (start_ns: {start_ns}, stop_ns: {stop_ns})")
+            self._execute_query(query, (project_id, session_name, 'Initial', None, bouts_json, start_ns, stop_ns,
+                                      parent_data_path, data_start_offset, data_end_offset), commit=True)
+            logger.debug(f"Successfully inserted session '{session_name}' for project {project_id} (start_ns: {start_ns}, stop_ns: {stop_ns}, virtual_split: {parent_data_path is not None})")
             return [session_name]
         except Exception as e:
             logger.error(
@@ -73,6 +79,71 @@ class SessionRepository(BaseRepository):
                 }
             )
             return []
+
+    def insert_virtual_split_session(self, session_name, project_id, bouts_json, start_ns, stop_ns, 
+                                   parent_data_path, data_start_offset, data_end_offset):
+        """
+        Insert a virtual split session into the database.
+        
+        Args:
+            session_name: Name of the new session
+            project_id: ID of the project this session belongs to
+            bouts_json: JSON string of bouts data for this split
+            start_ns: Start timestamp in nanoseconds since reboot
+            stop_ns: Stop timestamp in nanoseconds since reboot
+            parent_data_path: Path to parent data file
+            data_start_offset: Start row index for pandas slicing
+            data_end_offset: End row index for pandas slicing
+            
+        Returns:
+            int: Session ID if successful, None if failed
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor(dictionary=True)
+            
+            query = """
+                INSERT INTO sessions (project_id, session_name, status, keep, bouts, start_ns, stop_ns, 
+                                    parent_session_data_path, data_start_offset, data_end_offset)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            cursor.execute(query, (project_id, session_name, 'Initial', None, bouts_json, start_ns, stop_ns,
+                                 parent_data_path, data_start_offset, data_end_offset))
+            conn.commit()
+            session_id = cursor.lastrowid
+            
+            cursor.close()
+            conn.close()
+            
+            logger.debug(f"Successfully inserted virtual split session '{session_name}' with ID {session_id}")
+            return session_id
+        except Exception as e:
+            logger.error(f"Error inserting virtual split session {session_name}: {e}", exc_info=True)
+            return None
+
+    def get_session_split_info(self, session_id):
+        """
+        Get virtual split information for a session.
+        
+        Args:
+            session_id: ID of the session
+            
+        Returns:
+            dict: Contains parent_data_path, data_start_offset, data_end_offset, or None if not found
+        """
+        query = """
+            SELECT parent_session_data_path, data_start_offset, data_end_offset
+            FROM sessions 
+            WHERE session_id = %s
+        """
+        result = self._execute_query(query, (session_id,), fetch_one=True)
+        if result:
+            return {
+                'parent_data_path': result['parent_session_data_path'],
+                'data_start_offset': result['data_start_offset'],
+                'data_end_offset': result['data_end_offset']
+            }
+        return None
 
     def count_sessions_by_name_and_project(self, session_name, project_id):
         """

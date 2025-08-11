@@ -255,44 +255,79 @@ class SessionService:
                         break
 
 
-            # Create new session names and directories
+            # Save the complete resampled data to original directory (preserve original)
+            original_dir = os.path.join(project_path, session_name)
+            df[['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']].to_csv(os.path.join(original_dir, 'accelerometer_data.csv'), index=False)
+            if gyro:
+                df[['ns_since_reboot', 'gyro_x', 'gyro_y', 'gyro_z']].to_csv(os.path.join(original_dir, 'gyroscope_data.csv'), index=False)
+            
+            # Create virtual split sessions (no physical directories)
             new_sessions = []
             
             for i, segment in enumerate(segments):
                 # Generate unique name
                 new_name = self.generate_unique_session_name_upload(session_name, project_path, project_id)
-                new_dir = os.path.join(project_path, new_name)
                 
-                # Create directory and save CSV
-                os.makedirs(new_dir, exist_ok=True)
-                segment[['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']].to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
-                if gyro:
-                    segment[['ns_since_reboot', 'gyro_x', 'gyro_y', 'gyro_z']].to_csv(os.path.join(new_dir, 'gyroscope_data.csv'), index=False)
+                # Use the original split indices as offsets (they correspond to the un-resampled dataframe)
+                segment_start_offset = split_indices[i]
+                segment_end_offset = split_indices[i + 1]
                 
-                # Copy log file if it exists
-                log_path = os.path.join(project_path, session_name, 'log.csv')
-                if os.path.exists(log_path):
-                    shutil.copy(log_path, os.path.join(new_dir, 'log.csv'))
-                    
-                # Copy labels.json file if it exists
-                labels_path = os.path.join(project_path, session_name, 'labels.json')
-                if os.path.exists(labels_path):
-                    shutil.copy(labels_path, os.path.join(new_dir, 'labels.json'))
                 
                 # Calculate start_ns and stop_ns for this segment
                 segment_start_ns = int(segment['ns_since_reboot'].min())
                 segment_stop_ns = int(segment['ns_since_reboot'].max())
                 
-                # Insert session into database using repository
-                result = self.session_repo.insert_single_session(new_name, project_id, json.dumps(segment_bouts[i]), segment_start_ns, segment_stop_ns)
+                # Insert virtual split session into database
+                result = self.session_repo.insert_single_session(
+                    new_name, 
+                    project_id, 
+                    json.dumps(segment_bouts[i]), 
+                    segment_start_ns, 
+                    segment_stop_ns,
+                    parent_data_path=original_dir,
+                    data_start_offset=segment_start_offset,
+                    data_end_offset=segment_end_offset
+                )
                 if result:  # Only add to new_sessions if insertion was successful
                     new_sessions.append(new_name)
             
-            # Remove the original session directory
-            original_dir = os.path.join(project_path, session_name)
-            if os.path.exists(original_dir):
-                shutil.rmtree(original_dir)
+            # Mark original session as split but keep the data
+            conn = self.get_db_connection()
+            if conn:
+                try:
+                    with conn.cursor(dictionary=True) as cursor:
+                        cursor.execute("""
+                            INSERT INTO sessions (project_id, session_name, status, keep, bouts, start_ns, stop_ns)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        """, (project_id, session_name, 'Split', 0, '[]', int(df['ns_since_reboot'].min()), int(df['ns_since_reboot'].max())))
+                        
+                        parent_session_id = cursor.lastrowid
+                        
+                        # Update is_visible to hide the parent session
+                        cursor.execute("""
+                            UPDATE sessions SET is_visible = 0 WHERE session_id = %s
+                        """, (parent_session_id,))
+                        
+                        # Add lineage for virtual splits
+                        for new_session_name in new_sessions:
+                            cursor.execute("""
+                                SELECT session_id FROM sessions WHERE session_name = %s AND project_id = %s
+                            """, (new_session_name, project_id))
+                            child_result = cursor.fetchone()
+                            if child_result:
+                                cursor.execute("""
+                                    INSERT INTO session_lineage (child_session_id, parent_session_id)
+                                    VALUES (%s, %s)
+                                """, (child_result['session_id'], parent_session_id))
+                    
+                    conn.commit()
+                except Exception as e:
+                    conn.rollback()
+                    logger.error(f"Error creating parent session for virtual splits: {e}")
+                finally:
+                    conn.close()
             
+            logger.info(f"Created {len(new_sessions)} virtual split sessions from upload for {session_name}")
             return new_sessions
             
         except Exception as e:
@@ -352,11 +387,7 @@ class SessionService:
         while True:
             candidate_name = f"{original_name}.{base_counter}"
             
-            # Check filesystem for collision
-            if os.path.exists(os.path.join(project_path, candidate_name)):
-                base_counter += 1
-                continue
-                
+            # For virtual splits, only check database (no filesystem check needed)
             # Check database for collision
             conn = self.get_db_connection()
             if conn is None:
@@ -640,7 +671,7 @@ class SessionService:
             conn.close()
     
     def split_session(self, session_id, session_info, new_sessions):
-        """Split a session into multiple new sessions and mark original as split"""
+        """Split a session into multiple virtual sessions and mark original as split"""
         conn = self.get_db_connection()
         if conn is None:
             raise DatabaseError('Database connection failed')
@@ -651,15 +682,33 @@ class SessionService:
                 parent_id = session_id
                 created_sessions = []
                 
+                # Get the original session directory path for virtual splits
+                session_name = session_info['session_name']
+                project_path = session_info['project_path']
+                
+                # Check if we're splitting a virtual split session
+                split_info = self.session_repo.get_session_split_info(session_id)
+                if split_info and split_info['parent_data_path']:
+                    # Use the existing parent data path for virtual splits
+                    parent_data_path = split_info['parent_data_path']
+                else:
+                    # Regular session - use session directory
+                    parent_data_path = os.path.join(project_path, session_name)
+                
                 for session_data in new_sessions:
                     # Extract start_ns and stop_ns from session_data and ensure they're integers
                     start_ns = int(session_data.get('start_ns'))
                     stop_ns = int(session_data.get('stop_ns'))
                     
-                    # Keep the same project_id
+                    # Get data offsets for virtual splitting
+                    data_start_offset = session_data.get('data_start_offset')
+                    data_end_offset = session_data.get('data_end_offset')
+                    
+                    # Insert virtual split session
                     cursor.execute("""
-                        INSERT INTO sessions (project_id, session_name, status, keep, bouts, start_ns, stop_ns)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO sessions (project_id, session_name, status, keep, bouts, start_ns, stop_ns,
+                                            parent_session_data_path, data_start_offset, data_end_offset)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         session_info['project_id'], 
                         session_data['name'], 
@@ -667,7 +716,10 @@ class SessionService:
                         session_info['keep'], 
                         json.dumps(session_data['bouts']),
                         start_ns,
-                        stop_ns
+                        stop_ns,
+                        parent_data_path,
+                        data_start_offset,
+                        data_end_offset
                     ))
                     # Get the new session ID
                     child_id = cursor.lastrowid
@@ -679,7 +731,7 @@ class SessionService:
                         VALUES (%s, %s)
                     """, (child_id, parent_id))
                     
-                # Delete original session
+                # Mark original session as split (but don't delete data)
                 cursor.execute("""
                     UPDATE sessions
                     SET status = 'Split', 

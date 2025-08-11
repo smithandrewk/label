@@ -32,6 +32,9 @@ CREATE TABLE sessions (
     verified TINYINT(1) DEFAULT 0,
     start_ns BIGINT NOT NULL,
     stop_ns BIGINT NOT NULL,
+    parent_session_data_path VARCHAR(500) NULL, -- Path to parent data file for virtual splits
+    data_start_offset BIGINT NULL, -- Start row index for pandas slicing
+    data_end_offset BIGINT NULL, -- End row index for pandas slicing
     UNIQUE (project_id, session_name),
     FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE
 );

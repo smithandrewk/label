@@ -68,20 +68,53 @@ class SessionController:
             project_path = session_info['project_path']
             session_name = session_info['session_name']
             
-            csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
-
-            if not os.path.exists(csv_path):
-                return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
-            
-            df = pd.read_csv(csv_path)
-            df = df.iloc[::50]
+            # Check if this is a virtual split session
+            split_info = self.session_service.session_repo.get_session_split_info(session_id)
+            if split_info and split_info['parent_data_path']:
+                # Virtual split session - load from parent with offsets
+                csv_path = os.path.join(split_info['parent_data_path'], 'accelerometer_data.csv')
+                if not os.path.exists(csv_path):
+                    return jsonify({'error': f'Parent CSV file not found at {csv_path}'}), 404
+                
+                from app.services.utils import load_dataframe_from_csv
+                
+                # Check if we have valid offsets (new virtual splits)
+                if split_info['data_start_offset'] is not None and split_info['data_end_offset'] is not None:
+                    # Use efficient loading with offsets
+                    df = load_dataframe_from_csv(
+                        csv_path,
+                        column_prefix='accel',
+                        start_offset=split_info['data_start_offset'],
+                        end_offset=split_info['data_end_offset']
+                    )
+                else:
+                    # Fallback for old virtual splits without offsets - filter by time range
+                    df = pd.read_csv(csv_path)
+                    if 'x' in df.columns:
+                        df = df.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
+                    
+                    # Filter by session time range
+                    start_ns = session_info['start_ns']
+                    stop_ns = session_info['stop_ns']
+                    df = df[(df['ns_since_reboot'] >= start_ns) & (df['ns_since_reboot'] <= stop_ns)]
+                
+                # Apply downsampling for visualization
+                df = df.iloc[::50]
+            else:
+                # Regular session - load from session directory
+                csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
+                if not os.path.exists(csv_path):
+                    return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
+                
+                df = pd.read_csv(csv_path)
+                df = df.iloc[::50]
+                
+                # If the CSV has 'x', 'y', 'z' columns, rename them to 'accel_x', 'accel_y', 'accel_z'
+                if 'x' in df.columns:
+                    df = df.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
 
             bouts = session_info['bouts']
             expected_columns = ['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']
-
-            # If the CSV has 'x', 'y', 'z' columns, rename them to 'accel_x', 'accel_y', 'accel_z'
-            if 'x' in df.columns:
-                df = df.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
 
             if not all(col in df.columns for col in expected_columns):
                 return jsonify({'error': f'Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}'}), 400
@@ -157,12 +190,45 @@ class SessionController:
             except json.JSONDecodeError:
                 parent_bouts = []
             
-            # Read original CSV from the project directory
-            csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
-            if not os.path.exists(csv_path):
-                return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
-            
-            df = pd.read_csv(csv_path)
+            # Check if this is a virtual split session that needs parent data
+            split_info = self.session_service.session_repo.get_session_split_info(session_id)
+            if split_info and split_info['parent_data_path']:
+                # Virtual split session - load from parent data file
+                csv_path = os.path.join(split_info['parent_data_path'], 'accelerometer_data.csv')
+                if not os.path.exists(csv_path):
+                    return jsonify({'error': f'Parent CSV file not found at {csv_path}'}), 404
+                
+                # Load the session data using virtual split logic
+                from app.services.utils import load_dataframe_from_csv
+                if split_info['data_start_offset'] is not None and split_info['data_end_offset'] is not None:
+                    # Use efficient loading with offsets
+                    df = load_dataframe_from_csv(
+                        csv_path,
+                        column_prefix='accel',
+                        start_offset=split_info['data_start_offset'],
+                        end_offset=split_info['data_end_offset']
+                    )
+                else:
+                    # Fallback for old virtual splits - filter by time range
+                    df = pd.read_csv(csv_path)
+                    if 'x' in df.columns:
+                        df = df.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
+                    
+                    # Filter by session time range to get only this virtual split's data
+                    start_ns = session_info['start_ns']
+                    stop_ns = session_info['stop_ns']
+                    df = df[(df['ns_since_reboot'] >= start_ns) & (df['ns_since_reboot'] <= stop_ns)]
+                    
+                # IMPORTANT: Reset index so split point calculations work correctly
+                # The split points are relative to the filtered dataframe, not the original
+                df = df.reset_index(drop=True)
+            else:
+                # Regular session - load from session directory
+                csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
+                if not os.path.exists(csv_path):
+                    return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
+                
+                df = pd.read_csv(csv_path)
             expected_columns = ['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']
             if not all(col in df.columns for col in expected_columns):
                 return jsonify({'error': f'Invalid CSV format. Expected columns: {expected_columns}, Found: {list(df.columns)}'}), 400
@@ -184,31 +250,30 @@ class SessionController:
             if not split_indices:
                 return jsonify({'error': 'No valid split points provided'}), 400
 
-            # Split data into segments
-            segments = []
+            # Calculate virtual split segments with offsets
+            segment_offsets = []
             start_idx = 0
             for idx in split_indices:
-                segment = df.iloc[start_idx:idx + 1][expected_columns]
-                if not segment.empty:
-                    segments.append(segment)
-                start_idx = idx + 1
+                if start_idx < idx:  # Only add if segment has data
+                    segment_offsets.append((start_idx, idx))
+                start_idx = idx
             # Add final segment
-            final_segment = df.iloc[start_idx:][expected_columns]
-            if not final_segment.empty:
-                segments.append(final_segment)
+            if start_idx < len(df):
+                segment_offsets.append((start_idx, len(df)))
 
-            if len(segments) < 2:
+            if len(segment_offsets) < 2:
                 return jsonify({'error': 'Split would not create multiple valid recordings'}), 400
 
             # Define time ranges for each segment
             segment_ranges = []
-            for i, segment in enumerate(segments):
-                start_time = segment['ns_since_reboot'].min()
-                end_time = segment['ns_since_reboot'].max()
+            for start_offset, end_offset in segment_offsets:
+                segment_df = df.iloc[start_offset:end_offset]
+                start_time = segment_df['ns_since_reboot'].min()
+                end_time = segment_df['ns_since_reboot'].max()
                 segment_ranges.append((start_time, end_time))
             
             # Assign bouts to segments based on time ranges
-            segment_bouts = [[] for _ in segments]
+            segment_bouts = [[] for _ in segment_ranges]
             
             for bout in parent_bouts:
                 """
@@ -236,57 +301,81 @@ class SessionController:
                     # If bout overlaps with segment start
                     elif bout_start < segment_start and segment_start <= bout_end <= segment_end:
                         # Adjust bout to start at segment boundary
-                        adjusted_bout = [float(segment_start), float(bout_end)]
+                        adjusted_bout = {'start': float(segment_start), 'end': float(bout_end), 'label': bout_label}
                         segment_bouts[i].append(adjusted_bout)
                         break
                     # If bout overlaps with segment end
                     elif segment_start <= bout_start <= segment_end and bout_end > segment_end:
                         # Adjust bout to end at segment boundary
-                        adjusted_bout = [float(bout_start), float(segment_end)]
+                        adjusted_bout = {'start': float(bout_start), 'end': float(segment_end), 'label': bout_label}
                         segment_bouts[i].append(adjusted_bout)
                         break
                     # If bout spans entire segment
                     elif bout_start < segment_start and bout_end > segment_end:
                         # Create a bout for the entire segment
-                        adjusted_bout = [float(segment_start), float(segment_end)]
+                        adjusted_bout = {'start': float(segment_start), 'end': float(segment_end), 'label': bout_label}
                         segment_bouts[i].append(adjusted_bout)
                         break
 
-            # Create new session names and directories
+            # Pre-generate all unique names to avoid transaction conflicts
+            generated_names = []
+            for i in range(len(segment_offsets)):
+                # Generate name that doesn't conflict with database OR previously generated names in this batch
+                base_counter = 1
+                while True:
+                    candidate_name = f"{session_name}.{base_counter}"
+                    
+                    # Check if this name conflicts with previously generated names in this batch
+                    if candidate_name in generated_names:
+                        base_counter += 1
+                        continue
+                        
+                    # Check database for collision
+                    count = self.session_service.session_repo.count_sessions_by_name_and_project(candidate_name, session_info['project_id'])
+                    if count == 0:
+                        generated_names.append(candidate_name)
+                        break
+                    
+                    base_counter += 1
+            
+            # Create virtual split sessions (no physical file creation)
             new_sessions = []
-            for i, segment in enumerate(segments):
-                # Generate unique name instead of using suffix
-                new_name = self.session_service.generate_unique_session_name(session_name, project_path, session_info['project_id'])
-                new_dir = os.path.join(project_path, new_name)
+            for i, (start_offset, end_offset) in enumerate(segment_offsets):
+                new_name = generated_names[i]
                 
                 # Calculate start_ns and stop_ns for this segment
-                segment_start_ns = int(segment['ns_since_reboot'].min())
-                segment_stop_ns = int(segment['ns_since_reboot'].max())
+                segment_start_ns, segment_stop_ns = segment_ranges[i]
                 
-                os.makedirs(new_dir)
-                segment.to_csv(os.path.join(new_dir, 'accelerometer_data.csv'), index=False)
+                # Calculate absolute offsets relative to the original parent file
+                absolute_start_offset = start_offset
+                absolute_end_offset = end_offset
+                
+                # If we're splitting a virtual split, adjust offsets relative to parent
+                session_split_info = self.session_service.session_repo.get_session_split_info(session_id)
+                if session_split_info and session_split_info['parent_data_path']:
+                    if session_split_info['data_start_offset'] is not None:
+                        # Add the parent's start offset to make it absolute
+                        absolute_start_offset = session_split_info['data_start_offset'] + start_offset
+                        absolute_end_offset = session_split_info['data_start_offset'] + end_offset
+                    # If parent doesn't have offsets, we can't calculate absolute offsets
+                    # so we'll use None and fall back to time-based filtering
+                    else:
+                        absolute_start_offset = None
+                        absolute_end_offset = None
+                
                 new_sessions.append({
                     'name': new_name,
                     'bouts': segment_bouts[i],
-                    'start_ns': segment_start_ns,
-                    'stop_ns': segment_stop_ns
+                    'start_ns': int(segment_start_ns),
+                    'stop_ns': int(segment_stop_ns),
+                    'data_start_offset': absolute_start_offset,
+                    'data_end_offset': absolute_end_offset
                 })
-
-            # Copy original log file to new directories
-            log_path = os.path.join(project_path, session_name, 'log.csv')
-            if os.path.exists(log_path):
-                for session_data in new_sessions:
-                    shutil.copy(log_path, os.path.join(project_path, session_data['name'], 'log.csv'))
-            else:
-                print(f"Log file not found at {log_path}. Skipping copy.")
                 
             try:
                 created_sessions = self.session_service.split_session(session_id, session_info, new_sessions)
             except DatabaseError as e:
                 return jsonify({'error': str(e)}), 500
-
-            # Delete original session directory
-            shutil.rmtree(os.path.join(project_path, session_name))
 
             return jsonify({
                 'message': 'Session split successfully', 

@@ -13,7 +13,7 @@ class BaseRepository:
             raise DatabaseError('Database connection failed')
         return conn
     
-    def _execute_query(self, query, params=None, fetch_one=False, fetch_all=False, commit=False):
+    def _execute_query(self, query, params=None, fetch_one=False, fetch_all=False, commit=False, return_cursor=False):
         """
         Execute a database query with proper error handling and cleanup
         
@@ -23,9 +23,10 @@ class BaseRepository:
             fetch_one: Return single result
             fetch_all: Return all results
             commit: Whether to commit the transaction
+            return_cursor: Return cursor object (caller must handle cleanup)
             
         Returns:
-            Query result or cursor.rowcount for modifications
+            Query result, cursor.rowcount for modifications, or cursor object
         """
         conn = self._get_connection()
         cursor = conn.cursor(dictionary=True)
@@ -36,20 +37,31 @@ class BaseRepository:
             if commit:
                 conn.commit()
             
-            if fetch_one:
-                return cursor.fetchone()
+            if return_cursor:
+                # Caller is responsible for cursor/connection cleanup
+                return cursor
+            elif fetch_one:
+                result = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                return result
             elif fetch_all:
-                return cursor.fetchall()
+                result = cursor.fetchall()
+                cursor.close()
+                conn.close()
+                return result
             else:
-                return cursor.rowcount
+                rowcount = cursor.rowcount
+                cursor.close()
+                conn.close()
+                return rowcount
                 
         except Exception as e:
             if commit:
                 conn.rollback()
-            raise DatabaseError(f'Database operation failed: {str(e)}')
-        finally:
             cursor.close()
             conn.close()
+            raise DatabaseError(f'Database operation failed: {str(e)}')
     
     def _execute_transaction(self, operations):
         """
