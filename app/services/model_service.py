@@ -305,18 +305,49 @@ class ModelService:
             logger.error(f"error loading session data: {e}")
             raise DatabaseError(f'failed to load session data: {str(e)}')
         
-    def load_range_data(self, project_path, session_name, start_ns, end_ns):
+    def load_range_data(self, project_path, session_name, start_ns, end_ns, session_id=None):
         """
-        Extract CSV loading logic into a separate method
+        Load session data with range filtering, supporting virtual splits
         
         Args:
             project_path: Path to the project directory
             session_name: Name of the session
+            start_ns: Start timestamp for range filtering
+            end_ns: End timestamp for range filtering
+            session_id: Session ID (required for virtual splits)
             
         Returns:
             pandas.DataFrame: Session data with proper column naming
         """
         try:
+            # Check if this is a virtual split session
+            if session_id and self.session_repo:
+                split_info = self.session_repo.get_session_split_info(session_id)
+                if split_info and split_info['parent_data_path']:
+                    # Virtual split session - load from parent with offsets
+                    csv_path = f"{split_info['parent_data_path']}/accelerometer_data.csv"
+                    logger.info(f"Loading virtual split session range data from: {csv_path} (offsets: {split_info['data_start_offset']}-{split_info['data_end_offset']})")
+                    
+                    from app.services.utils import load_dataframe_from_csv
+                    df = load_dataframe_from_csv(
+                        csv_path, 
+                        column_prefix='accel',
+                        start_offset=split_info['data_start_offset'],
+                        end_offset=split_info['data_end_offset']
+                    )
+                    
+                    # Calculate sample rate for logging
+                    sample_interval = df['ns_since_reboot'].diff().median() * 1e-9
+                    sample_rate = 1 / sample_interval
+                    logger.info(f"loaded virtual split session range data: {len(df)} rows at {sample_rate:.1f} Hz")
+                    
+                    # Filter by range
+                    filtered_df = df[(df['ns_since_reboot'] >= start_ns) & (df['ns_since_reboot'] <= end_ns)]
+                    logger.info(f"filtered to range [{start_ns}, {end_ns}]: {len(filtered_df)} rows")
+                    
+                    return filtered_df
+            
+            # Regular session - load from session directory
             csv_path = f"{project_path}/{session_name}/accelerometer_data.csv"
             logger.info(f"Loading session data from: {csv_path}")
             
@@ -616,8 +647,8 @@ class ModelService:
             device_label = device.upper()
             logger.info(f"{device_label} scoring session {scoring_id} with model {model_config['name']}")
 
-            # Step 1: Load session data
-            data = self.load_range_data(project_path, session_name, start_ns, end_ns)
+            # Step 1: Load session data (supports virtual splits)
+            data = self.load_range_data(project_path, session_name, start_ns, end_ns, session_id)
             
             # Step 2: Get model settings or use defaults
             model_settings = model_config.get('model_settings', {})
