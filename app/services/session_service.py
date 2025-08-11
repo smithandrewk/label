@@ -826,6 +826,7 @@ class SessionService:
             conn.close()
 
     def get_root_session_info(self, session_id):
+        import os
         """
         Get root session information for labeling export/import.
         For virtual splits, returns the root parent session name and path.
@@ -842,7 +843,6 @@ class SessionService:
         
         if split_info and split_info['parent_data_path']:
             # Virtual split - extract root session name from parent path
-            import os
             parent_path = split_info['parent_data_path']
             root_session_name = os.path.basename(parent_path)
             
