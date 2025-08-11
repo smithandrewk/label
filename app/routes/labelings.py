@@ -360,23 +360,34 @@ class LabelController:
             sessions_processed = 0
             bouts_imported = 0
             
-            # Group existing sessions by root session name
+            # Group existing sessions by root session name and direct session name (for legacy compatibility)
             sessions_by_root = {}
+            sessions_by_direct_name = {}
             for existing_session in project_sessions:
+                # Modern virtual split handling
                 root_info = self.session_service.get_root_session_info(existing_session['session_id'])
                 root_session_name = root_info['root_session_name'] if root_info else existing_session['session_name']
                 
                 if root_session_name not in sessions_by_root:
                     sessions_by_root[root_session_name] = []
                 sessions_by_root[root_session_name].append(existing_session)
+                
+                # Legacy direct name mapping (for backward compatibility with legacy exports)
+                direct_session_name = existing_session['session_name']
+                if direct_session_name not in sessions_by_direct_name:
+                    sessions_by_direct_name[direct_session_name] = []
+                sessions_by_direct_name[direct_session_name].append(existing_session)
             
             # Process each imported session
             for imported_session in imported_sessions:
                 imported_session_name = imported_session['session_name']
                 imported_bouts = imported_session.get('bouts', [])
                 
-                # Find matching existing sessions by root name
+                # Find matching existing sessions - try root name first (modern), then direct name (legacy)
                 matching_sessions = sessions_by_root.get(imported_session_name, [])
+                if not matching_sessions:
+                    # Fallback to direct session name matching for legacy exports
+                    matching_sessions = sessions_by_direct_name.get(imported_session_name, [])
                 
                 for existing_session in matching_sessions:
                     current_bouts = []
