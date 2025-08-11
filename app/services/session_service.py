@@ -824,3 +824,46 @@ class SessionService:
         finally:
             cursor.close()
             conn.close()
+
+    def get_root_session_info(self, session_id):
+        """
+        Get root session information for labeling export/import.
+        For virtual splits, returns the root parent session name and path.
+        For regular sessions, returns the session itself.
+        
+        Args:
+            session_id: ID of the session
+            
+        Returns:
+            dict: Contains root_session_name, root_data_path, is_virtual_split
+        """
+        # Get session split info
+        split_info = self.session_repo.get_session_split_info(session_id)
+        
+        if split_info and split_info['parent_data_path']:
+            # Virtual split - extract root session name from parent path
+            import os
+            parent_path = split_info['parent_data_path']
+            root_session_name = os.path.basename(parent_path)
+            
+            return {
+                'root_session_name': root_session_name,
+                'root_data_path': parent_path,
+                'is_virtual_split': True,
+                'data_start_offset': split_info['data_start_offset'],
+                'data_end_offset': split_info['data_end_offset']
+            }
+        else:
+            # Regular session - get session details
+            session_info = self.get_session_details(session_id)
+            if session_info:
+                session_path = os.path.join(session_info['project_path'], session_info['session_name'])
+                return {
+                    'root_session_name': session_info['session_name'],
+                    'root_data_path': session_path,
+                    'is_virtual_split': False,
+                    'data_start_offset': None,
+                    'data_end_offset': None
+                }
+        
+        return None

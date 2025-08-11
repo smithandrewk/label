@@ -259,13 +259,19 @@ class LabelController:
 
                 # Only include sessions that have bouts for this labeling
                 if len(filtered_bouts) > 0:
+                    # Get root session info for proper export naming
+                    root_info = self.session_service.get_root_session_info(session['session_id'])
+                    root_session_name = root_info['root_session_name'] if root_info else session['session_name']
+                    
                     session_obj = {
                         'session_id': session['session_id'],
-                        'session_name': session['session_name'],
+                        'session_name': root_session_name,  # Use root session name for export
+                        'original_session_name': session['session_name'],  # Keep original for reference
                         'status': session['status'],
                         'verified': bool(session['verified']),
                         'bout_count': len(filtered_bouts),
-                        'bouts': filtered_bouts
+                        'bouts': filtered_bouts,
+                        'is_virtual_split': root_info['is_virtual_split'] if root_info else False
                     }
                     session_list.append(session_obj)
             
@@ -350,38 +356,48 @@ class LabelController:
                 
                 self.project_service.update_labelings(project_id, labeling)
             
-            # Process session matching and bout importing
+            # Process session matching and bout importing with virtual split support
             sessions_processed = 0
             bouts_imported = 0
             
-            # for existing_session in project_sessions:
+            # Group existing sessions by root session name
+            sessions_by_root = {}
             for existing_session in project_sessions:
-                root_existing_session_name = existing_session['session_name'].split('.')[0] if existing_session['session_name'] else None
-
-                current_bouts = []
-                try:
-                    if isinstance(existing_session['bouts'], str):
-                        current_bouts = json.loads(existing_session['bouts'])
-                    elif isinstance(existing_session['bouts'], list):
-                        current_bouts = existing_session['bouts']
-                except (json.JSONDecodeError, TypeError):
+                root_info = self.session_service.get_root_session_info(existing_session['session_id'])
+                root_session_name = root_info['root_session_name'] if root_info else existing_session['session_name']
+                
+                if root_session_name not in sessions_by_root:
+                    sessions_by_root[root_session_name] = []
+                sessions_by_root[root_session_name].append(existing_session)
+            
+            # Process each imported session
+            for imported_session in imported_sessions:
+                imported_session_name = imported_session['session_name']
+                imported_bouts = imported_session.get('bouts', [])
+                
+                # Find matching existing sessions by root name
+                matching_sessions = sessions_by_root.get(imported_session_name, [])
+                
+                for existing_session in matching_sessions:
                     current_bouts = []
+                    try:
+                        if isinstance(existing_session['bouts'], str):
+                            current_bouts = json.loads(existing_session['bouts'])
+                        elif isinstance(existing_session['bouts'], list):
+                            current_bouts = existing_session['bouts']
+                    except (json.JSONDecodeError, TypeError):
+                        current_bouts = []
 
-                imported_sessions_with_same_root = [
-                    s for s in imported_sessions if s['session_name'].startswith(root_existing_session_name)
-                ]
-
-                for imported_session in imported_sessions_with_same_root:
-                    imported_bouts = imported_session.get('bouts', [])
-
+                    session_updated = False
                     for bout in imported_bouts:
                         bout_start_ns = bout.get('start_time')
                         bout_end_ns = bout.get('end_time')
 
                         # Check if bout start and end times are within the session bounds
+                        # Allow bout end time to equal session stop_ns (inclusive right boundary)
                         if (bout_start_ns is not None and bout_end_ns is not None and
-                            existing_session['start_ns'] <= bout_start_ns < existing_session['stop_ns'] and
-                            existing_session['start_ns'] < bout_end_ns <= existing_session['stop_ns']):
+                            existing_session['start_ns'] <= bout_start_ns <= existing_session['stop_ns'] and
+                            existing_session['start_ns'] <= bout_end_ns <= existing_session['stop_ns']):
                             
                             new_bout = {
                                 "start": bout.get('start_time'),
@@ -392,17 +408,19 @@ class LabelController:
 
                             current_bouts.append(new_bout)
                             bouts_imported += 1
-                            
-                merged_bouts_json = json.dumps(current_bouts)
-
-                # Update session with merged bouts
-                self.session_service.update_session(
-                    existing_session['session_id'],
-                    existing_session['status'],
-                    existing_session['keep'],
-                    merged_bouts_json,
-                    existing_session['verified']
-                )
+                            session_updated = True
+                    
+                    # Only update session if bouts were added
+                    if session_updated:
+                        merged_bouts_json = json.dumps(current_bouts)
+                        self.session_service.update_session(
+                            existing_session['session_id'],
+                            existing_session['status'],
+                            existing_session['keep'],
+                            merged_bouts_json,
+                            existing_session['verified']
+                        )
+                        sessions_processed += 1
 
             return jsonify({
                 'success': True,
