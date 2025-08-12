@@ -11,10 +11,47 @@ export class ProjectService {
     static async fetchProjectSessionsAndLabelings(projectId) {
         try {
             // Fetch sessions and labelings concurrently
-            const [sessions, labelings] = await Promise.all([
+            let [sessions, labelings] = await Promise.all([
                 SessionAPI.fetchSessions(projectId),
                 ProjectAPI.fetchLabelings(projectId)
             ]);
+
+            // Check if we need to discover sessions for dataset-based projects
+            if (!sessions || sessions.length === 0) {
+                console.log('No sessions found, checking if this is a dataset-based project...');
+                try {
+                    // Try to discover sessions from linked datasets
+                    const response = await fetch(`/api/projects/${projectId}/discover-sessions`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    if (response.ok) {
+                        const discoveryResult = await response.json();
+                        if (discoveryResult.success && discoveryResult.sessions_created > 0) {
+                            console.log(`Discovered ${discoveryResult.sessions_created} sessions for dataset-based project`);
+                            
+                            // Re-fetch sessions after discovery
+                            sessions = await SessionAPI.fetchSessions(projectId);
+                            
+                            // Show user feedback
+                            if (window.showNotification) {
+                                window.showNotification(
+                                    `Discovered ${discoveryResult.sessions_created} sessions from linked datasets`,
+                                    'success'
+                                );
+                            } else {
+                                console.log('Session discovery result:', discoveryResult.message);
+                            }
+                        } else if (discoveryResult.sessions_created === 0) {
+                            console.log('Session discovery result:', discoveryResult.message);
+                        }
+                    }
+                } catch (discoveryError) {
+                    console.log('Session discovery not available or failed:', discoveryError.message);
+                    // Continue with empty sessions - this is expected for legacy projects
+                }
+            }
 
             // Determine current labeling
             let currentLabelingJSON = null;

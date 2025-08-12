@@ -476,3 +476,131 @@ class ProjectService:
             'dataset_count': len(dataset_ids),
             'project_type': 'dataset_based'
         }
+    
+    def discover_and_create_dataset_sessions(self, project_id: int) -> Dict[str, Any]:
+        """
+        Discover sessions from linked datasets and create session records for a dataset-based project
+        This should be called when a dataset-based project is first accessed
+        """
+        from app.services.raw_dataset_service import RawDatasetService
+        raw_dataset_service = RawDatasetService()
+        
+        # Get project info
+        project = self.get_project_with_participant(project_id)
+        if not project:
+            raise DatabaseError('Project not found')
+        
+        # Only process dataset-based projects
+        if project.get('project_type') != 'dataset_based':
+            return {
+                'sessions_created': 0,
+                'message': 'Project is not dataset-based, no action needed'
+            }
+        
+        # Check if sessions already exist
+        existing_sessions = self.session_service.get_sessions_by_project(project_id)
+        if existing_sessions and len(existing_sessions) > 0:
+            return {
+                'sessions_created': 0,
+                'existing_sessions': len(existing_sessions),
+                'message': 'Sessions already exist for this project'
+            }
+        
+        # Get linked datasets
+        linked_datasets = raw_dataset_service.get_project_datasets(project_id)
+        
+        if not linked_datasets:
+            return {
+                'sessions_created': 0,
+                'message': 'No datasets linked to this project'
+            }
+        
+        sessions_created = 0
+        all_labels = set()
+        
+        for dataset in linked_datasets:
+            dataset_id = dataset['dataset_id']
+            dataset_path = dataset['file_path']
+            
+            # Get sessions from the raw dataset
+            raw_sessions = raw_dataset_service.discover_sessions_in_dataset(dataset_path)
+            
+            for session in raw_sessions:
+                session_name = f"{dataset['dataset_name']}_{session['name']}"
+                
+                # Load original labels if available
+                original_labels = session.get('original_labels', [])
+                
+                # Process bouts and collect unique labels
+                processed_bouts = []
+                if original_labels:
+                    for bout in original_labels:
+                        if isinstance(bout, list) and len(bout) >= 3:
+                            label = bout[2] if len(bout) > 2 else 'smoking'
+                            all_labels.add(label)
+                            processed_bouts.append(bout)
+                        elif isinstance(bout, dict):
+                            label = bout.get('label', 'smoking')
+                            all_labels.add(label)
+                            processed_bouts.append([
+                                bout.get('start', bout.get('start_time', 0)),
+                                bout.get('end', bout.get('end_time', 1)),
+                                label,
+                                bout.get('confidence', 1.0)
+                            ])
+                
+                # Calculate session time bounds (placeholder - could be enhanced)
+                if processed_bouts:
+                    start_ns = min(bout[0] for bout in processed_bouts if len(bout) > 0)
+                    stop_ns = max(bout[1] for bout in processed_bouts if len(bout) > 1)
+                else:
+                    # Default time range if no bouts
+                    start_ns = 0
+                    stop_ns = 86400000000000  # 24 hours in nanoseconds
+                
+                try:
+                    # Create session record
+                    session_result = self.session_service.session_repo.create_session(
+                        session_name=session_name,
+                        project_id=project_id,
+                        bouts_json=processed_bouts,
+                        start_ns=start_ns,
+                        stop_ns=stop_ns,
+                        parent_data_path=session['path'],  # Reference to original session directory
+                        data_start_offset=None,  # Full session, no virtual split
+                        data_end_offset=None
+                    )
+                    
+                    # Update session to include dataset references
+                    conn = self.session_service.get_db_connection()
+                    try:
+                        with conn.cursor() as cursor:
+                            cursor.execute("""
+                                UPDATE sessions 
+                                SET dataset_id = %s, raw_session_name = %s
+                                WHERE session_id = %s
+                            """, (dataset_id, session['name'], session_result['session_id']))
+                            conn.commit()
+                    finally:
+                        cursor.close()
+                        conn.close()
+                    
+                    sessions_created += 1
+                    logger.info(f"Created session {session_name} for dataset-based project {project_id}")
+                    
+                except Exception as e:
+                    logger.warning(f"Could not create session {session_name}: {e}")
+                    continue
+        
+        # Add discovered labels to project
+        if all_labels:
+            label_list = list(all_labels)
+            self.add_list_of_labeling_names_to_project(project_id, label_list)
+            logger.info(f"Added labels {label_list} to project {project_id}")
+        
+        return {
+            'sessions_created': sessions_created,
+            'datasets_processed': len(linked_datasets),
+            'labels_discovered': list(all_labels),
+            'message': f'Created {sessions_created} sessions from {len(linked_datasets)} datasets'
+        }

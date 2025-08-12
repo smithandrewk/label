@@ -697,6 +697,24 @@ class ProjectController:
             logger.error(f"Stack trace: {traceback.format_exc()}")
             return jsonify({'error': str(e)}), 500
 
+    def discover_project_sessions(self, project_id):
+        """Discover and create sessions for a dataset-based project"""
+        try:
+            result = self.project_service.discover_and_create_dataset_sessions(project_id)
+            
+            return jsonify({
+                'success': True,
+                'sessions_created': result['sessions_created'],
+                'datasets_processed': result.get('datasets_processed', 0),
+                'labels_discovered': result.get('labels_discovered', []),
+                'message': result['message']
+            })
+            
+        except Exception as e:
+            logger.error(f"Error discovering project sessions: {e}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': str(e)}), 500
+
 @projects_bp.route('/api/projects')
 def list_projects():
     return controller.list_projects()
@@ -748,6 +766,10 @@ def export_project_configuration(project_id):
 @projects_bp.route('/api/projects/import-config', methods=['POST'])
 def import_project_configuration():
     return controller.import_project_configuration()
+
+@projects_bp.route('/api/projects/<int:project_id>/discover-sessions', methods=['POST'])
+def discover_project_sessions(project_id):
+    return controller.discover_project_sessions(project_id)
 
 controller = None
 
