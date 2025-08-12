@@ -39,7 +39,7 @@ def create_app():
     session_repository = SessionRepository(get_db_connection=get_db_connection)
     participant_repository = ParticipantRepository(get_db_connection=get_db_connection)
     model_repository = ModelRepository(get_db_connection=get_db_connection)
-    raw_dataset_repository = RawDatasetRepository()
+    raw_dataset_repository = RawDatasetRepository(get_db_connection=get_db_connection)
     
     # Initialize services with repositories
     from app.services.project_service import ProjectService
@@ -61,7 +61,7 @@ def create_app():
         session_repository=session_repository,
         model_repository=model_repository  # Add this line
     )
-    raw_dataset_service = RawDatasetService()
+    raw_dataset_service = RawDatasetService(raw_dataset_repository=raw_dataset_repository)
 
     # Register blueprints
     from app.routes import main, models, projects, sessions, labelings, raw_datasets

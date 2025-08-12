@@ -10,8 +10,13 @@ from app.logging_config import get_logger
 logger = get_logger(__name__)
 
 class RawDatasetService:
-    def __init__(self):
-        self.raw_dataset_repo = RawDatasetRepository()
+    def __init__(self, raw_dataset_repository=None):
+        if raw_dataset_repository:
+            self.raw_dataset_repo = raw_dataset_repository
+        else:
+            # Fallback for backward compatibility
+            from app.services.database_service import get_db_connection
+            self.raw_dataset_repo = RawDatasetRepository(get_db_connection=get_db_connection)
     
     def upload_raw_dataset(self, source_path: str, dataset_name: str, description: str = None, 
                           raw_data_dir: str = None) -> Dict[str, Any]:

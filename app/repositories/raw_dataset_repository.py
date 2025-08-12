@@ -9,8 +9,10 @@ from app.logging_config import get_logger
 logger = get_logger(__name__)
 
 class RawDatasetRepository(BaseRepository):
-    def __init__(self):
+    def __init__(self, get_db_connection=None):
         super().__init__()
+        if get_db_connection:
+            self.get_db_connection = get_db_connection
     
     def create_dataset(self, dataset_name: str, dataset_hash: str, file_path: str, 
                       file_size_bytes: int, session_count: int, description: str = None, 
