@@ -73,7 +73,29 @@ class SessionController:
             # Check if this is a virtual split session
             split_info = self.session_service.session_repo.get_session_split_info(session_id)
             print(f"DEBUG: Split info: {split_info}")
+            
+            # Also check if session has a dataset_id for dataset-based sessions
+            print(f"DEBUG: Checking session dataset info...")
+            dataset_id = session_info.get('dataset_id')
+            raw_session_name = session_info.get('raw_session_name')
+            print(f"DEBUG: Session dataset_id: {dataset_id}, raw_session_name: {raw_session_name}")
+            
             if split_info and split_info['parent_data_path']:
+                # Check if we need to correct the path for dataset-based sessions
+                if dataset_id and split_info['parent_data_path'] and 'raw_datasets/raw_datasets' in split_info['parent_data_path']:
+                    print(f"DEBUG: Detected doubled raw_datasets path, attempting to correct...")
+                    # Get correct dataset path
+                    try:
+                        from app.services.raw_dataset_service import RawDatasetService
+                        raw_dataset_service = RawDatasetService()
+                        dataset = raw_dataset_service.raw_dataset_repo.find_by_id(dataset_id)
+                        if dataset and raw_session_name:
+                            corrected_path = os.path.join(dataset['file_path'], raw_session_name)
+                            print(f"DEBUG: Corrected path: {corrected_path}")
+                            split_info['parent_data_path'] = corrected_path
+                    except Exception as e:
+                        print(f"DEBUG: Could not correct path: {e}")
+                
                 # Virtual split session (including dataset-based sessions) - load from parent with offsets
                 csv_path = os.path.join(split_info['parent_data_path'], 'accelerometer_data.csv')
                 if not os.path.exists(csv_path):
