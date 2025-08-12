@@ -82,15 +82,19 @@ class SessionController:
             
             if split_info and split_info['parent_data_path']:
                 # Check if we need to correct the path for dataset-based sessions
-                if dataset_id and split_info['parent_data_path'] and 'raw_datasets/raw_datasets' in split_info['parent_data_path']:
-                    print(f"DEBUG: Detected doubled raw_datasets path, attempting to correct...")
-                    # Get correct dataset path
+                if dataset_id and split_info['parent_data_path'] and ('raw_datasets/raw_datasets' in split_info['parent_data_path'] or not os.path.exists(split_info['parent_data_path'])):
+                    print(f"DEBUG: Path needs correction, attempting to fix...")
+                    # Get correct dataset path using current server's DATA_DIR
                     try:
                         from app.services.raw_dataset_service import RawDatasetService
                         raw_dataset_service = RawDatasetService()
                         dataset = raw_dataset_service.raw_dataset_repo.find_by_id(dataset_id)
                         if dataset and raw_session_name:
-                            corrected_path = os.path.join(dataset['file_path'], raw_session_name)
+                            # Use current DATA_DIR instead of stored path
+                            current_data_dir = os.path.expanduser(os.getenv('DATA_DIR', '~/.delta/data'))
+                            dataset_dir_name = os.path.basename(dataset['file_path'])
+                            corrected_dataset_path = os.path.join(current_data_dir, 'raw_datasets', dataset_dir_name)
+                            corrected_path = os.path.join(corrected_dataset_path, raw_session_name)
                             print(f"DEBUG: Corrected path: {corrected_path}")
                             split_info['parent_data_path'] = corrected_path
                     except Exception as e:

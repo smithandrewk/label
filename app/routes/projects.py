@@ -688,14 +688,19 @@ class ProjectController:
                     old_dataset_id = dataset_ref.get('dataset_id')
                     new_dataset_id = available_dataset_ids[i]
                     
-                    # Get the new dataset path on this server
+                    # Get the new dataset path on this server using current DATA_DIR
                     new_dataset = raw_dataset_service.raw_dataset_repo.find_by_id(new_dataset_id)
                     if new_dataset:
+                        # Construct the path using the current server's DATA_DIR instead of stored path
+                        current_data_dir = os.path.expanduser(os.getenv('DATA_DIR', '~/.delta/data'))
+                        dataset_dir_name = os.path.basename(new_dataset['file_path'])
+                        corrected_dataset_path = os.path.join(current_data_dir, 'raw_datasets', dataset_dir_name)
+                        
                         dataset_mapping[old_dataset_id] = {
                             'new_dataset_id': new_dataset_id,
-                            'new_dataset_path': new_dataset['file_path']
+                            'new_dataset_path': corrected_dataset_path
                         }
-                        logger.info(f"Dataset mapping: {old_dataset_id} -> {new_dataset_id} at {new_dataset['file_path']}")
+                        logger.info(f"Dataset mapping: {old_dataset_id} -> {new_dataset_id} at {corrected_dataset_path} (corrected for current DATA_DIR)")
                     else:
                         logger.warning(f"Could not find new dataset for ID {new_dataset_id}")
                 
