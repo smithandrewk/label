@@ -105,6 +105,7 @@ class SessionController:
                             corrected_path = os.path.join(corrected_dataset_path, raw_session_name)
                         
                         print(f"DEBUG: Setting corrected path: {corrected_path}")
+                        print(f"DEBUG: Dataset info - ID: {dataset_id}, stored path: {dataset['file_path']}, corrected to: {corrected_dataset_path}")
                         
                         # Ensure split_info exists and set the path
                         if not split_info:
