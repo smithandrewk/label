@@ -33,16 +33,19 @@ def create_app():
     from app.repositories.session_repository import SessionRepository
     from app.repositories.participant_repository import ParticipantRepository
     from app.repositories.model_repository import ModelRepository
+    from app.repositories.raw_dataset_repository import RawDatasetRepository
     
     project_repository = ProjectRepository(get_db_connection=get_db_connection)
     session_repository = SessionRepository(get_db_connection=get_db_connection)
     participant_repository = ParticipantRepository(get_db_connection=get_db_connection)
     model_repository = ModelRepository(get_db_connection=get_db_connection)
+    raw_dataset_repository = RawDatasetRepository()
     
     # Initialize services with repositories
     from app.services.project_service import ProjectService
     from app.services.session_service import SessionService
     from app.services.model_service import ModelService
+    from app.services.raw_dataset_service import RawDatasetService
     
     session_service = SessionService(
         get_db_connection=get_db_connection, # TODO: get rid of eventually when repository layer is fully implemented
@@ -58,9 +61,10 @@ def create_app():
         session_repository=session_repository,
         model_repository=model_repository  # Add this line
     )
+    raw_dataset_service = RawDatasetService()
 
     # Register blueprints
-    from app.routes import main, models, projects, sessions, labelings
+    from app.routes import main, models, projects, sessions, labelings, raw_datasets
 
     main.init_controller(session_service=session_service, project_service=project_service)
     app.register_blueprint(main.main_bp)
@@ -76,5 +80,8 @@ def create_app():
 
     labelings.init_controller(session_service=session_service, project_service=project_service, model_service=model_service)
     app.register_blueprint(labelings.labelings_bp)
+
+    raw_datasets.init_controller(raw_dataset_service=raw_dataset_service)
+    app.register_blueprint(raw_datasets.raw_datasets_bp)
 
     return app
