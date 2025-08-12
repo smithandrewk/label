@@ -296,7 +296,7 @@ export class ProjectAPI {
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${configData.project_name}_config_${new Date().toISOString().slice(0, 10)}.json`;
+            link.download = `${configData.project.project_name}_config_${new Date().toISOString().slice(0, 10)}.json`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);

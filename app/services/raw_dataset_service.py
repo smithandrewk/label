@@ -42,8 +42,8 @@ class RawDatasetService:
         if raw_data_dir is None:
             raw_data_dir = os.path.expanduser(os.getenv('DATA_DIR', '~/.delta/data'))
         
-        raw_datasets_dir = os.path.join(raw_data_dir, 'raw_datasets')
-        os.makedirs(raw_datasets_dir, exist_ok=True)
+        # raw_datasets_dir = os.path.join(raw_data_dir, 'raw_datasets')
+        os.makedirs(raw_data_dir, exist_ok=True)
         
         # Calculate hash for deduplication
         logger.info(f"Calculating hash for dataset at {source_path}")
@@ -68,7 +68,7 @@ class RawDatasetService:
         # Create unique storage path
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         storage_name = f"{dataset_name}_{timestamp}_{dataset_hash[:8]}"
-        storage_path = os.path.join(raw_datasets_dir, storage_name)
+        storage_path = os.path.join(raw_data_dir, storage_name)
         
         try:
             # Copy dataset to storage location
