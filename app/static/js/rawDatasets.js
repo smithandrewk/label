@@ -20,11 +20,16 @@ class RawDatasetManager {
         document.getElementById('upload-dataset-btn').addEventListener('click', () => this.uploadDataset());
         document.getElementById('delete-dataset-btn').addEventListener('click', () => this.deleteCurrentDataset());
 
+        // Project creation events
+        document.getElementById('create-project-btn').addEventListener('click', () => this.createProjectFromDatasets());
+
         // Form validation
         document.getElementById('dataset-path').addEventListener('blur', () => this.validatePath());
         
         // Modal events
         document.getElementById('uploadDatasetModal').addEventListener('hidden.bs.modal', () => this.resetUploadForm());
+        document.getElementById('createProjectModal').addEventListener('shown.bs.modal', () => this.loadDatasetsForProjectCreation());
+        document.getElementById('createProjectModal').addEventListener('hidden.bs.modal', () => this.resetProjectForm());
     }
 
     async loadDatasets() {
@@ -423,6 +428,144 @@ class RawDatasetManager {
 
         // Hide preview
         document.getElementById('dataset-preview').style.display = 'none';
+    }
+
+    async loadDatasetsForProjectCreation() {
+        try {
+            const response = await fetch('/api/datasets');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const datasets = await response.json();
+            this.renderDatasetSelection(datasets);
+            
+        } catch (error) {
+            console.error('Error loading datasets for project creation:', error);
+            this.showError('Failed to load datasets: ' + error.message);
+        }
+    }
+
+    renderDatasetSelection(datasets) {
+        const container = document.getElementById('dataset-selection');
+        
+        if (datasets.length === 0) {
+            container.innerHTML = `
+                <div class="text-center text-muted py-3">
+                    <i class="fa-solid fa-database" style="font-size: 2rem; opacity: 0.3;"></i>
+                    <p class="mb-0 mt-2">No datasets available</p>
+                    <small>Upload some datasets first</small>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = datasets.map(dataset => {
+            const uploadDate = new Date(dataset.upload_timestamp).toLocaleDateString();
+            const fileSize = this.formatFileSize(dataset.file_size_bytes);
+            
+            return `
+                <div class="form-check border rounded p-3 mb-2">
+                    <input class="form-check-input" type="checkbox" value="${dataset.dataset_id}" 
+                           id="dataset-${dataset.dataset_id}" name="dataset_ids">
+                    <label class="form-check-label w-100" for="dataset-${dataset.dataset_id}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">${this.escapeHtml(dataset.dataset_name)}</h6>
+                                ${dataset.description ? `<p class="text-muted small mb-1">${this.escapeHtml(dataset.description)}</p>` : ''}
+                                <div class="d-flex gap-3 small text-muted">
+                                    <span><i class="fa-solid fa-calendar me-1"></i>${uploadDate}</span>
+                                    <span><i class="fa-solid fa-weight-scale me-1"></i>${fileSize}</span>
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <div class="badge bg-primary">${dataset.session_count} sessions</div>
+                                ${dataset.project_count > 0 ? `<div class="badge bg-success mt-1">${dataset.project_count} projects</div>` : ''}
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async createProjectFromDatasets() {
+        const form = document.getElementById('create-project-form');
+        const formData = new FormData(form);
+        
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        // Get selected datasets
+        const selectedDatasets = Array.from(
+            form.querySelectorAll('input[name="dataset_ids"]:checked')
+        ).map(input => parseInt(input.value));
+
+        if (selectedDatasets.length === 0) {
+            this.showError('Please select at least one dataset');
+            return;
+        }
+
+        const createBtn = document.getElementById('create-project-btn');
+        const originalText = createBtn.innerHTML;
+        createBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Creating...';
+        createBtn.disabled = true;
+
+        try {
+            const projectData = {
+                name: formData.get('name'),
+                participant: formData.get('participant'),
+                description: formData.get('description'),
+                dataset_ids: selectedDatasets,
+                split_configs: {} // Future enhancement
+            };
+
+            const response = await fetch('/api/projects/create-from-datasets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(projectData)
+            });
+
+            const result = await response.json();
+            
+            if (response.ok) {
+                this.showSuccess(
+                    `Project "${result.project_name}" created successfully with ${result.dataset_count} dataset(s)!`
+                );
+                
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('createProjectModal')).hide();
+                
+                // Refresh datasets list to show updated project counts
+                this.loadDatasets();
+            } else {
+                this.showError(result.error || 'Failed to create project');
+            }
+            
+        } catch (error) {
+            console.error('Error creating project:', error);
+            this.showError('Failed to create project: ' + error.message);
+        } finally {
+            createBtn.innerHTML = originalText;
+            createBtn.disabled = false;
+        }
+    }
+
+    resetProjectForm() {
+        const form = document.getElementById('create-project-form');
+        form.reset();
+        form.classList.remove('was-validated');
+        
+        // Reset validation states
+        const inputs = form.querySelectorAll('.form-control');
+        inputs.forEach(input => {
+            input.classList.remove('is-valid', 'is-invalid');
+        });
+
+        // Clear dataset selection
+        document.getElementById('dataset-selection').innerHTML = '';
     }
 
     formatFileSize(bytes) {

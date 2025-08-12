@@ -1,4 +1,5 @@
 from math import log
+from typing import List, Dict, Optional, Any
 from app.exceptions import DatabaseError
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.participant_repository import ParticipantRepository
@@ -410,3 +411,68 @@ class ProjectService:
             logger.debug(f"  Project '{project_name}': {len(files)} files")
             
         return project_groups
+    
+    def create_dataset_based_project(self, project_name: str, participant_code: str, dataset_ids: List[int], 
+                                   split_configs: Dict[int, Any] = None, description: str = None) -> Dict[str, Any]:
+        """
+        Create a new project that references raw datasets instead of owning files
+        
+        Args:
+            project_name: Name of the project
+            participant_code: Code for the participant
+            dataset_ids: List of raw dataset IDs to include in project
+            split_configs: Virtual splitting configurations per dataset
+            description: Optional project description
+            
+        Returns:
+            dict: Project creation result with project_id and participant_id
+        """
+        from app.services.raw_dataset_service import RawDatasetService
+        raw_dataset_service = RawDatasetService()
+        
+        # Get or create participant
+        participant = self.get_participant_by_code(participant_code)
+        if participant:
+            participant_id = participant['participant_id']
+        else:
+            created_participant = self.create_participant(participant_code)
+            participant_id = created_participant['participant_id']
+        
+        # Validate that all datasets exist
+        for dataset_id in dataset_ids:
+            dataset = raw_dataset_service.raw_dataset_repo.find_by_id(dataset_id)
+            if not dataset:
+                raise DatabaseError(f'Raw dataset with ID {dataset_id} not found')
+        
+        # Create project record with dataset-based type
+        created_project = self.project_repo.create(
+            project_name=project_name,
+            participant_id=participant_id,
+            path=None  # No path for dataset-based projects
+        )
+        
+        project_id = created_project['project_id']
+        
+        # Update project to be dataset-based type with analysis config
+        analysis_config = {
+            'description': description,
+            'split_configs': split_configs or {},
+            'created_with': 'dataset_based_workflow',
+            'created_at': datetime.now().isoformat()
+        }
+        
+        self.project_repo.update_project_type(project_id, 'dataset_based', analysis_config)
+        
+        # Link project to datasets
+        for dataset_id in dataset_ids:
+            raw_dataset_service.link_project_to_dataset(project_id, dataset_id)
+        
+        logger.info(f"Created dataset-based project: {project_name} (ID: {project_id}) with {len(dataset_ids)} datasets")
+        
+        return {
+            'project_id': project_id,
+            'participant_id': participant_id,
+            'project_name': project_name,
+            'dataset_count': len(dataset_ids),
+            'project_type': 'dataset_based'
+        }

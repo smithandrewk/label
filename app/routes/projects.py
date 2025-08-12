@@ -456,6 +456,52 @@ class ProjectController:
             logger.error(f"Stack trace: {traceback.format_exc()}")
             return jsonify({'error': f'Bulk upload failed: {str(e)}'}), 500
 
+    def create_dataset_based_project(self):
+        """Create a new project that references raw datasets instead of copying files"""
+        try:
+            data = request.get_json()
+            project_name = data.get('name')
+            participant_code = data.get('participant')
+            dataset_ids = data.get('dataset_ids', [])
+            split_configs = data.get('split_configs', {})
+            description = data.get('description', '')
+            
+            if not all([project_name, participant_code]):
+                return jsonify({'error': 'Missing required fields: name or participant'}), 400
+            
+            if not dataset_ids:
+                return jsonify({'error': 'At least one dataset must be selected'}), 400
+            
+            # Validate dataset IDs are integers
+            try:
+                dataset_ids = [int(id) for id in dataset_ids]
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Invalid dataset IDs provided'}), 400
+            
+            result = self.project_service.create_dataset_based_project(
+                project_name=project_name,
+                participant_code=participant_code,
+                dataset_ids=dataset_ids,
+                split_configs=split_configs,
+                description=description
+            )
+            
+            logger.info(f"Dataset-based project creation result: {result}")
+            
+            return jsonify({
+                'message': 'Dataset-based project created successfully',
+                'project_id': result['project_id'],
+                'participant_id': result['participant_id'],
+                'project_name': result['project_name'],
+                'dataset_count': result['dataset_count'],
+                'project_type': result['project_type']
+            })
+            
+        except Exception as e:
+            logger.error(f"Error in create_dataset_based_project: {str(e)}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': f'Dataset-based project creation failed: {str(e)}'}), 500
+
 @projects_bp.route('/api/projects')
 def list_projects():
     return controller.list_projects()
@@ -495,6 +541,10 @@ def update_project_participant(project_id):
 @projects_bp.route('/api/projects/bulk-upload', methods=['POST'])
 def bulk_upload_projects():
     return controller.bulk_upload_projects()
+
+@projects_bp.route('/api/projects/create-from-datasets', methods=['POST'])
+def create_dataset_based_project():
+    return controller.create_dataset_based_project()
 
 controller = None
 

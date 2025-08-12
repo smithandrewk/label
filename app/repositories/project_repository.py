@@ -359,3 +359,21 @@ class ProjectRepository(BaseRepository):
             raise DatabaseError('Project not found')
         
         return True
+    
+    def update_project_type(self, project_id: int, project_type: str, analysis_config: dict = None):
+        """Update project type and analysis configuration"""
+        import json
+        
+        query = """
+            UPDATE projects 
+            SET project_type = %s, analysis_config = %s 
+            WHERE project_id = %s
+        """
+        
+        analysis_config_json = json.dumps(analysis_config) if analysis_config else None
+        rows_affected = self._execute_query(query, (project_type, analysis_config_json, project_id), commit=True)
+        
+        if rows_affected == 0:
+            raise DatabaseError('Project not found')
+        
+        return True
