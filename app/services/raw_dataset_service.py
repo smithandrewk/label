@@ -273,3 +273,134 @@ class RawDatasetService:
             'session_count': len(session_dirs),
             'sessions': session_dirs
         }
+    
+    def scan_and_register_existing_datasets(self, raw_data_dir: str = None) -> Dict[str, Any]:
+        """
+        Scan the raw_datasets directory for unregistered datasets and register them
+        
+        Args:
+            raw_data_dir: Base directory for raw data (defaults to DATA_DIR/raw_datasets)
+            
+        Returns:
+            dict: Results of the scan and registration process
+        """
+        if raw_data_dir is None:
+            raw_data_dir = os.path.expanduser(os.getenv('DATA_DIR', '~/.delta/data'))
+        
+        raw_datasets_dir = os.path.join(raw_data_dir, 'raw_datasets')
+        logger.info(f"Scan called with raw_data_dir={raw_data_dir}, computed raw_datasets_dir={raw_datasets_dir}")
+        
+        if not os.path.exists(raw_datasets_dir):
+            return {
+                'datasets_found': 0,
+                'datasets_registered': 0,
+                'datasets_skipped': 0,
+                'registered_datasets': [],
+                'errors': [],
+                'message': f'Raw datasets directory does not exist: {raw_datasets_dir}'
+            }
+        
+        datasets_found = 0
+        datasets_registered = 0
+        datasets_skipped = 0
+        errors = []
+        registered_datasets = []
+        
+        logger.info(f"Scanning for unregistered datasets in: {raw_datasets_dir}")
+        
+        # Get all existing dataset hashes to avoid duplicates
+        existing_datasets = self.raw_dataset_repo.list_all()
+        existing_hashes = {d['dataset_hash'] for d in existing_datasets}
+        logger.info(f"Found {len(existing_datasets)} existing datasets with hashes: {list(existing_hashes)}")
+        
+        # List directory contents for debugging
+        dir_contents = os.listdir(raw_datasets_dir)
+        logger.info(f"Directory contents: {dir_contents}")
+        
+        # Scan directory for potential dataset directories
+        for item in os.listdir(raw_datasets_dir):
+            item_path = os.path.join(raw_datasets_dir, item)
+            
+            # Skip files, only process directories
+            if not os.path.isdir(item_path):
+                logger.debug(f"Skipping non-directory: {item}")
+                continue
+                
+            datasets_found += 1
+            logger.info(f"Processing directory {datasets_found}: {item}")
+            
+            try:
+                # Validate that this looks like a dataset
+                validation = self.validate_dataset_path(item_path)
+                if not validation['valid']:
+                    errors.append(f"Skipping {item}: {validation['error']}")
+                    continue
+                
+                # Calculate hash to check if already registered
+                dataset_hash = self.raw_dataset_repo.calculate_directory_hash(item_path)
+                
+                if dataset_hash in existing_hashes:
+                    logger.debug(f"Dataset {item} already registered (hash: {dataset_hash[:8]})")
+                    datasets_skipped += 1
+                    continue
+                
+                # Extract dataset name from directory name (remove timestamp and hash suffix)
+                # Expected format: datasetname_YYYYMMDD_HHMMSS_hashprefix
+                parts = item.split('_')
+                if len(parts) >= 4:
+                    # Remove last 3 parts (date, time, hash)
+                    dataset_name = '_'.join(parts[:-3])
+                else:
+                    # Fallback: use directory name as dataset name
+                    dataset_name = item
+                
+                # Calculate metadata
+                file_size_bytes = self.raw_dataset_repo.calculate_directory_size(item_path)
+                session_count = self.raw_dataset_repo.count_sessions_in_directory(item_path)
+                
+                # Register the dataset
+                dataset_result = self.raw_dataset_repo.create_dataset(
+                    dataset_name=dataset_name,
+                    dataset_hash=dataset_hash,
+                    file_path=item_path,
+                    file_size_bytes=file_size_bytes,
+                    session_count=session_count,
+                    description=f"Auto-registered from existing directory: {item}",
+                    metadata={
+                        'auto_registered': True,
+                        'scan_timestamp': datetime.now().isoformat(),
+                        'original_directory': item
+                    }
+                )
+                
+                # Create raw session records
+                self._create_raw_session_records(dataset_result['dataset_id'], item_path)
+                
+                datasets_registered += 1
+                registered_datasets.append({
+                    'dataset_id': dataset_result['dataset_id'],
+                    'dataset_name': dataset_name,
+                    'path': item_path,
+                    'hash': dataset_hash,
+                    'sessions': session_count,
+                    'size_bytes': file_size_bytes
+                })
+                
+                logger.info(f"Registered dataset: {dataset_name} (ID: {dataset_result['dataset_id']}, sessions: {session_count})")
+                
+            except Exception as e:
+                error_msg = f"Failed to register {item}: {str(e)}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+        
+        result = {
+            'datasets_found': datasets_found,
+            'datasets_registered': datasets_registered, 
+            'datasets_skipped': datasets_skipped,
+            'registered_datasets': registered_datasets,
+            'errors': errors,
+            'message': f'Scan complete: {datasets_registered} registered, {datasets_skipped} skipped, {len(errors)} errors'
+        }
+        
+        logger.info(f"Dataset scan complete: {result['message']}")
+        return result

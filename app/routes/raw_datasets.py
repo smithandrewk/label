@@ -156,6 +156,29 @@ class RawDatasetController:
         except Exception as e:
             logger.error(f"Error previewing dataset: {e}")
             return jsonify({'error': str(e)}), 500
+    
+    def scan_and_register_datasets(self):
+        """Scan the raw datasets directory for unregistered datasets and register them"""
+        try:
+            # Optionally allow specifying a custom directory
+            custom_dir = request.json.get('raw_data_dir') if request.is_json else None
+            
+            logger.info(f"Starting dataset scan and register process")
+            result = self.raw_dataset_service.scan_and_register_existing_datasets(custom_dir)
+            
+            return jsonify({
+                'message': result['message'],
+                'datasets_found': result['datasets_found'],
+                'datasets_registered': result['datasets_registered'],
+                'datasets_skipped': result['datasets_skipped'],
+                'registered_datasets': result['registered_datasets'],
+                'errors': result['errors']
+            })
+            
+        except Exception as e:
+            logger.error(f"Error in scan_and_register_datasets: {str(e)}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': f'Scan and register failed: {str(e)}'}), 500
 
 # Route definitions
 @raw_datasets_bp.route('/api/datasets/upload', methods=['POST'])
@@ -181,6 +204,10 @@ def validate_dataset_path():
 @raw_datasets_bp.route('/api/datasets/preview', methods=['POST'])
 def preview_dataset():
     return controller.preview_dataset()
+
+@raw_datasets_bp.route('/api/datasets/scan', methods=['POST'])
+def scan_and_register_datasets():
+    return controller.scan_and_register_datasets()
 
 controller = None
 

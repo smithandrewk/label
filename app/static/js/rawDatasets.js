@@ -15,6 +15,9 @@ class RawDatasetManager {
     }
 
     bindEvents() {
+        // Scan datasets button
+        document.getElementById('scan-datasets-btn').addEventListener('click', () => this.scanAndRegisterDatasets());
+
         // Upload form events
         document.getElementById('preview-dataset-btn').addEventListener('click', () => this.previewDataset());
         document.getElementById('upload-dataset-btn').addEventListener('click', () => this.uploadDataset());
@@ -595,6 +598,50 @@ class RawDatasetManager {
         // Simple alert for now - could be enhanced with toast notifications
         alert(`Error: ${message}`);
         console.error('RawDatasetManager Error:', message);
+    }
+
+    async scanAndRegisterDatasets() {
+        const scanBtn = document.getElementById('scan-datasets-btn');
+        const originalText = scanBtn.innerHTML;
+        scanBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Scanning...';
+        scanBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/datasets/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+
+            const result = await response.json();
+            
+            if (response.ok) {
+                let message = `Scan complete!\n\n`;
+                message += `Datasets found: ${result.datasets_found}\n`;
+                message += `Datasets registered: ${result.datasets_registered}\n`;
+                message += `Datasets skipped: ${result.datasets_skipped}\n`;
+                
+                if (result.errors && result.errors.length > 0) {
+                    message += `\nErrors:\n${result.errors.join('\n')}`;
+                }
+                
+                if (result.datasets_registered > 0) {
+                    this.showSuccess(message);
+                    this.loadDatasets(); // Refresh the list to show new datasets
+                } else {
+                    alert(message);
+                }
+            } else {
+                this.showError(result.error || 'Scan and register failed');
+            }
+            
+        } catch (error) {
+            console.error('Error scanning and registering datasets:', error);
+            this.showError('Scan and register failed: ' + error.message);
+        } finally {
+            scanBtn.innerHTML = originalText;
+            scanBtn.disabled = false;
+        }
     }
 }
 
