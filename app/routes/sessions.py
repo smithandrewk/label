@@ -89,12 +89,22 @@ class SessionController:
                         from app.services.raw_dataset_service import RawDatasetService
                         raw_dataset_service = RawDatasetService()
                         dataset = raw_dataset_service.raw_dataset_repo.find_by_id(dataset_id)
-                        if dataset and raw_session_name:
+                        if dataset:
                             # Use current DATA_DIR instead of stored path
                             current_data_dir = os.path.expanduser(os.getenv('DATA_DIR', '~/.delta/data'))
                             dataset_dir_name = os.path.basename(dataset['file_path'])
                             corrected_dataset_path = os.path.join(current_data_dir, 'raw_datasets', dataset_dir_name)
-                            corrected_path = os.path.join(corrected_dataset_path, raw_session_name)
+                            
+                            # If we don't have raw_session_name, try to infer it from session name
+                            if not raw_session_name:
+                                session_name = session_info['session_name']
+                                # Remove split suffix (.1, .2, etc) to get original session name
+                                inferred_session_name = session_name.split('.')[0] if '.' in session_name else session_name
+                                print(f"DEBUG: No raw_session_name, inferring from session_name: {inferred_session_name}")
+                                corrected_path = os.path.join(corrected_dataset_path, inferred_session_name)
+                            else:
+                                corrected_path = os.path.join(corrected_dataset_path, raw_session_name)
+                            
                             print(f"DEBUG: Corrected path: {corrected_path}")
                             split_info['parent_data_path'] = corrected_path
                     except Exception as e:

@@ -748,7 +748,9 @@ class ProjectController:
                             potential_session_path = os.path.join(new_dataset_path, base_session_name)
                             if os.path.exists(potential_session_path):
                                 new_parent_data_path = potential_session_path
-                                logger.info(f"Legacy session mapped to dataset {new_dataset_id}: {new_parent_data_path}")
+                                # Set the raw_session_name so the session knows which dataset directory to use
+                                session_data['raw_session_name'] = base_session_name
+                                logger.info(f"Legacy session mapped to dataset {new_dataset_id}: {new_parent_data_path}, raw_session_name: {base_session_name}")
                             else:
                                 logger.warning(f"Could not find session directory for legacy session {session_name} in dataset")
                         else:
