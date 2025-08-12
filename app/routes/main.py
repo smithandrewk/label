@@ -135,6 +135,10 @@ def serve_index():
 def serve_settings():
     return render_template('settings.html', active_view='settings')
 
+@main_bp.route('/raw-datasets')
+def serve_raw_datasets():
+    return render_template('raw_datasets.html', active_view='raw_datasets')
+
 # Export labels for all projects and sessions
 @main_bp.route('/api/export/labels')
 def export_labels():
