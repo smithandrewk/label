@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify
 import os
 import uuid
 import shutil
+import json
+from datetime import datetime
 from app.exceptions import DatabaseError
 from app.logging_config import get_logger
 import traceback
@@ -502,6 +504,199 @@ class ProjectController:
             logger.error(f"Stack trace: {traceback.format_exc()}")
             return jsonify({'error': f'Dataset-based project creation failed: {str(e)}'}), 500
 
+    def export_project_configuration(self, project_id):
+        """Export project configuration including dataset references and analysis settings"""
+        try:
+            # Get project details including type and analysis config
+            project = self.project_service.get_project_with_participant(project_id)
+            if not project:
+                return jsonify({'error': 'Project not found'}), 404
+            
+            # Get linked datasets if this is a dataset-based project
+            from app.services.raw_dataset_service import RawDatasetService
+            raw_dataset_service = RawDatasetService()
+            linked_datasets = raw_dataset_service.get_project_datasets(project_id)
+            
+            # Get project labelings
+            labelings_data = []
+            try:
+                labelings_result = self.project_service.get_labelings(project_id)
+                if labelings_result and len(labelings_result) > 0:
+                    labelings_data = json.loads(labelings_result[0]['labelings']) if labelings_result[0]['labelings'] else []
+            except Exception as e:
+                logger.warning(f"Could not load labelings for project {project_id}: {e}")
+                labelings_data = []
+            
+            # Get sessions with their bouts for this project
+            try:
+                all_sessions = self.session_service.get_all_sessions_with_details()
+                project_sessions = [s for s in all_sessions if s['project_id'] == project_id]
+            except DatabaseError as e:
+                return jsonify({'error': str(e)}), 500
+            
+            # Process sessions and their bouts
+            processed_sessions = []
+            for session in project_sessions:
+                session_data = {
+                    'session_id': session['session_id'],
+                    'session_name': session['session_name'],
+                    'status': session['status'],
+                    'verified': bool(session['verified']),
+                    'start_ns': session.get('start_ns'),
+                    'stop_ns': session.get('stop_ns'),
+                    'dataset_id': session.get('dataset_id'),
+                    'raw_session_name': session.get('raw_session_name'),
+                    'virtual_split_info': {
+                        'parent_data_path': session.get('parent_session_data_path'),
+                        'data_start_offset': session.get('data_start_offset'),
+                        'data_end_offset': session.get('data_end_offset'),
+                        'is_virtual_split': bool(session.get('parent_session_data_path'))
+                    }
+                }
+                
+                # Parse bouts data
+                bouts = []
+                if session['bouts']:
+                    try:
+                        bouts_data = session['bouts']
+                        if isinstance(bouts_data, str):
+                            bouts = json.loads(bouts_data)
+                        elif isinstance(bouts_data, (list, dict)):
+                            bouts = bouts_data
+                    except (json.JSONDecodeError, TypeError) as e:
+                        logger.warning(f"Error parsing bouts for session {session['session_id']}: {e}")
+                        bouts = []
+                
+                session_data['bouts'] = bouts
+                processed_sessions.append(session_data)
+            
+            # Create export data structure
+            export_data = {
+                'export_version': '2.0',  # Version 2.0 supports dataset-based projects
+                'export_timestamp': datetime.now().isoformat(),
+                'export_type': 'project_configuration',
+                'project': {
+                    'project_id': project['project_id'],
+                    'project_name': project['project_name'],
+                    'project_type': project.get('project_type', 'legacy'),
+                    'analysis_config': json.loads(project.get('analysis_config', '{}')) if project.get('analysis_config') else {},
+                    'participant': {
+                        'participant_id': project['participant_id'],
+                        'participant_code': project['participant_code']
+                    }
+                },
+                'datasets': [{
+                    'dataset_id': ds['dataset_id'],
+                    'dataset_name': ds['dataset_name'],
+                    'dataset_hash': ds['dataset_hash'],
+                    'session_count': ds['session_count'],
+                    'description': ds.get('description'),
+                    'metadata': ds.get('metadata', {})
+                } for ds in linked_datasets],
+                'labelings': labelings_data,
+                'sessions': processed_sessions,
+                'session_count': len(processed_sessions),
+                'total_bouts': sum(len(s.get('bouts', [])) for s in processed_sessions)
+            }
+            
+            return jsonify(export_data)
+            
+        except Exception as e:
+            logger.error(f"Error exporting project configuration: {e}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': str(e)}), 500
+
+    def import_project_configuration(self):
+        """Import a project configuration, creating project and linking to datasets"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+            
+            # Validate export format
+            if data.get('export_type') != 'project_configuration':
+                return jsonify({'error': 'Invalid export type. Expected project_configuration.'}), 400
+            
+            export_version = data.get('export_version', '1.0')
+            if export_version not in ['1.0', '2.0']:
+                return jsonify({'error': f'Unsupported export version: {export_version}'}), 400
+            
+            project_data = data.get('project', {})
+            datasets_data = data.get('datasets', [])
+            labelings_data = data.get('labelings', [])
+            
+            if not project_data.get('project_name'):
+                return jsonify({'error': 'Missing project name in import data'}), 400
+            
+            # Check if this is a dataset-based project import
+            if export_version == '2.0' and datasets_data:
+                # For dataset-based projects, validate that referenced datasets exist
+                from app.services.raw_dataset_service import RawDatasetService
+                raw_dataset_service = RawDatasetService()
+                
+                missing_datasets = []
+                available_dataset_ids = []
+                
+                for dataset_ref in datasets_data:
+                    dataset_hash = dataset_ref.get('dataset_hash')
+                    if dataset_hash:
+                        existing_dataset = raw_dataset_service.raw_dataset_repo.find_by_hash(dataset_hash)
+                        if existing_dataset:
+                            available_dataset_ids.append(existing_dataset['dataset_id'])
+                        else:
+                            missing_datasets.append({
+                                'name': dataset_ref.get('dataset_name'),
+                                'hash': dataset_hash
+                            })
+                
+                if missing_datasets:
+                    return jsonify({
+                        'error': 'Referenced datasets not found',
+                        'missing_datasets': missing_datasets,
+                        'suggestion': 'Upload the missing datasets first, then retry the import'
+                    }), 400
+                
+                # Create dataset-based project
+                new_project_name = f"{project_data['project_name']}_imported_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                
+                result = self.project_service.create_dataset_based_project(
+                    project_name=new_project_name,
+                    participant_code=project_data.get('participant', {}).get('participant_code', 'IMPORTED'),
+                    dataset_ids=available_dataset_ids,
+                    split_configs=project_data.get('analysis_config', {}).get('split_configs', {}),
+                    description=f"Imported from {project_data['project_name']} on {datetime.now().isoformat()}"
+                )
+                
+                project_id = result['project_id']
+                
+                # Import labelings if present
+                if labelings_data:
+                    for labeling in labelings_data:
+                        try:
+                            self.project_service.update_labelings(project_id, labeling)
+                        except Exception as e:
+                            logger.warning(f"Could not import labeling {labeling.get('name')}: {e}")
+                
+                return jsonify({
+                    'message': 'Project configuration imported successfully',
+                    'project_id': project_id,
+                    'project_name': new_project_name,
+                    'imported_datasets': len(available_dataset_ids),
+                    'imported_labelings': len(labelings_data),
+                    'note': 'Virtual sessions will be recreated when you start analysis'
+                })
+                
+            else:
+                return jsonify({
+                    'error': 'Legacy project import not supported in this version',
+                    'suggestion': 'Use the original project upload workflow for legacy projects'
+                }), 400
+                
+        except Exception as e:
+            logger.error(f"Error importing project configuration: {e}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': str(e)}), 500
+
 @projects_bp.route('/api/projects')
 def list_projects():
     return controller.list_projects()
@@ -545,6 +740,14 @@ def bulk_upload_projects():
 @projects_bp.route('/api/projects/create-from-datasets', methods=['POST'])
 def create_dataset_based_project():
     return controller.create_dataset_based_project()
+
+@projects_bp.route('/api/projects/<int:project_id>/export-config')
+def export_project_configuration(project_id):
+    return controller.export_project_configuration(project_id)
+
+@projects_bp.route('/api/projects/import-config', methods=['POST'])
+def import_project_configuration():
+    return controller.import_project_configuration()
 
 controller = None
 
