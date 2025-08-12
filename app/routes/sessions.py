@@ -132,16 +132,23 @@ class SessionController:
                     )
                 else:
                     # Fallback for old virtual splits without offsets - filter by time range
+                    print(f"DEBUG: Loading full CSV and filtering by time range")
                     df = pd.read_csv(csv_path)
+                    print(f"DEBUG: Loaded CSV with {len(df)} rows")
                     if 'x' in df.columns:
                         df = df.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
                     
                     # Filter by session time range
-                    print(f"DEBUG: session_info keys: {session_info.keys()}")
-                    print(f"DEBUG: session_info: {session_info}")
                     start_ns = session_info['start_ns']
                     stop_ns = session_info['stop_ns']
-                    df = df[(df['ns_since_reboot'] >= start_ns) & (df['ns_since_reboot'] <= stop_ns)]
+                    print(f"DEBUG: Filtering by time range: {start_ns} to {stop_ns}")
+                    if 'ns_since_reboot' in df.columns:
+                        print(f"DEBUG: Data time range: {df['ns_since_reboot'].min()} to {df['ns_since_reboot'].max()}")
+                        df = df[(df['ns_since_reboot'] >= start_ns) & (df['ns_since_reboot'] <= stop_ns)]
+                        print(f"DEBUG: After filtering: {len(df)} rows")
+                    else:
+                        print(f"DEBUG: No 'ns_since_reboot' column found. Columns: {list(df.columns)}")
+                        return jsonify({'error': 'Dataset missing ns_since_reboot column'}), 500
                 
                 # Apply downsampling for visualization
                 df = df.iloc[::50]
