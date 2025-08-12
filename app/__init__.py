@@ -55,7 +55,8 @@ def create_app():
     project_service = ProjectService(
         project_repository=project_repository,
         session_repository=session_repository,
-        participant_repository=participant_repository
+        participant_repository=participant_repository,
+        session_service=session_service
     )
     model_service = ModelService(
         session_repository=session_repository,

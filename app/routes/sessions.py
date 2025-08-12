@@ -68,10 +68,13 @@ class SessionController:
             project_path = session_info['project_path']
             session_name = session_info['session_name']
             
+            print(f"DEBUG: Session {session_id} - project_path: {project_path}, session_name: {session_name}")
+            
             # Check if this is a virtual split session
             split_info = self.session_service.session_repo.get_session_split_info(session_id)
+            print(f"DEBUG: Split info: {split_info}")
             if split_info and split_info['parent_data_path']:
-                # Virtual split session - load from parent with offsets
+                # Virtual split session (including dataset-based sessions) - load from parent with offsets
                 csv_path = os.path.join(split_info['parent_data_path'], 'accelerometer_data.csv')
                 if not os.path.exists(csv_path):
                     return jsonify({'error': f'Parent CSV file not found at {csv_path}'}), 404
@@ -94,14 +97,16 @@ class SessionController:
                         df = df.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
                     
                     # Filter by session time range
+                    print(f"DEBUG: session_info keys: {session_info.keys()}")
+                    print(f"DEBUG: session_info: {session_info}")
                     start_ns = session_info['start_ns']
                     stop_ns = session_info['stop_ns']
                     df = df[(df['ns_since_reboot'] >= start_ns) & (df['ns_since_reboot'] <= stop_ns)]
                 
                 # Apply downsampling for visualization
                 df = df.iloc[::50]
-            else:
-                # Regular session - load from session directory
+            elif project_path:
+                # Regular session with project path - load from session directory
                 csv_path = os.path.join(project_path, session_name, 'accelerometer_data.csv')
                 if not os.path.exists(csv_path):
                     return jsonify({'error': f'CSV file not found at {csv_path}'}), 404
@@ -112,6 +117,9 @@ class SessionController:
                 # If the CSV has 'x', 'y', 'z' columns, rename them to 'accel_x', 'accel_y', 'accel_z'
                 if 'x' in df.columns:
                     df = df.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
+            else:
+                # Dataset-based session without virtual split info - this shouldn't happen
+                return jsonify({'error': 'Dataset-based session missing virtual split information'}), 500
 
             bouts = session_info['bouts']
             expected_columns = ['ns_since_reboot', 'accel_x', 'accel_y', 'accel_z']

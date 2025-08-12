@@ -272,6 +272,71 @@ export class ProjectAPI {
         }
     }
 
+    /**
+     * Export project configuration as downloadable JSON
+     * @param {string|number} projectId - The project ID to export
+     * @returns {Promise<void>} - Triggers download of JSON file
+     */
+    static async exportProjectConfiguration(projectId) {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/export-config`);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to export project configuration');
+            }
+            
+            const configData = await response.json();
+            
+            // Create a blob and download link
+            const blob = new Blob([JSON.stringify(configData, null, 2)], {
+                type: 'application/json'
+            });
+            
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${configData.project_name}_config_${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+            
+            return configData;
+        } catch (error) {
+            console.error('Error exporting project configuration:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Import project configuration from JSON data
+     * @param {Object} configData - The project configuration data to import
+     * @returns {Promise<Object>} The import result
+     */
+    static async importProjectConfiguration(configData) {
+        try {
+            const response = await fetch('/api/projects/import-config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(configData)
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to import project configuration');
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('Error importing project configuration:', error);
+            throw error;
+        }
+    }
+
 }
 
 export default ProjectAPI;

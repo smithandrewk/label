@@ -43,6 +43,7 @@ class ProjectRepository(BaseRepository):
         """Get detailed project information including participant data"""
         query = """
             SELECT p.project_id, p.project_name, p.path, p.participant_id,
+                p.project_type, p.analysis_config,
                 pt.participant_code
             FROM projects p
             JOIN participants pt ON p.participant_id = pt.participant_id

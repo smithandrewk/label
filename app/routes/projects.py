@@ -490,13 +490,26 @@ class ProjectController:
             
             logger.info(f"Dataset-based project creation result: {result}")
             
+            # Automatically create sessions from the linked datasets with time gap splitting and bout detection
+            try:
+                logger.info(f"Attempting to auto-create sessions for dataset-based project {result['project_id']}")
+                session_result = self.project_service.discover_and_create_dataset_sessions(result['project_id'])
+                logger.info(f"Session result: {session_result}")
+                logger.info(f"Auto-created {session_result['sessions_created']} sessions for dataset-based project {result['project_id']}")
+            except Exception as e:
+                import traceback
+                logger.error(f"Failed to auto-create sessions for dataset-based project {result['project_id']}: {e}")
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                # Don't fail the entire project creation if session discovery fails
+            
             return jsonify({
                 'message': 'Dataset-based project created successfully',
                 'project_id': result['project_id'],
                 'participant_id': result['participant_id'],
                 'project_name': result['project_name'],
                 'dataset_count': result['dataset_count'],
-                'project_type': result['project_type']
+                'project_type': result['project_type'],
+                'sessions_created': session_result.get('sessions_created', 0) if 'session_result' in locals() else 0
             })
             
         except Exception as e:

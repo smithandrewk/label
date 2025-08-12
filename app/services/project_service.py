@@ -14,10 +14,11 @@ import random
 logger = get_logger(__name__)
 
 class ProjectService:
-    def __init__(self, project_repository=None, session_repository=None, participant_repository=None):
+    def __init__(self, project_repository=None, session_repository=None, participant_repository=None, session_service=None):
         self.project_repo: ProjectRepository = project_repository
         self.participant_repo: ParticipantRepository = participant_repository
         self.session_repo: SessionRepository = session_repository
+        self.session_service = session_service
     
     def list_projects(self):
         """Get all projects"""
@@ -480,8 +481,11 @@ class ProjectService:
     def discover_and_create_dataset_sessions(self, project_id: int) -> Dict[str, Any]:
         """
         Discover sessions from linked datasets and create session records for a dataset-based project
-        This should be called when a dataset-based project is first accessed
+        Uses the same time gap splitting logic as the original upload functionality
         """
+        logger.info(f"Starting discover_and_create_dataset_sessions for project_id: {project_id}")
+        logger.info(f"Session service available: {self.session_service is not None}")
+        
         from app.services.raw_dataset_service import RawDatasetService
         raw_dataset_service = RawDatasetService()
         
@@ -489,6 +493,8 @@ class ProjectService:
         project = self.get_project_with_participant(project_id)
         if not project:
             raise DatabaseError('Project not found')
+        
+        logger.info(f"Project found: {project['project_name']}, type: {project.get('project_type')}")
         
         # Only process dataset-based projects
         if project.get('project_type') != 'dataset_based':
@@ -498,13 +504,14 @@ class ProjectService:
             }
         
         # Check if sessions already exist
-        existing_sessions = self.session_service.get_sessions_by_project(project_id)
-        if existing_sessions and len(existing_sessions) > 0:
-            return {
-                'sessions_created': 0,
-                'existing_sessions': len(existing_sessions),
-                'message': 'Sessions already exist for this project'
-            }
+        if self.session_service:
+            existing_sessions = self.session_service.get_sessions(project_id=project_id)
+            if existing_sessions and len(existing_sessions) > 0:
+                return {
+                    'sessions_created': 0,
+                    'existing_sessions': len(existing_sessions),
+                    'message': 'Sessions already exist for this project'
+                }
         
         # Get linked datasets
         linked_datasets = raw_dataset_service.get_project_datasets(project_id)
@@ -524,72 +531,80 @@ class ProjectService:
             
             # Get sessions from the raw dataset
             raw_sessions = raw_dataset_service.discover_sessions_in_dataset(dataset_path)
+            logger.info(f"Discovered {len(raw_sessions)} raw sessions in dataset {dataset['dataset_name']}: {[s['name'] for s in raw_sessions]}")
             
             for session in raw_sessions:
                 session_name = f"{dataset['dataset_name']}_{session['name']}"
                 
-                # Load original labels if available
+                # Load original labels if available and convert to compatible format
                 original_labels = session.get('original_labels', [])
-                
-                # Process bouts and collect unique labels
                 processed_bouts = []
+                
                 if original_labels:
                     for bout in original_labels:
-                        if isinstance(bout, list) and len(bout) >= 3:
-                            label = bout[2] if len(bout) > 2 else 'smoking'
+                        if isinstance(bout, list) and len(bout) >= 2:
+                            # Convert list format to dict format for compatibility
+                            label = bout[2] if len(bout) > 2 else 'SELF REPORTED SMOKING'
                             all_labels.add(label)
-                            processed_bouts.append(bout)
+                            processed_bouts.append({
+                                'start': bout[0],
+                                'end': bout[1], 
+                                'label': label
+                            })
                         elif isinstance(bout, dict):
-                            label = bout.get('label', 'smoking')
+                            label = bout.get('label', 'SELF REPORTED SMOKING')
                             all_labels.add(label)
-                            processed_bouts.append([
-                                bout.get('start', bout.get('start_time', 0)),
-                                bout.get('end', bout.get('end_time', 1)),
-                                label,
-                                bout.get('confidence', 1.0)
-                            ])
-                
-                # Calculate session time bounds (placeholder - could be enhanced)
-                if processed_bouts:
-                    start_ns = min(bout[0] for bout in processed_bouts if len(bout) > 0)
-                    stop_ns = max(bout[1] for bout in processed_bouts if len(bout) > 1)
-                else:
-                    # Default time range if no bouts
-                    start_ns = 0
-                    stop_ns = 86400000000000  # 24 hours in nanoseconds
-                
+                            processed_bouts.append({
+                                'start': bout.get('start', bout.get('start_time', 0)),
+                                'end': bout.get('end', bout.get('end_time', 1)),
+                                'label': label
+                            })
+
                 try:
-                    # Create session record
-                    session_result = self.session_service.session_repo.create_session(
-                        session_name=session_name,
-                        project_id=project_id,
-                        bouts_json=processed_bouts,
-                        start_ns=start_ns,
-                        stop_ns=stop_ns,
-                        parent_data_path=session['path'],  # Reference to original session directory
-                        data_start_offset=None,  # Full session, no virtual split
-                        data_end_offset=None
-                    )
-                    
-                    # Update session to include dataset references
-                    conn = self.session_service.get_db_connection()
-                    try:
-                        with conn.cursor() as cursor:
-                            cursor.execute("""
-                                UPDATE sessions 
-                                SET dataset_id = %s, raw_session_name = %s
-                                WHERE session_id = %s
-                            """, (dataset_id, session['name'], session_result['session_id']))
-                            conn.commit()
-                    finally:
-                        cursor.close()
-                        conn.close()
-                    
-                    sessions_created += 1
-                    logger.info(f"Created session {session_name} for dataset-based project {project_id}")
-                    
+                    # Use the same time gap splitting logic as the original upload functionality
+                    if self.session_service:
+                        logger.info(f"Processing session {session['name']} with time gap splitting")
+                        logger.info(f"Session path: {session['path']}, Dataset path: {dataset_path}")
+                        logger.info(f"Processed {len(processed_bouts)} bouts for session {session['name']}")
+                        logger.info(f"About to call preprocess_and_split_session_on_upload with:")
+                        logger.info(f"  session_name: {session['name']}")
+                        logger.info(f"  project_path: {dataset_path}")
+                        logger.info(f"  parent_bouts: {len(processed_bouts)} bouts")
+                        created_sessions = self.session_service.preprocess_and_split_session_on_upload(
+                            session_name=session['name'],  # Use original session name
+                            project_path=dataset_path,  # Use dataset path as project path
+                            project_id=project_id,
+                            parent_bouts=processed_bouts
+                        )
+                        logger.info(f"preprocess_and_split_session_on_upload returned: {created_sessions}")
+                        
+                        # Update created sessions to include dataset references AND set parent_data_path
+                        if created_sessions:
+                            conn = self.session_service.get_db_connection()
+                            try:
+                                with conn.cursor() as cursor:
+                                    for created_session_name in created_sessions:
+                                        # Update with dataset info AND set parent_data_path for data retrieval
+                                        cursor.execute("""
+                                            UPDATE sessions 
+                                            SET dataset_id = %s, raw_session_name = %s, parent_session_data_path = %s
+                                            WHERE session_name = %s AND project_id = %s
+                                        """, (dataset_id, session['name'], session['path'], created_session_name, project_id))
+                                        logger.info(f"Updated session {created_session_name} with dataset_id={dataset_id}, raw_session_name={session['name']}, parent_data_path={session['path']}")
+                                    conn.commit()
+                            finally:
+                                cursor.close()
+                                conn.close()
+                            
+                            sessions_created += len(created_sessions)
+                            logger.info(f"Created {len(created_sessions)} sessions from {session['name']} for dataset-based project {project_id}: {created_sessions}")
+                        else:
+                            logger.warning(f"No sessions created from {session['name']}")
+                    else:
+                        logger.warning(f"No session service available for time gap splitting")
+                        
                 except Exception as e:
-                    logger.warning(f"Could not create session {session_name}: {e}")
+                    logger.warning(f"Could not process session {session['name']} with time gap splitting: {e}")
                     continue
         
         # Add discovered labels to project

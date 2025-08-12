@@ -107,6 +107,9 @@ function renderParticipants() {
                                     <li class="d-flex align-items-center px-2 py-1 dropdown-item">
                                         <span class="flex-grow-1" onclick="viewProject(${projectId}, '${escapedProjectName}'); return false;" style="cursor: pointer;">${projectName}</span>
                                         <div class="btn-group ms-2" role="group">
+                                            <button class="btn btn-sm btn-outline-primary" onclick="exportProjectConfiguration(${projectId}, '${escapedProjectName}'); return false;" title="Export project configuration">
+                                                <i class="fa-solid fa-download"></i>
+                                            </button>
                                             <button class="btn btn-sm btn-outline-secondary" onclick="showChangeParticipantModal(${projectId}, '${escapedProjectName}', '${escapedParticipantCode}'); return false;" title="Change participant">
                                                 <i class="fa-solid fa-user"></i>
                                             </button>
@@ -122,6 +125,9 @@ function renderParticipants() {
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="#" onclick="createProjectForParticipant('${participant.participant_code.replace(/'/g, '&apos;').replace(/"/g, '&quot;')}'); return false;">
                             <i class="fa-solid fa-plus me-2"></i>New project...
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="showImportProjectModal('${participant.participant_code.replace(/'/g, '&apos;').replace(/"/g, '&quot;')}'); return false;">
+                            <i class="fa-solid fa-upload me-2"></i>Import project...
                         </a></li>
                     </ul> 
                 </div>
@@ -511,8 +517,136 @@ function clearChangeParticipantError() {
     }
 }
 
+// Export project configuration
+async function exportProjectConfiguration(projectId, projectName) {
+    try {
+        console.log(`Exporting project configuration for: ${projectName} (ID: ${projectId})`);
+        
+        // Import ProjectAPI dynamically
+        const ProjectAPI = (await import('./js/api/projectAPI.js')).default;
+        
+        // Export will automatically trigger download
+        await ProjectAPI.exportProjectConfiguration(projectId);
+        
+        showSuccess(`Project configuration exported successfully!`);
+        
+    } catch (error) {
+        console.error('Error exporting project configuration:', error);
+        showError(`Failed to export project: ${error.message}`);
+    }
+}
+
+// Show import project modal
+function showImportProjectModal(participantCode) {
+    // Set the participant code
+    document.getElementById('importParticipantCode').value = participantCode;
+    
+    // Clear any previous file selection and error messages
+    document.getElementById('importFileInput').value = '';
+    document.getElementById('importProjectError').style.display = 'none';
+    document.getElementById('importProjectError').textContent = '';
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('importProjectModal'));
+    modal.show();
+}
+
+// Handle import project form
+async function handleImportProject() {
+    const fileInput = document.getElementById('importFileInput');
+    const participantCode = document.getElementById('importParticipantCode').value;
+    
+    if (!fileInput.files || fileInput.files.length === 0) {
+        showImportProjectError('Please select a project configuration file');
+        return;
+    }
+    
+    const file = fileInput.files[0];
+    
+    // Validate file type
+    if (!file.name.endsWith('.json')) {
+        showImportProjectError('Please select a valid JSON configuration file');
+        return;
+    }
+    
+    try {
+        // Read the file
+        const fileContent = await readFileAsText(file);
+        let configData;
+        
+        try {
+            configData = JSON.parse(fileContent);
+        } catch (parseError) {
+            throw new Error('Invalid JSON file format');
+        }
+        
+        // Validate that it's a project configuration
+        if (!configData.export_type || configData.export_type !== 'project_configuration') {
+            throw new Error('Invalid project configuration file');
+        }
+        
+        // Override participant code if specified
+        if (participantCode) {
+            configData.participant_code = participantCode;
+        }
+        
+        console.log('Importing project configuration:', configData.project_name);
+        
+        // Import ProjectAPI dynamically
+        const ProjectAPI = (await import('./js/api/projectAPI.js')).default;
+        
+        // Import the project
+        const result = await ProjectAPI.importProjectConfiguration(configData);
+        
+        // Hide the modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('importProjectModal'));
+        modal.hide();
+        
+        // Reload participants to show the new project
+        await loadParticipants();
+        
+        showSuccess(`Project "${result.project_name}" imported successfully!`);
+        
+    } catch (error) {
+        console.error('Error importing project:', error);
+        showImportProjectError(error.message);
+    }
+}
+
+// Read file as text
+function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(new Error('Failed to read file'));
+        reader.readAsText(file);
+    });
+}
+
+// Show error in import project modal
+function showImportProjectError(message) {
+    const errorDiv = document.getElementById('importProjectError');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
+}
+
+// Clear import project error
+function clearImportProjectError() {
+    const errorDiv = document.getElementById('importProjectError');
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+    }
+}
+
 // Make additional functions available globally
 window.showChangeParticipantModal = showChangeParticipantModal;
 window.changeProjectParticipant = changeProjectParticipant;
 window.onParticipantSelectChange = onParticipantSelectChange;
 window.clearChangeParticipantError = clearChangeParticipantError;
+window.exportProjectConfiguration = exportProjectConfiguration;
+window.showImportProjectModal = showImportProjectModal;
+window.handleImportProject = handleImportProject;
+window.clearImportProjectError = clearImportProjectError;

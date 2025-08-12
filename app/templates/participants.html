@@ -155,6 +155,41 @@
             </div>
         </div>
     </div>
+
+    <!-- Import Project Modal -->
+    <div class="modal fade" id="importProjectModal" tabindex="-1" aria-labelledby="importProjectModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="importProjectModalLabel">Import Project Configuration</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <p class="text-muted">Import a project configuration from another server. The referenced raw datasets must already exist on this server.</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="importParticipantCode" class="form-label">Participant Code</label>
+                        <input type="text" class="form-control" id="importParticipantCode" readonly>
+                        <div class="form-text">Project will be assigned to this participant</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="importFileInput" class="form-label">Project Configuration File</label>
+                        <input type="file" class="form-control" id="importFileInput" accept=".json" onchange="clearImportProjectError()">
+                        <div class="form-text">Select the exported project configuration JSON file</div>
+                    </div>
+                    
+                    <div id="importProjectError" class="alert alert-danger" style="display: none;" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="handleImportProject()">Import Project</button>
+                </div>
+            </div>
+        </div>
+    </div>
 {% endblock %}
 
 {% block scripts %}

@@ -460,6 +460,7 @@ class SessionService:
         try:
             cursor.execute("""
                 SELECT s.session_id, s.session_name, s.status, s.keep, s.verified, s.bouts,
+                    s.start_ns, s.stop_ns,
                     p.project_id, p.project_name, p.path AS project_path
                 FROM sessions s
                 JOIN projects p ON s.project_id = p.project_id
