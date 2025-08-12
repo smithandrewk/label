@@ -682,6 +682,93 @@ class ProjectController:
                 
                 project_id = result['project_id']
                 
+                # Create mapping from old dataset_id to new dataset_id and paths
+                dataset_mapping = {}
+                for i, dataset_ref in enumerate(datasets_data):
+                    old_dataset_id = dataset_ref.get('dataset_id')
+                    new_dataset_id = available_dataset_ids[i]
+                    
+                    # Get the new dataset path on this server
+                    new_dataset = raw_dataset_service.raw_dataset_repo.find_by_id(new_dataset_id)
+                    if new_dataset:
+                        dataset_mapping[old_dataset_id] = {
+                            'new_dataset_id': new_dataset_id,
+                            'new_dataset_path': new_dataset['file_path']
+                        }
+                        logger.info(f"Dataset mapping: {old_dataset_id} -> {new_dataset_id} at {new_dataset['file_path']}")
+                    else:
+                        logger.warning(f"Could not find new dataset for ID {new_dataset_id}")
+                
+                logger.info(f"Created dataset mapping: {dataset_mapping}")
+                
+                # Import sessions with their exact bouts data
+                sessions_data = data.get('sessions', [])
+                imported_sessions = 0
+                for session_data in sessions_data:
+                    try:
+                        # Map dataset references to new server
+                        old_dataset_id = session_data.get('dataset_id')
+                        new_dataset_id = None
+                        new_parent_data_path = None
+                        
+                        logger.info(f"Processing session {session_data['session_name']}: old_dataset_id={old_dataset_id}, raw_session_name={session_data.get('raw_session_name')}")
+                        
+                        if old_dataset_id and old_dataset_id in dataset_mapping:
+                            new_dataset_id = dataset_mapping[old_dataset_id]['new_dataset_id']
+                            new_dataset_path = dataset_mapping[old_dataset_id]['new_dataset_path']
+                            raw_session_name = session_data.get('raw_session_name')
+                            
+                            # Construct new parent data path
+                            if raw_session_name:
+                                new_parent_data_path = os.path.join(new_dataset_path, raw_session_name)
+                                logger.info(f"Mapped to new path: {new_parent_data_path}")
+                            else:
+                                # Fallback: try to extract session name from old parent path
+                                old_parent_path = session_data.get('virtual_split_info', {}).get('parent_data_path')
+                                if old_parent_path:
+                                    session_dir_name = os.path.basename(old_parent_path)
+                                    new_parent_data_path = os.path.join(new_dataset_path, session_dir_name)
+                                    logger.info(f"Fallback mapped to new path: {new_parent_data_path}")
+                        elif not old_dataset_id and len(available_dataset_ids) == 1:
+                            # Handle legacy sessions without dataset_id - assume they belong to the single dataset
+                            new_dataset_id = available_dataset_ids[0]
+                            new_dataset_path = list(dataset_mapping.values())[0]['new_dataset_path']
+                            
+                            # Try to map session name to a directory in the dataset
+                            session_name = session_data['session_name']
+                            # Remove split suffix (.1, .2, etc) to get original session name
+                            base_session_name = session_name.split('.')[0] if '.' in session_name else session_name
+                            
+                            # Check if this session directory exists in the dataset
+                            potential_session_path = os.path.join(new_dataset_path, base_session_name)
+                            if os.path.exists(potential_session_path):
+                                new_parent_data_path = potential_session_path
+                                logger.info(f"Legacy session mapped to dataset {new_dataset_id}: {new_parent_data_path}")
+                            else:
+                                logger.warning(f"Could not find session directory for legacy session {session_name} in dataset")
+                        else:
+                            logger.warning(f"No dataset mapping found for session {session_data['session_name']}, old_dataset_id={old_dataset_id}")
+                        
+                        # Create session with exact data from export, but updated paths
+                        session_result = self.session_service.import_session(
+                            project_id=project_id,
+                            session_name=session_data['session_name'],
+                            status=session_data.get('status', 'unlabeled'),
+                            verified=session_data.get('verified', False),
+                            bouts=session_data.get('bouts', []),
+                            dataset_id=new_dataset_id,
+                            raw_session_name=session_data.get('raw_session_name'),
+                            start_ns=session_data.get('start_ns'),
+                            stop_ns=session_data.get('stop_ns'),
+                            parent_session_data_path=new_parent_data_path,
+                            data_start_offset=session_data.get('virtual_split_info', {}).get('data_start_offset'),
+                            data_end_offset=session_data.get('virtual_split_info', {}).get('data_end_offset')
+                        )
+                        imported_sessions += 1
+                        logger.info(f"Imported session: {session_data['session_name']} -> dataset {new_dataset_id}, path: {new_parent_data_path}")
+                    except Exception as e:
+                        logger.warning(f"Could not import session {session_data.get('session_name')}: {e}")
+                
                 # Import labelings if present
                 if labelings_data:
                     for labeling in labelings_data:
@@ -695,8 +782,8 @@ class ProjectController:
                     'project_id': project_id,
                     'project_name': new_project_name,
                     'imported_datasets': len(available_dataset_ids),
-                    'imported_labelings': len(labelings_data),
-                    'note': 'Virtual sessions will be recreated when you start analysis'
+                    'imported_sessions': imported_sessions,
+                    'imported_labelings': len(labelings_data)
                 })
                 
             else:

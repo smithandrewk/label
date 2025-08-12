@@ -868,3 +868,65 @@ class SessionService:
                 }
         
         return None
+
+    def import_session(self, project_id, session_name, status='unlabeled', verified=False, 
+                      bouts=None, dataset_id=None, raw_session_name=None, start_ns=None, stop_ns=None,
+                      parent_session_data_path=None, data_start_offset=None, data_end_offset=None):
+        """
+        Import a session with all its data fields for project import functionality
+        
+        Args:
+            project_id: ID of the project this session belongs to
+            session_name: Name of the session
+            status: Status of the session (default: 'unlabeled')
+            verified: Whether the session is verified (default: False)
+            bouts: List of bouts data
+            dataset_id: Reference to raw dataset (for dataset-based sessions)
+            raw_session_name: Original session name in raw dataset
+            start_ns: Start timestamp in nanoseconds
+            stop_ns: Stop timestamp in nanoseconds
+            parent_session_data_path: Path to parent data for virtual splits
+            data_start_offset: Start row index for pandas slicing
+            data_end_offset: End row index for pandas slicing
+            
+        Returns:
+            dict: Contains session_id and session_name if successful
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor()
+        try:
+            # Convert bouts to JSON string
+            bouts_json = json.dumps(bouts) if bouts else None
+            
+            # Insert session with all fields
+            query = """
+                INSERT INTO sessions (
+                    project_id, session_name, status, verified, bouts, dataset_id, raw_session_name,
+                    start_ns, stop_ns, parent_session_data_path, data_start_offset, data_end_offset
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            
+            cursor.execute(query, (
+                project_id, session_name, status, verified, bouts_json, dataset_id, raw_session_name,
+                start_ns, stop_ns, parent_session_data_path, data_start_offset, data_end_offset
+            ))
+            
+            session_id = cursor.lastrowid
+            conn.commit()
+            
+            logger.info(f"Successfully imported session '{session_name}' for project {project_id} (ID: {session_id})")
+            return {
+                'session_id': session_id,
+                'session_name': session_name
+            }
+            
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error importing session {session_name}: {e}")
+            raise DatabaseError(f'Failed to import session: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
