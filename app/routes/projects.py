@@ -858,9 +858,6 @@ def delete_participant(participant_id):
 def update_project_participant(project_id):
     return controller.update_project_participant(project_id)
 
-@projects_bp.route('/api/projects/bulk-upload', methods=['POST'])
-def bulk_upload_projects():
-    return controller.bulk_upload_projects()
 
 @projects_bp.route('/api/projects/create-from-datasets', methods=['POST'])
 def create_dataset_based_project():

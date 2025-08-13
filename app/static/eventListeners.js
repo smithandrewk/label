@@ -237,45 +237,5 @@ export function addEventListeners() {
         exportLabelsJSON();
     });
 
-    const uploadButton = document.getElementById('upload-btn-overlay');
-    if (uploadButton) {
-        uploadButton.addEventListener('click', showCreateProjectForm);
-        uploadButton.addEventListener('mouseenter', () => {
-            uploadButton.style.background = 'rgba(0, 0, 0, 0.1)';
-        });
-        uploadButton.addEventListener('mouseleave', () => {
-            uploadButton.style.background = 'rgba(0, 0, 0, 0)';
-        });
-    }
 
-    const bulkUploadButton = document.getElementById('bulk-upload-btn');
-    if (bulkUploadButton) {
-        bulkUploadButton.addEventListener('click', showBulkUploadForm);
-        bulkUploadButton.addEventListener('mouseenter', () => {
-            bulkUploadButton.style.background = 'rgba(0, 0, 0, 0.1)';
-        });
-        bulkUploadButton.addEventListener('mouseleave', () => {
-            bulkUploadButton.style.background = 'rgba(0, 0, 0, 0)';
-        });
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        const createProjectForm = document.getElementById('create-project-form');
-        createProjectForm.addEventListener('submit', function(event) {
-            event.preventDefault();
-            
-            const projectName = document.getElementById('project-name').value;
-            const participantCode = document.getElementById('project-participant').value;
-            const projectPath = document.getElementById('project-path').value;
-            
-            const formData = {
-                name: projectName,
-                participant: participantCode,
-                projectPath: projectPath,
-            };
-            
-            // Send data to your backend
-            createNewProject(formData);
-        });
-    });
 }

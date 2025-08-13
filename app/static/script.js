@@ -5,10 +5,8 @@ import ProjectController from './js/controllers/projectController.js';
 import { 
     updateCurrentProjectPill, 
     resetScoreButton, 
-    showCreateProjectForm, 
     showTableView, 
     showNotification,
-    showBulkUploadForm,
     hideModal,
     resetForm
 } from './js/ui/uiUtils.js';
@@ -25,10 +23,10 @@ function checkUrlParameters() {
     const projectId = urlParams.get('project_id');
     
     if (participantCode && createProject === 'true') {
-        // Pre-fill participant code and show create project modal
+        // Pre-fill participant code and redirect to raw datasets page for project creation
         setTimeout(() => {
-            document.getElementById('project-participant').value = participantCode;
-            showCreateProjectForm();
+            // Redirect to raw datasets page where projects are now created
+            window.location.href = `/raw-datasets?participant=${participantCode}&create_project=true`;
         }, 500); // Small delay to ensure page is loaded
     }
     
@@ -1939,15 +1937,12 @@ window.toggleSplitMode = toggleSplitMode;
 window.toggleVerifiedStatus = toggleVerifiedStatus;
 window.splitSession = splitSession;
 window.createNewBout = createNewBout;
-window.showCreateProjectForm = showCreateProjectForm;
 window.createNewProject = ProjectController.createNewProject;
 window.createBulkUpload = ProjectController.createBulkUpload;
-window.showBulkUploadForm = showBulkUploadForm;
 window.updateSidebarHighlighting = updateSidebarHighlighting;
 window.updateSessionsList = updateSessionsList;
 window.exportLabelsJSON = exportLabelsJSON;
 window.exportLabelingJSON = exportLabelingJSON;
-window.showBulkUploadForm = showBulkUploadForm;
 window.pollScoringStatus = pollScoringStatus;
 window.deleteProject = ProjectController.deleteProject;
 

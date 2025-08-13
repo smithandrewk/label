@@ -30,29 +30,6 @@ export function resetScoreButton(sessionId) {
     }
 }
 
-/**
- * Show create project form modal
- */
-export function showCreateProjectForm() {
-    const modalElement = document.getElementById('createProjectModal');
-    if (modalElement) {
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
-    } else {
-        console.error('Create Project Modal not found');
-    }
-}
-
-// Bulk upload functions
-export function showBulkUploadForm() {
-    const modalElement = document.getElementById('bulkUploadModal');
-    if (modalElement) {
-        const modal = new bootstrap.Modal(modalElement);
-        modal.show();
-    } else {
-        console.error('Bulk Upload Modal not found');
-    }
-}
 
 export function displayBulkPreview(projectGroups) {
     const previewElement = document.getElementById('bulk-preview');
