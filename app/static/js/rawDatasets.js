@@ -26,6 +26,10 @@ class RawDatasetManager {
         // Project creation events
         document.getElementById('create-project-btn').addEventListener('click', () => this.createProjectFromDatasets());
 
+        // Bulk upload events
+        document.getElementById('scan-bulk-btn').addEventListener('click', () => this.scanBulkDirectory());
+        document.getElementById('bulk-upload-datasets-btn').addEventListener('click', () => this.bulkUploadDatasets());
+
         // Form validation
         document.getElementById('dataset-path').addEventListener('blur', () => this.validatePath());
         
@@ -33,6 +37,7 @@ class RawDatasetManager {
         document.getElementById('uploadDatasetModal').addEventListener('hidden.bs.modal', () => this.resetUploadForm());
         document.getElementById('createProjectModal').addEventListener('shown.bs.modal', () => this.loadDatasetsForProjectCreation());
         document.getElementById('createProjectModal').addEventListener('hidden.bs.modal', () => this.resetProjectForm());
+        document.getElementById('bulkUploadModal').addEventListener('hidden.bs.modal', () => this.resetBulkUploadForm());
     }
 
     async loadDatasets() {
@@ -642,6 +647,237 @@ class RawDatasetManager {
             scanBtn.innerHTML = originalText;
             scanBtn.disabled = false;
         }
+    }
+
+    async scanBulkDirectory() {
+        const parentPath = document.getElementById('bulk-parent-path').value.trim();
+        if (!parentPath) {
+            this.showError('Please enter a parent directory path');
+            return;
+        }
+
+        const scanBtn = document.getElementById('scan-bulk-btn');
+        const originalText = scanBtn.innerHTML;
+        scanBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Scanning...';
+        scanBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/datasets/bulk-scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ parent_path: parentPath })
+            });
+
+            const result = await response.json();
+            
+            if (response.ok) {
+                this.renderBulkDatasets(result);
+                this.updateBulkSummary(result);
+            } else {
+                this.showError(result.error || 'Bulk scan failed');
+                this.resetBulkDatasetsList();
+            }
+            
+        } catch (error) {
+            console.error('Error scanning bulk directory:', error);
+            this.showError('Bulk scan failed: ' + error.message);
+            this.resetBulkDatasetsList();
+        } finally {
+            scanBtn.innerHTML = originalText;
+            scanBtn.disabled = false;
+        }
+    }
+
+    renderBulkDatasets(scanResult) {
+        const container = document.getElementById('bulk-datasets-list');
+        const datasets = scanResult.datasets;
+
+        if (datasets.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-5 text-muted">
+                    <i class="fa-solid fa-folder-open" style="font-size: 3rem; opacity: 0.3;"></i>
+                    <p class="mt-2 mb-0">No subdirectories found in the specified path</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="select-all-bulk">
+                    <label class="form-check-label" for="select-all-bulk">
+                        <strong>Select All Valid Datasets</strong>
+                    </label>
+                </div>
+            </div>
+            <div style="max-height: 400px; overflow-y: auto;">
+                ${datasets.map(dataset => this.createBulkDatasetItem(dataset)).join('')}
+            </div>
+        `;
+
+        // Add event listeners after DOM is created
+        const selectAllCheckbox = document.getElementById('select-all-bulk');
+        selectAllCheckbox.addEventListener('change', (e) => this.toggleAllBulkDatasets(e.target));
+
+        // Add event listeners to individual checkboxes
+        const datasetCheckboxes = document.querySelectorAll('.bulk-dataset-checkbox');
+        console.log('Found checkboxes:', datasetCheckboxes.length);
+        datasetCheckboxes.forEach((checkbox, index) => {
+            checkbox.addEventListener('change', (e) => {
+                console.log(`Checkbox ${index} changed, checked:`, e.target.checked);
+                this.updateBulkUploadButton();
+            });
+        });
+
+        this.updateBulkUploadButton();
+    }
+
+    createBulkDatasetItem(dataset) {
+        const fileSize = dataset.file_size_bytes ? this.formatFileSize(dataset.file_size_bytes) : 'Unknown';
+        const statusClass = dataset.valid ? 'success' : 'danger';
+        const statusIcon = dataset.valid ? 'check-circle' : 'exclamation-triangle';
+        const statusText = dataset.valid ? 'Valid' : 'Invalid';
+
+        return `
+            <div class="card mb-2 ${dataset.valid ? '' : 'border-danger'}">
+                <div class="card-body p-3">
+                    <div class="form-check">
+                        <input class="form-check-input bulk-dataset-checkbox" type="checkbox" 
+                               value="${this.escapeHtml(JSON.stringify(dataset))}" 
+                               id="bulk-${this.escapeHtml(dataset.name)}"
+                               ${dataset.valid ? '' : 'disabled'}>
+                        <label class="form-check-label w-100" for="bulk-${this.escapeHtml(dataset.name)}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">${this.escapeHtml(dataset.name)}</h6>
+                                    <div class="small text-muted mb-2">
+                                        <code class="text-break">${this.escapeHtml(dataset.path)}</code>
+                                    </div>
+                                    
+                                    ${dataset.valid ? `
+                                        <div class="d-flex gap-3 small">
+                                            <span><i class="fa-solid fa-list me-1"></i>${dataset.session_count} sessions</span>
+                                            <span><i class="fa-solid fa-weight-scale me-1"></i>${fileSize}</span>
+                                        </div>
+                                    ` : `
+                                        <div class="text-danger small">
+                                            <i class="fa-solid fa-exclamation-triangle me-1"></i>
+                                            ${this.escapeHtml(dataset.error || 'Invalid dataset')}
+                                        </div>
+                                    `}
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-${statusClass}">
+                                        <i class="fa-solid fa-${statusIcon} me-1"></i>${statusText}
+                                    </span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    updateBulkSummary(scanResult) {
+        const summaryDiv = document.getElementById('bulk-summary');
+        summaryDiv.innerHTML = `Found ${scanResult.total_found} directories, ${scanResult.valid_datasets} valid datasets`;
+        summaryDiv.style.display = 'block';
+    }
+
+    toggleAllBulkDatasets(selectAllCheckbox) {
+        const checkboxes = document.querySelectorAll('.bulk-dataset-checkbox:not(:disabled)');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = selectAllCheckbox.checked;
+        });
+        this.updateBulkUploadButton();
+    }
+
+    updateBulkUploadButton() {
+        const checkedBoxes = document.querySelectorAll('.bulk-dataset-checkbox:checked');
+        const uploadBtn = document.getElementById('bulk-upload-datasets-btn');
+        
+        console.log('updateBulkUploadButton called, checked boxes:', checkedBoxes.length);
+        console.log('upload button:', uploadBtn);
+        
+        if (uploadBtn) {
+            uploadBtn.disabled = checkedBoxes.length === 0;
+            uploadBtn.innerHTML = checkedBoxes.length > 0 
+                ? `<i class="fa-solid fa-cloud-arrow-up me-2"></i>Upload ${checkedBoxes.length} Dataset${checkedBoxes.length > 1 ? 's' : ''}`
+                : `<i class="fa-solid fa-cloud-arrow-up me-2"></i>Upload Selected Datasets`;
+            
+            console.log('Button disabled state:', uploadBtn.disabled);
+        } else {
+            console.error('Upload button not found!');
+        }
+    }
+
+    async bulkUploadDatasets() {
+        const checkedBoxes = document.querySelectorAll('.bulk-dataset-checkbox:checked');
+        if (checkedBoxes.length === 0) {
+            this.showError('Please select at least one dataset to upload');
+            return;
+        }
+
+        const datasets = Array.from(checkedBoxes).map(checkbox => JSON.parse(checkbox.value));
+        
+        const uploadBtn = document.getElementById('bulk-upload-datasets-btn');
+        const originalText = uploadBtn.innerHTML;
+        uploadBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Uploading...';
+        uploadBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/datasets/bulk-upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ datasets })
+            });
+
+            const result = await response.json();
+            
+            if (response.ok) {
+                this.showSuccess(`Bulk upload completed!\n\n${result.message}`);
+                
+                // Close modal and refresh datasets list
+                bootstrap.Modal.getInstance(document.getElementById('bulkUploadModal')).hide();
+                this.loadDatasets();
+                
+                if (result.failed && result.failed.length > 0) {
+                    // Show details about failed uploads
+                    const failureDetails = result.failed.map(f => `• ${f.name}: ${f.error}`).join('\n');
+                    setTimeout(() => {
+                        alert(`Failed uploads:\n${failureDetails}`);
+                    }, 1000);
+                }
+            } else {
+                this.showError(result.error || 'Bulk upload failed');
+            }
+            
+        } catch (error) {
+            console.error('Error in bulk upload:', error);
+            this.showError('Bulk upload failed: ' + error.message);
+        } finally {
+            uploadBtn.innerHTML = originalText;
+            uploadBtn.disabled = false;
+        }
+    }
+
+    resetBulkUploadForm() {
+        document.getElementById('bulk-parent-path').value = '';
+        this.resetBulkDatasetsList();
+        document.getElementById('bulk-summary').style.display = 'none';
+        document.getElementById('bulk-upload-datasets-btn').disabled = true;
+        document.getElementById('bulk-upload-datasets-btn').innerHTML = '<i class="fa-solid fa-cloud-arrow-up me-2"></i>Upload Selected Datasets';
+    }
+
+    resetBulkDatasetsList() {
+        document.getElementById('bulk-datasets-list').innerHTML = `
+            <div class="text-center py-5 text-muted">
+                <i class="fa-solid fa-folder-open" style="font-size: 3rem; opacity: 0.3;"></i>
+                <p class="mt-2 mb-0">Enter a parent directory path and click "Scan Directory"</p>
+            </div>
+        `;
     }
 }
 

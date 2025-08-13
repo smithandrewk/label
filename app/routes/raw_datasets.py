@@ -179,6 +179,133 @@ class RawDatasetController:
             logger.error(f"Error in scan_and_register_datasets: {str(e)}")
             logger.error(f"Stack trace: {traceback.format_exc()}")
             return jsonify({'error': f'Scan and register failed: {str(e)}'}), 500
+    
+    def bulk_scan_datasets(self):
+        """Scan a parent directory for multiple potential datasets"""
+        try:
+            parent_path = request.json.get('parent_path')
+            if not parent_path:
+                return jsonify({'error': 'Missing parent_path'}), 400
+            
+            # Validate parent path exists
+            if not os.path.exists(parent_path):
+                return jsonify({'error': 'Parent path does not exist'}), 400
+                
+            if not os.path.isdir(parent_path):
+                return jsonify({'error': 'Parent path is not a directory'}), 400
+            
+            logger.info(f"Bulk scanning parent directory: {parent_path}")
+            
+            # Get all subdirectories that could be datasets
+            potential_datasets = []
+            for item in os.listdir(parent_path):
+                item_path = os.path.join(parent_path, item)
+                if os.path.isdir(item_path):
+                    # Check if this directory looks like a dataset
+                    validation = self.raw_dataset_service.validate_dataset_path(item_path)
+                    
+                    dataset_info = {
+                        'name': item,  # Use directory name as dataset name
+                        'path': item_path,
+                        'valid': validation['valid'],
+                        'error': validation.get('error', None)
+                    }
+                    
+                    if validation['valid']:
+                        # Get additional info for valid datasets
+                        try:
+                            sessions = self.raw_dataset_service.discover_sessions_in_dataset(item_path)
+                            from app.repositories.raw_dataset_repository import RawDatasetRepository
+                            file_size_bytes = RawDatasetRepository.calculate_directory_size(item_path)
+                            
+                            dataset_info.update({
+                                'sessions': sessions,
+                                'session_count': len(sessions),
+                                'file_size_bytes': file_size_bytes,
+                            })
+                        except Exception as e:
+                            logger.warning(f"Error getting dataset info for {item_path}: {e}")
+                            dataset_info['error'] = str(e)
+                            dataset_info['valid'] = False
+                    
+                    potential_datasets.append(dataset_info)
+            
+            # Sort by name
+            potential_datasets.sort(key=lambda x: x['name'])
+            
+            return jsonify({
+                'parent_path': parent_path,
+                'datasets': potential_datasets,
+                'total_found': len(potential_datasets),
+                'valid_datasets': sum(1 for d in potential_datasets if d['valid'])
+            })
+            
+        except Exception as e:
+            logger.error(f"Error in bulk_scan_datasets: {str(e)}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': f'Bulk scan failed: {str(e)}'}), 500
+    
+    def bulk_upload_datasets(self):
+        """Upload multiple datasets from a bulk scan"""
+        try:
+            datasets_data = request.json.get('datasets', [])
+            if not datasets_data:
+                return jsonify({'error': 'No datasets provided'}), 400
+            
+            results = {
+                'successful': [],
+                'failed': [],
+                'duplicates': [],
+                'total_processed': len(datasets_data)
+            }
+            
+            for dataset_data in datasets_data:
+                try:
+                    result = self.raw_dataset_service.upload_raw_dataset(
+                        source_path=dataset_data['path'],
+                        dataset_name=dataset_data['name'],
+                        description=dataset_data.get('description', ''),
+                        raw_data_dir=RAW_DATA_DIR
+                    )
+                    
+                    if result.get('duplicate', False):
+                        results['duplicates'].append({
+                            'name': dataset_data['name'],
+                            'path': dataset_data['path'],
+                            'existing_id': result['dataset_id']
+                        })
+                    else:
+                        results['successful'].append({
+                            'name': result['dataset_name'],
+                            'id': result['dataset_id'],
+                            'path': result['file_path'],
+                            'sessions': result['session_count']
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"Error uploading dataset {dataset_data['name']}: {e}")
+                    results['failed'].append({
+                        'name': dataset_data['name'],
+                        'path': dataset_data['path'],
+                        'error': str(e)
+                    })
+            
+            message_parts = []
+            if results['successful']:
+                message_parts.append(f"{len(results['successful'])} datasets uploaded successfully")
+            if results['duplicates']:
+                message_parts.append(f"{len(results['duplicates'])} duplicates skipped")
+            if results['failed']:
+                message_parts.append(f"{len(results['failed'])} failed")
+                
+            results['message'] = ', '.join(message_parts)
+            
+            return jsonify(results)
+            
+        except Exception as e:
+            logger.error(f"Error in bulk_upload_datasets: {str(e)}")
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            return jsonify({'error': f'Bulk upload failed: {str(e)}'}), 500
 
 # Route definitions
 @raw_datasets_bp.route('/api/datasets/upload', methods=['POST'])
@@ -208,6 +335,14 @@ def preview_dataset():
 @raw_datasets_bp.route('/api/datasets/scan', methods=['POST'])
 def scan_and_register_datasets():
     return controller.scan_and_register_datasets()
+
+@raw_datasets_bp.route('/api/datasets/bulk-scan', methods=['POST'])
+def bulk_scan_datasets():
+    return controller.bulk_scan_datasets()
+
+@raw_datasets_bp.route('/api/datasets/bulk-upload', methods=['POST'])
+def bulk_upload_datasets():
+    return controller.bulk_upload_datasets()
 
 controller = None
 
