@@ -692,11 +692,17 @@ async function loadRawDatasets() {
         // Clear existing options except the first one
         selector.innerHTML = '<option value="">Select a raw dataset...</option>';
         
+        // Sort datasets alphabetically by name
+        datasets.sort((a, b) => a.dataset_name.localeCompare(b.dataset_name));
+        
         // Add dataset options
         datasets.forEach(dataset => {
             const option = document.createElement('option');
             option.value = dataset.dataset_id;
-            option.textContent = `${dataset.dataset_name} (${dataset.session_count} sessions)`;
+            
+            // Format upload timestamp for display
+            const uploadDate = new Date(dataset.upload_timestamp).toLocaleDateString();
+            option.textContent = `${dataset.dataset_name} (${dataset.session_count} sessions, ${uploadDate})`;
             selector.appendChild(option);
         });
         
