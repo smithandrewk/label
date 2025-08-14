@@ -65,6 +65,13 @@ export function showTableView() {
     // Remove dark mode if it is on
     document.body.classList.remove('dark-mode');
     localStorage.setItem('dark-mode', false);
+    
+    // Reset the visualization title and browser tab title to default
+    const titleElement = document.getElementById('visualization-title');
+    if (titleElement) {
+        titleElement.textContent = 'Accelerometer Data Visualization';
+    }
+    document.title = 'Dashboard - Accelerometer Data Visualization';
 }
 
 /**

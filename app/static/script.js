@@ -16,6 +16,22 @@ import SessionController from './js/controllers/sessionController.js';
 import { ActionButtonTemplates, ActionButtonHandlers } from './js/templates/actionButtonTemplates.js';
 import { SessionListTemplates, SessionListHandlers } from './js/templates/sessionListTemplates.js';
 
+function updateVisualizationTitle(session) {
+    const titleElement = document.getElementById('visualization-title');
+    if (titleElement && session) {
+        // Get session index from the sessions array
+        const sessionIndex = sessions.findIndex(s => s.session_id === session.session_id) + 1;
+        const sessionName = session.session_name || 'Unknown Session';
+        
+        // Update title to show session index and name
+        const newTitle = `Session ${sessionIndex}: ${sessionName}`;
+        titleElement.textContent = newTitle;
+        
+        // Also update the browser tab title
+        document.title = `${newTitle} - Accelerometer Data Visualization`;
+    }
+}
+
 function checkUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const participantCode = urlParams.get('participant');
@@ -297,6 +313,9 @@ async function visualizeSession(sessionId) {
     currentActiveSession = session.session_name;
     
     dragContext.currentSession = session;
+
+    // Update the visualization title with session information
+    updateVisualizationTitle(session);
 
     if (!session.data || session.data.length === 0) {
         const { bouts, data } = await SessionAPI.loadSessionData(sessionId);
