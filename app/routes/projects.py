@@ -643,31 +643,40 @@ class ProjectController:
             
             # Check if this is a dataset-based project import
             if export_version == '2.0' and datasets_data:
-                # For dataset-based projects, validate that referenced datasets exist
+                # For dataset-based projects, check if user selected a dataset manually
+                selected_dataset_id = data.get('selected_dataset_id')
+                
                 from app.services.raw_dataset_service import RawDatasetService
                 raw_dataset_service = RawDatasetService()
                 
-                missing_datasets = []
                 available_dataset_ids = []
                 
-                for dataset_ref in datasets_data:
-                    dataset_hash = dataset_ref.get('dataset_hash')
-                    if dataset_hash:
-                        existing_dataset = raw_dataset_service.raw_dataset_repo.find_by_hash(dataset_hash)
-                        if existing_dataset:
-                            available_dataset_ids.append(existing_dataset['dataset_id'])
-                        else:
-                            missing_datasets.append({
-                                'name': dataset_ref.get('dataset_name'),
-                                'hash': dataset_hash
-                            })
-                
-                if missing_datasets:
-                    return jsonify({
-                        'error': 'Referenced datasets not found',
-                        'missing_datasets': missing_datasets,
-                        'suggestion': 'Upload the missing datasets first, then retry the import'
-                    }), 400
+                if selected_dataset_id:
+                    # User manually selected a dataset - use that instead of hash lookup
+                    logger.info(f"Using manually selected dataset ID: {selected_dataset_id}")
+                    available_dataset_ids = [selected_dataset_id]
+                else:
+                    # Try hash-based lookup (original behavior)
+                    missing_datasets = []
+                    
+                    for dataset_ref in datasets_data:
+                        dataset_hash = dataset_ref.get('dataset_hash')
+                        if dataset_hash:
+                            existing_dataset = raw_dataset_service.raw_dataset_repo.find_by_hash(dataset_hash)
+                            if existing_dataset:
+                                available_dataset_ids.append(existing_dataset['dataset_id'])
+                            else:
+                                missing_datasets.append({
+                                    'name': dataset_ref.get('dataset_name'),
+                                    'hash': dataset_hash
+                                })
+                    
+                    if missing_datasets:
+                        return jsonify({
+                            'error': 'Referenced datasets not found',
+                            'missing_datasets': missing_datasets,
+                            'suggestion': 'Re-import and select a dataset manually from the dropdown'
+                        }), 400
                 
                 # Create dataset-based project
                 new_project_name = f"{project_data['project_name']}_imported_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

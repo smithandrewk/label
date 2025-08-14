@@ -177,8 +177,16 @@
                     
                     <div class="mb-3">
                         <label for="importFileInput" class="form-label">Project Configuration File</label>
-                        <input type="file" class="form-control" id="importFileInput" accept=".json" onchange="clearImportProjectError()">
+                        <input type="file" class="form-control" id="importFileInput" accept=".json" onchange="handleConfigFileSelected()">
                         <div class="form-text">Select the exported project configuration JSON file</div>
+                    </div>
+                    
+                    <div id="datasetSelectorSection" class="mb-3" style="display: none;">
+                        <label for="rawDatasetSelector" class="form-label">Raw Dataset</label>
+                        <select class="form-select" id="rawDatasetSelector">
+                            <option value="">Select a raw dataset...</option>
+                        </select>
+                        <div class="form-text">Choose the raw dataset for this project (required if referenced datasets are missing)</div>
                     </div>
                     
                     <div id="importProjectError" class="alert alert-danger" style="display: none;" role="alert"></div>

@@ -590,6 +590,12 @@ async function handleImportProject() {
             configData.participant_code = participantCode;
         }
         
+        // Add selected dataset if provided
+        const selectedDatasetId = document.getElementById('rawDatasetSelector').value;
+        if (selectedDatasetId) {
+            configData.selected_dataset_id = parseInt(selectedDatasetId);
+        }
+        
         console.log('Importing project configuration:', configData.project_name);
         
         // Import ProjectAPI dynamically
@@ -641,12 +647,72 @@ function clearImportProjectError() {
     }
 }
 
+// Handle config file selection - check if datasets are missing
+async function handleConfigFileSelected() {
+    clearImportProjectError();
+    
+    const fileInput = document.getElementById('importFileInput');
+    const datasetSection = document.getElementById('datasetSelectorSection');
+    
+    if (!fileInput.files || fileInput.files.length === 0) {
+        datasetSection.style.display = 'none';
+        return;
+    }
+    
+    try {
+        const file = fileInput.files[0];
+        const fileContent = await readFileAsText(file);
+        const configData = JSON.parse(fileContent);
+        
+        // Check if this is a dataset-based project (export_version 2.0)
+        if (configData.export_version === '2.0' && configData.datasets && configData.datasets.length > 0) {
+            // Show dataset selector and populate with available datasets
+            await loadRawDatasets();
+            datasetSection.style.display = 'block';
+        } else {
+            datasetSection.style.display = 'none';
+        }
+    } catch (error) {
+        console.warn('Could not parse config file for dataset check:', error);
+        datasetSection.style.display = 'none';
+    }
+}
+
+// Load available raw datasets for selection
+async function loadRawDatasets() {
+    try {
+        const response = await fetch('/api/datasets');
+        if (!response.ok) {
+            throw new Error('Failed to load datasets');
+        }
+        
+        const datasets = await response.json();
+        const selector = document.getElementById('rawDatasetSelector');
+        
+        // Clear existing options except the first one
+        selector.innerHTML = '<option value="">Select a raw dataset...</option>';
+        
+        // Add dataset options
+        datasets.forEach(dataset => {
+            const option = document.createElement('option');
+            option.value = dataset.dataset_id;
+            option.textContent = `${dataset.dataset_name} (${dataset.session_count} sessions)`;
+            selector.appendChild(option);
+        });
+        
+    } catch (error) {
+        console.error('Error loading raw datasets:', error);
+        showImportProjectError('Failed to load available datasets');
+    }
+}
+
 // Make additional functions available globally
 window.showChangeParticipantModal = showChangeParticipantModal;
 window.changeProjectParticipant = changeProjectParticipant;
 window.onParticipantSelectChange = onParticipantSelectChange;
 window.clearChangeParticipantError = clearChangeParticipantError;
 window.exportProjectConfiguration = exportProjectConfiguration;
+window.handleConfigFileSelected = handleConfigFileSelected;
 window.showImportProjectModal = showImportProjectModal;
 window.handleImportProject = handleImportProject;
 window.clearImportProjectError = clearImportProjectError;
