@@ -140,7 +140,7 @@ class RawDatasetRepository(BaseRepository):
                     FROM raw_datasets rd
                     LEFT JOIN project_dataset_refs pdr ON rd.dataset_id = pdr.dataset_id
                     GROUP BY rd.dataset_id
-                    ORDER BY rd.upload_timestamp DESC
+                    ORDER BY rd.dataset_name ASC
                 """)
                 
                 results = cursor.fetchall()
