@@ -110,6 +110,9 @@ function renderParticipants() {
                                             <button class="btn btn-sm btn-outline-primary" onclick="exportProjectConfiguration(${projectId}, '${escapedProjectName}'); return false;" title="Export project configuration">
                                                 <i class="fa-solid fa-download"></i>
                                             </button>
+                                            <button class="btn btn-sm btn-outline-warning" onclick="showRenameProjectModal(${projectId}, '${escapedProjectName}'); return false;" title="Rename project">
+                                                <i class="fa-solid fa-edit"></i>
+                                            </button>
                                             <button class="btn btn-sm btn-outline-secondary" onclick="showChangeParticipantModal(${projectId}, '${escapedProjectName}', '${escapedParticipantCode}'); return false;" title="Change participant">
                                                 <i class="fa-solid fa-user"></i>
                                             </button>
@@ -758,6 +761,88 @@ async function loadRawDatasets() {
     }
 }
 
+// Show rename project modal
+function showRenameProjectModal(projectId, projectName) {
+    // Set the project information
+    document.getElementById('renameProjectId').value = projectId;
+    document.getElementById('currentProjectName').textContent = projectName;
+    document.getElementById('newProjectName').value = projectName; // Pre-fill with current name
+    
+    // Clear any previous error messages
+    document.getElementById('renameProjectError').style.display = 'none';
+    document.getElementById('renameProjectError').textContent = '';
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('renameProjectModal'));
+    modal.show();
+    
+    // Focus on the input field and select all text
+    setTimeout(() => {
+        const input = document.getElementById('newProjectName');
+        input.focus();
+        input.select();
+    }, 100);
+}
+
+// Handle rename project form
+async function handleRenameProject() {
+    const projectId = document.getElementById('renameProjectId').value;
+    const newProjectName = document.getElementById('newProjectName').value.trim();
+    
+    if (!newProjectName) {
+        showRenameProjectError('Project name is required');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/project/${projectId}/rename`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name: newProjectName })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to rename project');
+        }
+        
+        const result = await response.json();
+        
+        // Hide the modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('renameProjectModal'));
+        modal.hide();
+        
+        // Reload participants to show the updated project name
+        await loadParticipants();
+        
+        showSuccess(`Project renamed to "${result.project_name}" successfully!`);
+        
+    } catch (error) {
+        console.error('Error renaming project:', error);
+        showRenameProjectError(error.message);
+    }
+}
+
+// Show error in rename project modal
+function showRenameProjectError(message) {
+    const errorDiv = document.getElementById('renameProjectError');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+    }
+}
+
+// Clear rename project error
+function clearRenameProjectError() {
+    const errorDiv = document.getElementById('renameProjectError');
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+    }
+}
+
 // Make additional functions available globally
 window.showChangeParticipantModal = showChangeParticipantModal;
 window.changeProjectParticipant = changeProjectParticipant;
@@ -768,3 +853,6 @@ window.handleConfigFileSelected = handleConfigFileSelected;
 window.showImportProjectModal = showImportProjectModal;
 window.handleImportProject = handleImportProject;
 window.clearImportProjectError = clearImportProjectError;
+window.showRenameProjectModal = showRenameProjectModal;
+window.handleRenameProject = handleRenameProject;
+window.clearRenameProjectError = clearRenameProjectError;
