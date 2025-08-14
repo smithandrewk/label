@@ -32,6 +32,68 @@ function updateVisualizationTitle(session) {
     }
 }
 
+function calculateVerificationPercentage() {
+    if (!sessions || sessions.length === 0) {
+        return 0;
+    }
+    
+    // Filter sessions that are kept (not discarded)
+    const activeSessions = sessions.filter(session => session.keep !== 0);
+    if (activeSessions.length === 0) {
+        return 0;
+    }
+    
+    // Count verified sessions
+    const verifiedSessions = activeSessions.filter(session => session.verified === 1 || session.verified === true);
+    
+    // Calculate percentage
+    const percentage = Math.round((verifiedSessions.length / activeSessions.length) * 100);
+    return percentage;
+}
+
+function updateVerificationPill() {
+    const percentage = calculateVerificationPercentage();
+    
+    // Update both pills (table view and visualization view)
+    const pillElements = [
+        document.getElementById('verification-percentage-pill'),
+        document.getElementById('verification-percentage-pill-viz')
+    ];
+    
+    pillElements.forEach(pillElement => {
+        if (pillElement) {
+            // Update pill content
+            pillElement.textContent = `Project ${percentage}% Verified`;
+            
+            // Update pill color based on percentage
+            if (pillElement.id === 'verification-percentage-pill-viz') {
+                // Visualization view pill with modern font
+                pillElement.className = 'badge me-2';
+                pillElement.style.fontFamily = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif';
+                pillElement.style.fontSize = '0.75rem';
+                pillElement.style.fontWeight = '500';
+                pillElement.style.display = 'inline-flex';
+                pillElement.style.alignItems = 'center';
+                pillElement.style.lineHeight = '1';
+            } else {
+                // Table view pill
+                pillElement.className = 'badge fs-6';
+                pillElement.style.display = 'inline-flex';
+                pillElement.style.alignItems = 'center';
+                pillElement.style.lineHeight = '1';
+            }
+            
+            if (percentage === 100) {
+                pillElement.classList.add('bg-success');
+            } else if (percentage >= 50) {
+                pillElement.classList.add('bg-warning');
+            } else {
+                pillElement.classList.add('bg-danger');
+            }
+        }
+    });
+}
+
 function checkUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const participantCode = urlParams.get('participant');
@@ -145,6 +207,9 @@ function updateSessionsList() {
 
         }
     });
+    
+    // Update verification percentage pill
+    updateVerificationPill();
 }
 async function pollScoringStatus(scoringId, sessionId, sessionName, deviceType = 'cpu') {
     const maxPolls = 120; // 2 minutes max
@@ -401,6 +466,9 @@ async function visualizeSession(sessionId) {
         labelingColor: currentLabelingJSON ? currentLabelingJSON.color : '#000000',
         boutCount: boutCount,
     });
+    
+    // Update verification percentage pill immediately after action buttons are created
+    updateVerificationPill();
     
     // Setup event listeners using the template handlers
     ActionButtonHandlers.setupVisualizationButtons({

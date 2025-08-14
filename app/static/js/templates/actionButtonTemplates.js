@@ -98,6 +98,7 @@ currentLabeling: (labelingName, labelingColor, boutCount) => `
         return [
             ActionButtonTemplates.modelStatusIndicator(),
             ActionButtonTemplates.currentLabeling(labelingName, labelingColor, boutCount),
+            '<span id="verification-percentage-pill-viz" class="badge bg-secondary me-2" style="font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, \'Noto Sans\', sans-serif; font-size: 0.75rem; font-weight: 500;">Project 0% Verified</span>',
             ActionButtonTemplates.darkModeButton(),
             ActionButtonTemplates.scoreButton(),
             ActionButtonTemplates.splitButton(isSplitting),
