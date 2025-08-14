@@ -70,7 +70,7 @@ function renderParticipants() {
     if (participants.length === 0) {
         tableBody.innerHTML = `
             <tr>
-                <td colspan="7" class="text-center py-5">
+                <td colspan="8" class="text-center py-5">
                     <i class="fa-solid fa-users fa-3x text-muted mb-3"></i>
                     <h4 class="text-muted">No Participants Found</h4>
                     <p class="text-muted">Add your first participant to get started.</p>
@@ -134,6 +134,15 @@ function renderParticipants() {
             </td>
             <td>
                 <span class="badge bg-success">${participant.total_sessions || 0}</span>
+            </td>
+            <td class="text-center">
+                <span class="badge great-puffs-badge ${participant.great_puffs ? 'bg-primary' : 'bg-secondary'}" 
+                      onclick="toggleGreatPuffs(${participant.participant_id}); return false;" 
+                      style="cursor: pointer; user-select: none;" 
+                      title="Click to toggle great puffs status">
+                    <i class="fa-solid fa-wind me-1"></i>
+                    ${participant.great_puffs ? 'Great Puffs' : 'No Rating'}
+                </span>
             </td>
             <td>
                 <small>${new Date(participant.created_at).toLocaleDateString()}</small>
@@ -336,11 +345,48 @@ function showSuccess(message) {
     alert(message);
 }
 
+// Toggle great puffs status for participant
+async function toggleGreatPuffs(participantId) {
+    const participant = participants.find(p => p.participant_id === participantId);
+    if (!participant) return;
+    
+    const newStatus = !participant.great_puffs;
+    
+    try {
+        const response = await fetch(`/api/participants/${participantId}/great-puffs`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ great_puffs: newStatus })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to update great puffs status');
+        }
+        
+        // Update local data
+        participant.great_puffs = newStatus;
+        
+        // Re-render participants to update the badge
+        renderParticipants();
+        
+        const statusText = newStatus ? 'marked as having great puffs' : 'rating removed';
+        showSuccess(`Participant ${participant.participant_code} ${statusText}!`);
+        
+    } catch (error) {
+        console.error('Error updating great puffs status:', error);
+        showError(error.message);
+    }
+}
+
 // Make functions available globally for onclick handlers
 window.editParticipant = editParticipant;
 window.deleteParticipant = deleteParticipant;
 window.viewProject = viewProject;
 window.createProjectForParticipant = createProjectForParticipant;
+window.toggleGreatPuffs = toggleGreatPuffs;
 
 // Show change participant modal
 async function showChangeParticipantModal(projectId, projectName, currentParticipantCode) {

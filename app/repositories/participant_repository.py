@@ -63,6 +63,25 @@ class ParticipantRepository(BaseRepository):
                 raise DatabaseError(f'Participant code "{participant_code}" already exists')
             raise e
     
+    def update_great_puffs(self, participant_id, great_puffs):
+        """Update participant's great puffs status"""
+        query = """
+            UPDATE participants 
+            SET great_puffs = %s
+            WHERE participant_id = %s
+        """
+        try:
+            rows_affected = self._execute_query(
+                query, 
+                (great_puffs, participant_id), 
+                commit=True
+            )
+            if rows_affected == 0:
+                raise DatabaseError('Participant not found')
+            return self.find_by_id(participant_id)
+        except DatabaseError as e:
+            raise e
+    
     def find_by_id(self, participant_id):
         """Find participant by ID"""
         query = "SELECT participant_id, participant_code FROM participants WHERE participant_id = %s"
@@ -79,6 +98,7 @@ class ParticipantRepository(BaseRepository):
                 pt.email, 
                 pt.notes,
                 pt.created_at,
+                pt.great_puffs,
                 COUNT(DISTINCT p.project_id) as project_count,
                 GROUP_CONCAT(DISTINCT p.project_name ORDER BY p.project_id SEPARATOR ', ') as project_names,
                 GROUP_CONCAT(DISTINCT p.project_id ORDER BY p.project_id SEPARATOR ',') as project_ids,
@@ -87,7 +107,7 @@ class ParticipantRepository(BaseRepository):
             LEFT JOIN projects p ON pt.participant_id = p.participant_id
             LEFT JOIN sessions s ON p.project_id = s.project_id 
                 AND (s.status != 'Split' OR s.status IS NULL)
-            GROUP BY pt.participant_id, pt.participant_code, pt.first_name, pt.last_name, pt.email, pt.notes, pt.created_at
+            GROUP BY pt.participant_id, pt.participant_code, pt.first_name, pt.last_name, pt.email, pt.notes, pt.created_at, pt.great_puffs
             ORDER BY pt.participant_code
         """
         return self._execute_query(query, fetch_all=True)

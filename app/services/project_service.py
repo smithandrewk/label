@@ -84,6 +84,14 @@ class ProjectService:
             'participant_code': result['participant_code']
         }
 
+    def update_participant_great_puffs(self, participant_id, great_puffs):
+        """Update a participant's great puffs status"""
+        result = self.participant_repo.update_great_puffs(participant_id, great_puffs)
+        return {
+            'participant_id': participant_id,
+            'great_puffs': great_puffs
+        }
+
     def get_participant_info(self, participant_id):
         """Get basic participant information"""
         return self.participant_repo.find_by_id(participant_id)

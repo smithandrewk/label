@@ -275,6 +275,30 @@ class ProjectController:
             logger.error(f"Error updating participant: {e}")
             return jsonify({'error': str(e)}), 500
 
+    def update_participant_great_puffs(self, participant_id):
+        try:
+            data = request.get_json()
+            great_puffs = data.get('great_puffs')
+            
+            if great_puffs is None:
+                return jsonify({'error': 'great_puffs field is required'}), 400
+            
+            try:
+                result = self.project_service.update_participant_great_puffs(participant_id, great_puffs)
+                return jsonify({
+                    'message': 'Great puffs status updated successfully',
+                    'participant_id': participant_id,
+                    'great_puffs': great_puffs
+                })
+            except DatabaseError as e:
+                if 'not found' in str(e):
+                    return jsonify({'error': str(e)}), 404
+                return jsonify({'error': str(e)}), 500
+                    
+        except Exception as e:
+            logger.error(f"Error updating participant great puffs status: {e}")
+            return jsonify({'error': str(e)}), 500
+
     def delete_participant(self, participant_id):
         try:
             try:
@@ -862,6 +886,10 @@ def update_participant(participant_id):
 @projects_bp.route('/api/participants/<int:participant_id>', methods=['DELETE'])
 def delete_participant(participant_id):
     return controller.delete_participant(participant_id)
+
+@projects_bp.route('/api/participants/<int:participant_id>/great-puffs', methods=['PUT'])
+def update_participant_great_puffs(participant_id):
+    return controller.update_participant_great_puffs(participant_id)
 
 @projects_bp.route('/api/project/<int:project_id>/participant', methods=['PUT'])
 def update_project_participant(project_id):
