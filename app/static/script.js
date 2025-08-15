@@ -32,27 +32,30 @@ function updateVisualizationTitle(session) {
     }
 }
 
-function calculateVerificationPercentage() {
+function calculateVerificationPercentages() {
     if (!sessions || sessions.length === 0) {
-        return 0;
+        return { puffs: 0, smoking: 0 };
     }
     
     // Filter sessions that are kept (not discarded)
     const activeSessions = sessions.filter(session => session.keep !== 0);
     if (activeSessions.length === 0) {
-        return 0;
+        return { puffs: 0, smoking: 0 };
     }
     
-    // Count verified sessions
-    const verifiedSessions = activeSessions.filter(session => session.verified === 1 || session.verified === true);
+    // Count verified sessions for each type
+    const puffsVerifiedSessions = activeSessions.filter(session => session.puffs_verified === 1 || session.puffs_verified === true);
+    const smokingVerifiedSessions = activeSessions.filter(session => session.smoking_verified === 1 || session.smoking_verified === true);
     
-    // Calculate percentage
-    const percentage = Math.round((verifiedSessions.length / activeSessions.length) * 100);
-    return percentage;
+    // Calculate percentages
+    const puffsPercentage = Math.round((puffsVerifiedSessions.length / activeSessions.length) * 100);
+    const smokingPercentage = Math.round((smokingVerifiedSessions.length / activeSessions.length) * 100);
+    
+    return { puffs: puffsPercentage, smoking: smokingPercentage };
 }
 
 function updateVerificationPill() {
-    const percentage = calculateVerificationPercentage();
+    const percentages = calculateVerificationPercentages();
     
     // Update both pills (table view and visualization view)
     const pillElements = [
@@ -62,8 +65,11 @@ function updateVerificationPill() {
     
     pillElements.forEach(pillElement => {
         if (pillElement) {
-            // Update pill content
-            pillElement.textContent = `Project ${percentage}% Verified`;
+            // Update pill content with dual percentages
+            pillElement.textContent = `Puffs ${percentages.puffs}% | Smoking ${percentages.smoking}%`;
+            
+            // Calculate average for color determination
+            const avgPercentage = Math.round((percentages.puffs + percentages.smoking) / 2);
             
             // Update pill color based on percentage
             if (pillElement.id === 'verification-percentage-pill-viz') {
@@ -83,9 +89,9 @@ function updateVerificationPill() {
                 pillElement.style.lineHeight = '1';
             }
             
-            if (percentage === 100) {
+            if (avgPercentage === 100) {
                 pillElement.classList.add('bg-success');
-            } else if (percentage >= 50) {
+            } else if (avgPercentage >= 50) {
                 pillElement.classList.add('bg-warning');
             } else {
                 pillElement.classList.add('bg-danger');
@@ -202,7 +208,8 @@ function updateSessionsList() {
             SessionListHandlers.setupTableRowHandlers(
                 sessionId, 
                 decideSession, 
-                toggleVerifiedStatus
+                togglePuffsVerifiedStatus,
+                toggleSmokingVerifiedStatus
             );
 
         }
@@ -461,7 +468,8 @@ async function visualizeSession(sessionId) {
     // Use template for action buttons
     actionButtons.innerHTML = ActionButtonTemplates.visualizationActionButtons({
         isSplitting: isSplitting,
-        isVerified: session.verified,
+        isPuffsVerified: session.puffs_verified,
+        isSmokingVerified: session.smoking_verified,
         labelingName: currentLabelingName,
         labelingColor: currentLabelingJSON ? currentLabelingJSON.color : '#000000',
         boutCount: boutCount,
@@ -474,7 +482,8 @@ async function visualizeSession(sessionId) {
     ActionButtonHandlers.setupVisualizationButtons({
         onDeleteBouts: () => deleteCurrentLabelingBouts(currentSessionId),
         onDelete: () => decideSession(currentSessionId, false),
-        onVerify: () => toggleVerifiedStatus(),
+        onVerifyPuffs: () => togglePuffsVerifiedStatus(),
+        onVerifySmoking: () => toggleSmokingVerifiedStatus(),
         onSplit: () => toggleSplitMode(),
         onScore: () => SessionController.scoreSession(currentSessionId, session.project_name, session.session_name),
         onDarkMode: () => toggleDarkMode(),
@@ -1444,7 +1453,7 @@ function toggleSplitMode() {
     const split_btn_overlay = document.getElementById('split-btn-overlay');
     split_btn_overlay.style.background = isSplitting ? 'rgba(224, 224, 224)' : 'rgba(0, 0, 0, 0)';
 }
-async function toggleVerifiedStatus(sessionId = null) {
+async function togglePuffsVerifiedStatus(sessionId = null) {
     // Get the session to toggle - use provided sessionId or current session
     let session;
     if (sessionId) {
@@ -1454,60 +1463,135 @@ async function toggleVerifiedStatus(sessionId = null) {
     }
     
     if (!session) {
-        console.error('No session found to toggle verified status');
+        console.error('No session found to toggle puffs verified status');
         return;
     }
     
-    // Get the verified button (try visualization view first, then table view)
-    let verified_btn_viz = document.getElementById('verified-btn-viz');
-    if (!verified_btn_viz) {
-        verified_btn_viz = document.getElementById(`verified-btn-${session.session_id}`);
+    // Get the puffs verified button (try visualization view first, then table view)
+    let puffs_btn_viz = document.getElementById('puffs-verified-btn-viz');
+    if (!puffs_btn_viz) {
+        puffs_btn_viz = document.getElementById(`puffs-verified-btn-${session.session_id}`);
     }
     
-    if (!verified_btn_viz) {
-        console.error('Verified button not found');
+    if (!puffs_btn_viz) {
+        console.error('Puffs verified button not found');
         return;
     }
     
-    // Toggle verified status
-    session.verified = session.verified ? 0 : 1;
+    // Toggle puffs verified status
+    session.puffs_verified = session.puffs_verified ? 0 : 1;
     
     // Update the visual state immediately
-    verified_btn_viz.style.color = session.verified ? '#28a745' : '#dee2e6';
+    puffs_btn_viz.style.color = session.puffs_verified ? '#28a745' : '#dee2e6';
     
     // Also update the button class in table view
-    if (verified_btn_viz.classList) {
-        if (session.verified) {
-            verified_btn_viz.classList.remove('btn-outline-secondary');
-            verified_btn_viz.classList.add('btn-success');
+    if (puffs_btn_viz.classList) {
+        if (session.puffs_verified) {
+            puffs_btn_viz.classList.remove('btn-outline-secondary');
+            puffs_btn_viz.classList.add('btn-success');
         } else {
-            verified_btn_viz.classList.remove('btn-success');
-            verified_btn_viz.classList.add('btn-outline-secondary');
+            puffs_btn_viz.classList.remove('btn-success');
+            puffs_btn_viz.classList.add('btn-outline-secondary');
         }
     }
     
     // Save to backend
     try {
         await SessionAPI.updateSessionMetadata(session);
-        console.log(`Session ${session.session_id} verified status updated to: ${session.verified}`);
+        console.log(`Session ${session.session_id} puffs verified status updated to: ${session.puffs_verified}`);
+        
+        // Update verification percentage pill
+        updateVerificationPill();
         
         // Also update the sessions list if we're in table view or sidebar
         updateSessionsList();
 
     } catch (error) {
-        console.error('Error updating verified status:', error);
+        console.error('Error updating puffs verified status:', error);
         // Revert the visual change on error
-        session.verified = session.verified ? 0 : 1;
-        verified_btn_viz.style.color = session.verified ? '#28a745' : '#dee2e6';
+        session.puffs_verified = session.puffs_verified ? 0 : 1;
+        puffs_btn_viz.style.color = session.puffs_verified ? '#28a745' : '#dee2e6';
         
         // Revert button class change
-        if (verified_btn_viz.classList) {
-            if (session.verified) {
-                verified_btn_viz.classList.remove('btn-outline-secondary');
-                verified_btn_viz.classList.add('btn-success');
+        if (puffs_btn_viz.classList) {
+            if (session.puffs_verified) {
+                puffs_btn_viz.classList.remove('btn-outline-secondary');
+                puffs_btn_viz.classList.add('btn-success');
             } else {
-                verified_btn_viz.classList.remove('btn-success');
-                verified_btn_viz.classList.add('btn-outline-secondary');
+                puffs_btn_viz.classList.remove('btn-success');
+                puffs_btn_viz.classList.add('btn-outline-secondary');
+            }
+        }
+    }
+}
+
+async function toggleSmokingVerifiedStatus(sessionId = null) {
+    // Get the session to toggle - use provided sessionId or current session
+    let session;
+    if (sessionId) {
+        session = SessionService.findSessionById(sessions, sessionId);
+    } else {
+        session = getCurrentSession();
+    }
+    
+    if (!session) {
+        console.error('No session found to toggle smoking verified status');
+        return;
+    }
+    
+    // Get the smoking verified button (try visualization view first, then table view)
+    let smoking_btn_viz = document.getElementById('smoking-verified-btn-viz');
+    if (!smoking_btn_viz) {
+        smoking_btn_viz = document.getElementById(`smoking-verified-btn-${session.session_id}`);
+    }
+    
+    if (!smoking_btn_viz) {
+        console.error('Smoking verified button not found');
+        return;
+    }
+    
+    // Toggle smoking verified status
+    session.smoking_verified = session.smoking_verified ? 0 : 1;
+    
+    // Update the visual state immediately
+    smoking_btn_viz.style.color = session.smoking_verified ? '#28a745' : '#dee2e6';
+    
+    // Also update the button class in table view
+    if (smoking_btn_viz.classList) {
+        if (session.smoking_verified) {
+            smoking_btn_viz.classList.remove('btn-outline-secondary');
+            smoking_btn_viz.classList.add('btn-success');
+        } else {
+            smoking_btn_viz.classList.remove('btn-success');
+            smoking_btn_viz.classList.add('btn-outline-secondary');
+        }
+    }
+    
+    // Save to backend
+    try {
+        await SessionAPI.updateSessionMetadata(session);
+        console.log(`Session ${session.session_id} smoking verified status updated to: ${session.smoking_verified}`);
+        
+        // Update verification percentage pill
+        updateVerificationPill();
+        
+        // Also update the sessions list if we're in table view or sidebar
+        updateSessionsList();
+
+    } catch (error) {
+        console.error('Error updating smoking verified status:', error);
+        // Revert the visual change on error
+        session.smoking_verified = session.smoking_verified ? 0 : 1;
+        smoking_btn_viz.style.color = session.smoking_verified ? '#28a745' : '#dee2e6';
+        
+        // Revert button class change
+        if (smoking_btn_viz.classList) {
+            if (session.smoking_verified) {
+                smoking_btn_viz.classList.remove('btn-outline-secondary');
+                smoking_btn_viz.classList.add('btn-success');
+            } else {
+                smoking_btn_viz.classList.remove('btn-success');
+                smoking_btn_viz.classList.add('btn-outline-secondary');
             }
         }
     }
@@ -2021,7 +2105,8 @@ window.scoreSession = SessionController.scoreSession;
 window.showTableView = showTableView;
 window.decideSession = decideSession;
 window.toggleSplitMode = toggleSplitMode;
-window.toggleVerifiedStatus = toggleVerifiedStatus;
+window.togglePuffsVerifiedStatus = togglePuffsVerifiedStatus;
+window.toggleSmokingVerifiedStatus = toggleSmokingVerifiedStatus;
 window.splitSession = splitSession;
 window.createNewBout = createNewBout;
 window.createNewProject = ProjectController.createNewProject;

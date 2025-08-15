@@ -15,16 +15,26 @@ export const SessionListTemplates = {
     `,
 
     /**
-     * Verified checkbox template for table rows
+     * Dual verified buttons template for table rows
      * @param {string} sessionId - The session ID
-     * @param {boolean} isVerified - Whether the session is verified
+     * @param {boolean} isPuffsVerified - Whether puffs are verified
+     * @param {boolean} isSmokingVerified - Whether smoking are verified
      */
-    tableVerifiedButton: (sessionId, isVerified = false) => `
-        <button class="btn btn-sm ${isVerified ? 'btn-success' : 'btn-outline-secondary'}" 
-                id="verified-btn-${sessionId}" 
-                title="${isVerified ? 'Verified' : 'Mark as Verified'}">
-            <i class="fa-solid fa-check"></i>
-        </button>
+    tableDualVerifiedButtons: (sessionId, isPuffsVerified = false, isSmokingVerified = false) => `
+        <div class="btn-group btn-group-sm" role="group">
+            <button class="btn ${isPuffsVerified ? 'btn-success' : 'btn-outline-secondary'}" 
+                    id="puffs-verified-btn-${sessionId}" 
+                    title="${isPuffsVerified ? 'Puffs Verified' : 'Mark Puffs as Verified'}"
+                    style="border-radius: 4px 0 0 4px;">
+                <i class="fa-solid fa-wind"></i>
+            </button>
+            <button class="btn ${isSmokingVerified ? 'btn-success' : 'btn-outline-secondary'}" 
+                    id="smoking-verified-btn-${sessionId}" 
+                    title="${isSmokingVerified ? 'Smoking Verified' : 'Mark Smoking as Verified'}"
+                    style="border-radius: 0 4px 4px 0;">
+                <i class="fa-solid fa-smoking"></i>
+            </button>
+        </div>
     `,
 
     /**
@@ -32,7 +42,7 @@ export const SessionListTemplates = {
      * @param {Object} session - Session object
      */
     tableRow: (session) => {
-        const { session_id: sessionId, session_name, project_name, status, label, keep, verified } = session;
+        const { session_id: sessionId, session_name, project_name, status, label, keep, puffs_verified, smoking_verified } = session;
         
         // Create status badge based on status
         let statusBadge = '';
@@ -58,7 +68,7 @@ export const SessionListTemplates = {
             <td><strong>${session_name}</strong></td>
             <td class="text-muted">${project_name || '-'}</td>
             <td>${statusBadge}</td>
-            <td>${SessionListTemplates.tableVerifiedButton(sessionId, verified)}</td>
+            <td>${SessionListTemplates.tableDualVerifiedButtons(sessionId, puffs_verified, smoking_verified)}</td>
             <td>
                 <div class="btn-group" role="group">
                     <button class="btn btn-sm btn-primary" onclick="visualizeSession('${sessionId}')" title="View Session">
@@ -125,31 +135,40 @@ export const SessionListHandlers = {
     },
 
     /**
-     * Setup event listeners for table row verified button
+     * Setup event listeners for table row dual verified buttons
      * @param {string} sessionId - The session ID
-     * @param {Function} onVerify - Verify callback function
+     * @param {Function} onVerifyPuffs - Verify puffs callback function
+     * @param {Function} onVerifySmoking - Verify smoking callback function
      */
-    setupTableVerifiedButton: (sessionId, onVerify) => {
-        const verified_btn = document.getElementById(`verified-btn-${sessionId}`);
+    setupTableDualVerifiedButtons: (sessionId, onVerifyPuffs, onVerifySmoking) => {
+        const puffs_btn = document.getElementById(`puffs-verified-btn-${sessionId}`);
+        const smoking_btn = document.getElementById(`smoking-verified-btn-${sessionId}`);
 
-        if (!verified_btn) return;
-        
-        // Click handling
-        verified_btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (onVerify) onVerify(sessionId);
-        });
+        if (puffs_btn) {
+            puffs_btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (onVerifyPuffs) onVerifyPuffs(sessionId);
+            });
+        }
+
+        if (smoking_btn) {
+            smoking_btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (onVerifySmoking) onVerifySmoking(sessionId);
+            });
+        }
     },
 
     /**
      * Setup all event listeners for a session table row
      * @param {string} sessionId - The session ID
      * @param {Function} onDelete - Delete callback function
-     * @param {Function} onVerify - Verify callback function
+     * @param {Function} onVerifyPuffs - Verify puffs callback function
+     * @param {Function} onVerifySmoking - Verify smoking callback function
      */
-    setupTableRowHandlers: (sessionId, onDelete, onVerify) => {
+    setupTableRowHandlers: (sessionId, onDelete, onVerifyPuffs, onVerifySmoking) => {
         SessionListHandlers.setupTableTrashButton(sessionId, onDelete);
-        SessionListHandlers.setupTableVerifiedButton(sessionId, onVerify);
+        SessionListHandlers.setupTableDualVerifiedButtons(sessionId, onVerifyPuffs, onVerifySmoking);
     }
 };
 

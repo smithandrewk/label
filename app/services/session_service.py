@@ -536,7 +536,7 @@ class SessionService:
             cursor.close()
             conn.close()
     
-    def update_session(self, session_id, status, keep, bouts, verified):
+    def update_session(self, session_id, status, keep, bouts, verified, puffs_verified=None, smoking_verified=None):
         """Update session data including status, keep flag, bouts, and verified status"""
         conn = self.get_db_connection()
         if conn is None:
@@ -544,14 +544,39 @@ class SessionService:
         
         cursor = conn.cursor()
         try:
-            cursor.execute("""
-                UPDATE sessions
-                SET status = %s, keep = %s, bouts = %s, verified = %s
-                WHERE session_id = %s
-            """, (status, keep, bouts, verified, session_id))
+            # Build dynamic query to only update provided fields
+            update_fields = []
+            values = []
             
-            rows_affected = cursor.rowcount
-            conn.commit()
+            if status is not None:
+                update_fields.append("status = %s")
+                values.append(status)
+            if keep is not None:
+                update_fields.append("keep = %s")
+                values.append(keep)
+            if bouts is not None:
+                update_fields.append("bouts = %s")
+                values.append(bouts)
+            if verified is not None:
+                update_fields.append("verified = %s")
+                values.append(verified)
+            if puffs_verified is not None:
+                update_fields.append("puffs_verified = %s")
+                values.append(puffs_verified)
+            if smoking_verified is not None:
+                update_fields.append("smoking_verified = %s")
+                values.append(smoking_verified)
+            
+            values.append(session_id)
+            
+            if update_fields:
+                query = f"UPDATE sessions SET {', '.join(update_fields)} WHERE session_id = %s"
+                cursor.execute(query, values)
+                
+                rows_affected = cursor.rowcount
+                conn.commit()
+            else:
+                rows_affected = 0
             return rows_affected
         except Exception as e:
             conn.rollback()

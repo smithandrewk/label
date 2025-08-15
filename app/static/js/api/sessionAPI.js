@@ -76,6 +76,8 @@ export class SessionAPI {
                     status: session.status,
                     keep: session.keep,
                     verified: session.verified || 0,
+                    puffs_verified: session.puffs_verified || 0,
+                    smoking_verified: session.smoking_verified || 0,
                     bouts: JSON.stringify(session.bouts || [])
                 })
             });

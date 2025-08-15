@@ -208,10 +208,12 @@ class SessionController:
             keep = data.get('keep')
             bouts = data.get('bouts')
             verified = data.get('verified')
+            puffs_verified = data.get('puffs_verified')
+            smoking_verified = data.get('smoking_verified')
             
             try:
-                print(f"Updating session {session_id} with status={status}, keep={keep}, bouts={bouts}, verified={verified}")
-                rows_affected = self.session_service.update_session(session_id, status, keep, bouts, verified)
+                print(f"Updating session {session_id} with status={status}, keep={keep}, bouts={bouts}, verified={verified}, puffs_verified={puffs_verified}, smoking_verified={smoking_verified}")
+                rows_affected = self.session_service.update_session(session_id, status, keep, bouts, verified, puffs_verified, smoking_verified)
                 
             except DatabaseError as e:
                 return jsonify({'error': str(e)}), 500

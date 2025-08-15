@@ -71,12 +71,16 @@ currentLabeling: (labelingName, labelingColor, boutCount) => `
     `,
 
     /**
-     * Verified status button template
-     * @param {boolean} isVerified - Whether the session is verified
+     * Dual verified status buttons template
+     * @param {boolean} isPuffsVerified - Whether puffs are verified
+     * @param {boolean} isSmokingVerified - Whether smoking is verified
      */
-    verifiedButton: (isVerified = false) => `
-        <span id="verified-btn-overlay-viz" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer; margin-left: 8px;">
-            <i id="verified-btn-viz" class="fa-solid fa-check" style="color: ${isVerified ? '#28a745' : '#dee2e6'}; font-size: 18px;"></i>
+    verifiedButtons: (isPuffsVerified = false, isSmokingVerified = false) => `
+        <span id="puffs-verified-btn-overlay-viz" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer; margin-left: 8px;" title="Verify Puffs">
+            <i id="puffs-verified-btn-viz" class="fa-solid fa-wind" style="color: ${isPuffsVerified ? '#28a745' : '#dee2e6'}; font-size: 16px;"></i>
+        </span>
+        <span id="smoking-verified-btn-overlay-viz" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(224,224,224,0); cursor: pointer; margin-left: 4px;" title="Verify Smoking">
+            <i id="smoking-verified-btn-viz" class="fa-solid fa-smoking" style="color: ${isSmokingVerified ? '#28a745' : '#dee2e6'}; font-size: 16px;"></i>
         </span>
     `,
 
@@ -92,19 +96,20 @@ currentLabeling: (labelingName, labelingColor, boutCount) => `
      * Complete action buttons container for visualization view
      * @param {Object} options - Configuration options
      * @param {boolean} options.isSplitting - Whether splitting mode is active
-     * @param {boolean} options.isVerified - Whether the session is verified
+     * @param {boolean} options.isPuffsVerified - Whether puffs are verified
+     * @param {boolean} options.isSmokingVerified - Whether smoking is verified
      */
-    visualizationActionButtons: ({ isSplitting = false, isVerified = false, labelingName = "No Labeling", labelingColor = "#000000", boutCount } = {}) => {
+    visualizationActionButtons: ({ isSplitting = false, isPuffsVerified = false, isSmokingVerified = false, labelingName = "No Labeling", labelingColor = "#000000", boutCount } = {}) => {
         return [
             ActionButtonTemplates.modelStatusIndicator(),
             ActionButtonTemplates.currentLabeling(labelingName, labelingColor, boutCount),
-            '<span id="verification-percentage-pill-viz" class="badge bg-secondary me-2" style="font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, \'Noto Sans\', sans-serif; font-size: 0.75rem; font-weight: 500;">Project 0% Verified</span>',
+            '<span id="verification-percentage-pill-viz" class="badge bg-secondary me-2" style="font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, \'Noto Sans\', sans-serif; font-size: 0.75rem; font-weight: 500;">Puffs 0% | Smoking 0%</span>',
             ActionButtonTemplates.darkModeButton(),
             ActionButtonTemplates.scoreButton(),
             ActionButtonTemplates.splitButton(isSplitting),
             ActionButtonTemplates.deleteBoutButton(),
             ActionButtonTemplates.deleteButton(),
-            ActionButtonTemplates.verifiedButton(isVerified)
+            ActionButtonTemplates.verifiedButtons(isPuffsVerified, isSmokingVerified)
         ].join('');
     }
 };
@@ -118,21 +123,22 @@ export const ActionButtonHandlers = {
      * @param {Object} options - Configuration options
      * @param {Function} options.onDeleteBouts - Delete Bouts callback function
      * @param {Function} options.onDelete - Delete callback function
-     * @param {Function} options.onVerify - Verify callback function
+     * @param {Function} options.onVerifyPuffs - Verify puffs callback function
+     * @param {Function} options.onVerifySmoking - Verify smoking callback function
      * @param {Function} options.onSplit - Split toggle callback function
      * @param {Function} options.onScore - Score callback function
      * @param {Function} options.onDarkMode - darkmode callback function
      * @param {boolean} options.isSplitting - Current splitting state
      */
-    setupVisualizationButtons: ({ onDeleteBouts, onDelete, onVerify, onSplit, onScore, onDarkMode, onLabeling, isSplitting = false } = {}) => {
+    setupVisualizationButtons: ({ onDeleteBouts, onDelete, onVerifyPuffs, onVerifySmoking, onSplit, onScore, onDarkMode, onLabeling, isSplitting = false } = {}) => {
         // Setup delete bout button with confirmation
         ActionButtonHandlers.setupDeleteBoutButton(onDeleteBouts);
 
         // Setup delete button with confirmation
         ActionButtonHandlers.setupDeleteButton(onDelete);
 
-        // Setup verified button
-        ActionButtonHandlers.setupVerifiedButton(onVerify);
+        // Setup dual verified buttons
+        ActionButtonHandlers.setupVerifiedButtons(onVerifyPuffs, onVerifySmoking);
         
         // Setup split button
         ActionButtonHandlers.setupSplitButton(onSplit, isSplitting);
@@ -279,27 +285,47 @@ export const ActionButtonHandlers = {
     },
 
     /**
-     * Setup verified button
-     * @param {Function} onVerify - Verify callback function
+     * Setup dual verified buttons
+     * @param {Function} onVerifyPuffs - Verify puffs callback function
+     * @param {Function} onVerifySmoking - Verify smoking callback function
      */
-    setupVerifiedButton: (onVerify) => {
-        const verified_btn_overlay = document.getElementById('verified-btn-overlay-viz');
+    setupVerifiedButtons: (onVerifyPuffs, onVerifySmoking) => {
+        const puffs_btn_overlay = document.getElementById('puffs-verified-btn-overlay-viz');
+        const smoking_btn_overlay = document.getElementById('smoking-verified-btn-overlay-viz');
 
-        if (!verified_btn_overlay) return;
+        // Setup puffs verification button
+        if (puffs_btn_overlay) {
+            // Hover effects
+            puffs_btn_overlay.addEventListener('mouseenter', () => {
+                puffs_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+            });
+            
+            puffs_btn_overlay.addEventListener('mouseleave', () => {
+                puffs_btn_overlay.style.background = 'rgba(224,224,224,0)';
+            });
+            
+            // Click handling
+            puffs_btn_overlay.addEventListener('click', () => {
+                if (onVerifyPuffs) onVerifyPuffs();
+            });
+        }
 
-        // Hover effects
-        verified_btn_overlay.addEventListener('mouseenter', () => {
-            verified_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
-        });
-        
-        verified_btn_overlay.addEventListener('mouseleave', () => {
-            verified_btn_overlay.style.background = 'rgba(224,224,224,0)';
-        });
-        
-        // Click handling
-        verified_btn_overlay.addEventListener('click', () => {
-            if (onVerify) onVerify();
-        });
+        // Setup smoking verification button
+        if (smoking_btn_overlay) {
+            // Hover effects
+            smoking_btn_overlay.addEventListener('mouseenter', () => {
+                smoking_btn_overlay.style.background = 'rgba(0,0,0,0.1)';
+            });
+            
+            smoking_btn_overlay.addEventListener('mouseleave', () => {
+                smoking_btn_overlay.style.background = 'rgba(224,224,224,0)';
+            });
+            
+            // Click handling
+            smoking_btn_overlay.addEventListener('click', () => {
+                if (onVerifySmoking) onVerifySmoking();
+            });
+        }
     },
 
     /**
