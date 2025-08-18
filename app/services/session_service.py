@@ -425,6 +425,7 @@ class SessionService:
                 # Get sessions for a specific project
                 cursor.execute(f"""
                     SELECT s.session_id, s.session_name, s.status, s.keep, s.verified,
+                        s.puffs_verified, s.smoking_verified,
                         p.project_name, p.project_id, part.participant_code
                     FROM sessions s
                     JOIN projects p ON s.project_id = p.project_id
@@ -436,6 +437,7 @@ class SessionService:
                 # Get all sessions
                 cursor.execute(f"""
                     SELECT s.session_id, s.session_name, s.status, s.keep, s.verified,
+                        s.puffs_verified, s.smoking_verified,
                         p.project_name, p.project_id, part.participant_code
                     FROM sessions s
                     JOIN projects p ON s.project_id = p.project_id
@@ -460,6 +462,7 @@ class SessionService:
         try:
             cursor.execute("""
                 SELECT s.session_id, s.session_name, s.status, s.keep, s.verified, s.bouts,
+                    s.puffs_verified, s.smoking_verified,
                     s.start_ns, s.stop_ns, s.dataset_id, s.raw_session_name,
                     p.project_id, p.project_name, p.path AS project_path
                 FROM sessions s
@@ -735,11 +738,12 @@ class SessionService:
                     data_start_offset = session_data.get('data_start_offset')
                     data_end_offset = session_data.get('data_end_offset')
                     
-                    # Insert virtual split session
+                    # Insert virtual split session, preserving verification states from parent
                     cursor.execute("""
                         INSERT INTO sessions (project_id, session_name, status, keep, bouts, start_ns, stop_ns,
-                                            parent_session_data_path, data_start_offset, data_end_offset)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                            parent_session_data_path, data_start_offset, data_end_offset,
+                                            verified, puffs_verified, smoking_verified)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (
                         session_info['project_id'], 
                         session_data['name'], 
@@ -750,7 +754,10 @@ class SessionService:
                         stop_ns,
                         parent_data_path,
                         data_start_offset,
-                        data_end_offset
+                        data_end_offset,
+                        session_info.get('verified', 0),
+                        session_info.get('puffs_verified', 0),
+                        session_info.get('smoking_verified', 0)
                     ))
                     # Get the new session ID
                     child_id = cursor.lastrowid
