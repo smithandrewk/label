@@ -5,6 +5,7 @@
  * - 'l': Navigate to next labeling (with wraparound)
  * - 'k': Navigate to previous labeling (with wraparound)
  * - 's': Toggle split mode
+ * - 'v': Toggle smoking verified status
  * - 'r': Create new bout
  * - 'b': Score visible range with selected model
  * - 'f': Fullscreen/zoom out to show all data

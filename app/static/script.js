@@ -1597,6 +1597,11 @@ async function toggleSmokingVerifiedStatus(sessionId = null) {
     }
 }
 
+window.toggleVerifiedStatus = async function() {
+    // Toggle smoking verification status (v key shortcut)
+    await toggleSmokingVerifiedStatus();
+}
+
 function getCurrentSession() {
     return SessionService.findSessionById(sessions, currentSessionId);
 }
