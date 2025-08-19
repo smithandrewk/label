@@ -658,6 +658,88 @@ class SessionService:
             cursor.close()
             conn.close()
 
+    def remove_session_bouts_by_labeling_name(self, project_id, labeling_name):
+        """Remove all session bouts that use a specific labeling name
+        
+        Args:
+            project_id: ID of the project containing the sessions
+            labeling_name: Labeling name to remove bouts for
+            
+        Returns:
+            dict: Summary of removal operation including counts
+        """
+        conn = self.get_db_connection()
+        if conn is None:
+            raise DatabaseError('Database connection failed')
+        
+        cursor = conn.cursor(dictionary=True)
+        try:
+            # Get all sessions for this project that have bouts
+            cursor.execute("""
+                SELECT session_id, bouts 
+                FROM sessions 
+                WHERE project_id = %s AND bouts IS NOT NULL AND bouts != '[]'
+            """, (project_id,))
+            
+            sessions_to_update = cursor.fetchall()
+            updated_sessions = 0
+            total_bouts_removed = 0
+            
+            for session_row in sessions_to_update:
+                session_id = session_row['session_id']
+                bouts_json = session_row['bouts']
+                
+                if not bouts_json:
+                    continue
+                    
+                try:
+                    # Parse the bouts JSON
+                    bouts = json.loads(bouts_json)
+                    if not isinstance(bouts, list):
+                        continue
+                    
+                    # Count bouts before removal
+                    original_count = len(bouts)
+                    
+                    # Remove bouts that have the specified labeling name
+                    filtered_bouts = []
+                    for bout in bouts:
+                        if isinstance(bout, dict) and bout.get('label') == labeling_name:
+                            # Skip this bout (effectively removing it)
+                            total_bouts_removed += 1
+                        else:
+                            filtered_bouts.append(bout)
+                    
+                    # If we removed any bouts, update the session
+                    if len(filtered_bouts) != original_count:
+                        updated_bouts_json = json.dumps(filtered_bouts)
+                        cursor.execute("""
+                            UPDATE sessions 
+                            SET bouts = %s 
+                            WHERE session_id = %s
+                        """, (updated_bouts_json, session_id))
+                        updated_sessions += 1
+                        
+                except json.JSONDecodeError:
+                    # Skip sessions with invalid JSON
+                    logger.warning(f'Invalid bouts JSON for session {session_id}, skipping')
+                    continue
+            
+            conn.commit()
+            logger.info(f'Removed {total_bouts_removed} bouts with labeling "{labeling_name}" from {updated_sessions} sessions')
+            
+            return {
+                'sessions_updated': updated_sessions,
+                'bouts_removed': total_bouts_removed
+            }
+            
+        except Exception as e:
+            conn.rollback()
+            raise DatabaseError(f'Failed to remove session bouts by labeling name: {str(e)}')
+        finally:
+            cursor.close()
+            conn.close()
+
     def delete_session_lineage_by_project(self, project_id):
         """Delete all session lineage records for sessions in a project"""
         conn = self.get_db_connection()

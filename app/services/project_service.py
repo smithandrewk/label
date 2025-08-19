@@ -349,17 +349,39 @@ class ProjectService:
         return self.project_repo.delete_labeling(project_id, labeling_name)
 
     def permanently_delete_labeling(self, project_id, labeling_name):
-        """Permanently delete a labeling from a project
+        """Permanently delete a labeling from a project and all associated bouts
         
         Args:
             project_id: ID of the project containing the labeling
             labeling_name: Name of the labeling to permanently delete
             
         Returns:
-            dict: Status and message indicating success or failure
+            dict: Status and message indicating success or failure with bout removal stats
         """
         logger.info(f'Permanently deleting labeling "{labeling_name}" from project {project_id}')
-        return self.project_repo.permanently_delete_labeling(project_id, labeling_name)
+        
+        # First, remove all bouts with this labeling name from all sessions in the project
+        bout_removal_result = None
+        if self.session_service:
+            try:
+                bout_removal_result = self.session_service.remove_session_bouts_by_labeling_name(project_id, labeling_name)
+                logger.info(f'Removed {bout_removal_result["bouts_removed"]} bouts from {bout_removal_result["sessions_updated"]} sessions')
+            except Exception as e:
+                logger.error(f'Failed to remove bouts for labeling "{labeling_name}": {str(e)}')
+                # Continue with labeling deletion even if bout removal fails
+                bout_removal_result = {'sessions_updated': 0, 'bouts_removed': 0, 'error': str(e)}
+        
+        # Then, remove the labeling from the project
+        labeling_result = self.project_repo.permanently_delete_labeling(project_id, labeling_name)
+        
+        # Combine results
+        if bout_removal_result:
+            labeling_result['sessions_updated'] = bout_removal_result['sessions_updated']
+            labeling_result['bouts_removed'] = bout_removal_result['bouts_removed']
+            if 'error' in bout_removal_result:
+                labeling_result['bout_removal_error'] = bout_removal_result['error']
+        
+        return labeling_result
 
     def discover_project_sessions(self, project_path):
         """

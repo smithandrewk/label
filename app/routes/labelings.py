@@ -210,14 +210,29 @@ class LabelController:
             if not labeling_name:
                 return jsonify({"error": "Labeling name cannot be empty"}), 400
             
-            # Permanently delete the labeling
+            # Permanently delete the labeling and associated bouts
             result = self.project_service.permanently_delete_labeling(project_id, labeling_name)
             
-            return jsonify({
+            # Create detailed message including bout removal info
+            message = f"Labeling '{labeling_name}' permanently deleted successfully"
+            if 'bouts_removed' in result and result['bouts_removed'] > 0:
+                message += f" (removed {result['bouts_removed']} bouts from {result['sessions_updated']} sessions)"
+            
+            response_data = {
                 "status": "success",
-                "message": f"Labeling '{labeling_name}' permanently deleted successfully",
+                "message": message,
                 "labeling_name": labeling_name
-            }), 200
+            }
+            
+            # Include bout removal statistics in response
+            if 'bouts_removed' in result:
+                response_data['bouts_removed'] = result['bouts_removed']
+                response_data['sessions_updated'] = result['sessions_updated']
+            
+            if 'bout_removal_error' in result:
+                response_data['bout_removal_error'] = result['bout_removal_error']
+            
+            return jsonify(response_data), 200
             
         except DatabaseError as e:
             logging.error(f"Database error: {str(e)}")

@@ -753,7 +753,7 @@ async function permanentlyDeleteLabeling(labelingName) {
     console.log(`Permanently deleting labeling: ${labelingName}`);
     
     // Confirm with user since this is irreversible
-    const confirmed = confirm(`Are you sure you want to PERMANENTLY delete the labeling "${labelingName}"? This action cannot be undone and will remove all associated bouts.`);
+    const confirmed = confirm(`Are you sure you want to PERMANENTLY delete the labeling "${labelingName}"? This action cannot be undone and will remove the labeling AND all bouts with this label from all sessions in the project.`);
     
     if (!confirmed) {
         return;
@@ -767,7 +767,13 @@ async function permanentlyDeleteLabeling(labelingName) {
         // Refresh the labelings display to reflect the permanent deletion
         await ProjectController.fetchAndDisplayLabelings(window.currentProjectId);
         
-        alert(`Labeling "${labelingName}" has been permanently deleted.`);
+        // Show detailed success message
+        let successMessage = result.message || `Labeling "${labelingName}" has been permanently deleted.`;
+        if (result.bout_removal_error) {
+            successMessage += `\n\nNote: There was an issue removing some bouts: ${result.bout_removal_error}`;
+        }
+        
+        alert(successMessage);
         
     } catch (error) {
         console.error('Error permanently deleting labeling:', error);
