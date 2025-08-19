@@ -755,12 +755,14 @@ export const ActionButtonHandlers = {
         const modal = document.getElementById('moveVisibleRangeBoutsModal');
         const labelingButtons = modal.querySelectorAll('[data-labeling]');
         
+        // Create modal instance once and reuse it
+        const bsModal = new bootstrap.Modal(modal);
+        
         labelingButtons.forEach(button => {
             button.addEventListener('click', (e) => {
                 const targetLabeling = e.currentTarget.dataset.labeling;
                 
-                // Close modal first
-                const bsModal = new bootstrap.Modal(modal);
+                // Close modal using the same instance
                 bsModal.hide();
                 
                 // Execute the move
@@ -769,7 +771,6 @@ export const ActionButtonHandlers = {
         });
 
         // Show the modal
-        const bsModal = new bootstrap.Modal(modal);
         bsModal.show();
 
         // Clean up when modal is closed
