@@ -139,6 +139,9 @@ function renderParticipants() {
                 <span class="badge bg-success">${participant.total_sessions || 0}</span>
             </td>
             <td class="text-center">
+                ${renderVerificationStatus(participant)}
+            </td>
+            <td class="text-center">
                 <span class="badge great-puffs-badge ${participant.great_puffs ? 'bg-primary' : 'bg-secondary'}" 
                       onclick="toggleGreatPuffs(${participant.participant_id}); return false;" 
                       style="cursor: pointer; user-select: none;" 
@@ -165,6 +168,41 @@ function renderParticipants() {
             </td>
         </tr>
     `).join('');
+}
+
+// Render verification status for a participant
+function renderVerificationStatus(participant) {
+    if (!participant.project_verification_status || !participant.project_ids || participant.project_ids.length === 0) {
+        return '<span class="text-muted small">No projects</span>';
+    }
+
+    const verificationStatuses = [];
+    const projectNames = participant.project_names ? participant.project_names.split(', ') : [];
+    
+    participant.project_ids.forEach((projectId, index) => {
+        const projectName = projectNames[index] || `Project ${projectId}`;
+        const status = participant.project_verification_status[projectId];
+        
+        if (status) {
+            const badgeClass = status.all_verified ? 'bg-success' : 'bg-warning';
+            const icon = status.all_verified ? 'fa-check-circle' : 'fa-exclamation-triangle';
+            const title = `${projectName}: ${status.verified_count}/${status.total_count} sessions verified (${status.percentage}%)`;
+            
+            verificationStatuses.push(`
+                <span class="badge ${badgeClass} me-1" title="${title}">
+                    <i class="fa-solid ${icon} me-1"></i>${status.percentage}%
+                </span>
+            `);
+        } else {
+            verificationStatuses.push(`
+                <span class="badge bg-secondary me-1" title="${projectName}: No sessions">
+                    <i class="fa-solid fa-minus me-1"></i>0%
+                </span>
+            `);
+        }
+    });
+    
+    return verificationStatuses.join('');
 }
 
 // Handle create participant form submission

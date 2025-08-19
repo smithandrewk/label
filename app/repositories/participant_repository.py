@@ -110,7 +110,54 @@ class ParticipantRepository(BaseRepository):
             GROUP BY pt.participant_id, pt.participant_code, pt.first_name, pt.last_name, pt.email, pt.notes, pt.created_at, pt.great_puffs
             ORDER BY pt.participant_code
         """
-        return self._execute_query(query, fetch_all=True)
+        participants = self._execute_query(query, fetch_all=True)
+        
+        # Get verification status for each project
+        for participant in participants:
+            if participant['project_ids']:
+                participant['project_verification_status'] = self._get_project_verification_status(participant['project_ids'])
+            else:
+                participant['project_verification_status'] = {}
+                
+        return participants
+    
+    def _get_project_verification_status(self, project_ids_str):
+        """Get verification status for each project based on whether all sessions have 100% smoking verification"""
+        if not project_ids_str:
+            return {}
+            
+        project_ids = [int(id.strip()) for id in project_ids_str.split(',')]
+        verification_status = {}
+        
+        for project_id in project_ids:
+            # Check if all sessions in this project have 100% smoking verification
+            query = """
+                SELECT 
+                    COUNT(*) as total_sessions,
+                    COUNT(CASE WHEN (smoking_verified = 1 OR smoking_verified = 100) THEN 1 END) as verified_sessions
+                FROM sessions 
+                WHERE project_id = %s 
+                    AND (keep != 0 OR keep IS NULL)
+                    AND (status != 'Split' OR status IS NULL)
+            """
+            result = self._execute_query(query, (project_id,), fetch_one=True)
+            
+            if result and result['total_sessions'] > 0:
+                verification_status[project_id] = {
+                    'all_verified': result['total_sessions'] == result['verified_sessions'],
+                    'verified_count': result['verified_sessions'],
+                    'total_count': result['total_sessions'],
+                    'percentage': round((result['verified_sessions'] / result['total_sessions']) * 100, 1)
+                }
+            else:
+                verification_status[project_id] = {
+                    'all_verified': False,
+                    'verified_count': 0,
+                    'total_count': 0,
+                    'percentage': 0
+                }
+        
+        return verification_status
     
     def count_projects(self, participant_id):
         """Count projects for a participant"""
