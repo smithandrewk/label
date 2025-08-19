@@ -1151,6 +1151,68 @@ function showBoutContextMenu(event, boutIndex) {
     moveToItem.appendChild(submenu);
     contextMenu.appendChild(moveToItem);
 
+    // Create "Move all visible range bouts to" submenu item
+    const moveAllVisibleItem = document.createElement('div');
+    moveAllVisibleItem.className = 'dropdown-item dropdown-toggle';
+    moveAllVisibleItem.innerHTML = '<i class="bi bi-collection me-2"></i>Move all visible range bouts to';
+    moveAllVisibleItem.style.cursor = 'pointer';
+
+    // Create submenu container for bulk move
+    const bulkSubmenu = document.createElement('div');
+    bulkSubmenu.className = 'dropdown-menu';
+    bulkSubmenu.style.position = 'absolute';
+    bulkSubmenu.style.left = '100%';
+    bulkSubmenu.style.top = '0';
+    bulkSubmenu.style.display = 'none';
+
+    // Populate bulk move submenu with available labelings
+    if (currentProjectId && labelings) {
+        labelings.forEach(labeling => {
+            // Skip current labeling
+            if (labeling.name === currentBout.label) {
+                return;
+            }
+
+            const bulkLabelingItem = document.createElement('a');
+            bulkLabelingItem.className = 'dropdown-item d-flex align-items-center';
+            bulkLabelingItem.href = '#';
+            bulkLabelingItem.innerHTML = `
+                <div class="labeling-color-indicator me-2" style="width: 12px; height: 12px; background-color: ${labeling.color}; border-radius: 2px;"></div>
+                <span>${labeling.name}</span>
+            `;
+            
+            bulkLabelingItem.addEventListener('click', (e) => {
+                e.preventDefault();
+                moveAllVisibleRangeBoutsToLabeling(labeling.name);
+                contextMenu.remove();
+            });
+
+            bulkSubmenu.appendChild(bulkLabelingItem);
+        });
+    }
+
+    // Show/hide bulk submenu on hover
+    moveAllVisibleItem.addEventListener('mouseenter', () => {
+        bulkSubmenu.style.display = 'block';
+    });
+
+    moveAllVisibleItem.addEventListener('mouseleave', (e) => {
+        // Only hide if not moving to submenu
+        setTimeout(() => {
+            if (!bulkSubmenu.matches(':hover') && !moveAllVisibleItem.matches(':hover')) {
+                bulkSubmenu.style.display = 'none';
+            }
+        }, 100);
+    });
+
+    bulkSubmenu.addEventListener('mouseleave', () => {
+        bulkSubmenu.style.display = 'none';
+    });
+
+    // Append bulk submenu to move all visible item
+    moveAllVisibleItem.appendChild(bulkSubmenu);
+    contextMenu.appendChild(moveAllVisibleItem);
+
     // Add separator
     const separator = document.createElement('hr');
     separator.className = 'dropdown-divider';
@@ -1253,6 +1315,96 @@ async function moveBoutToLabeling(boutIndex, targetLabelingName) {
         // Revert the change
         bout.label = originalLabeling;
         alert('Failed to move bout. Please try again.');
+    }
+}
+
+// Move all bouts in visible range to different labeling
+async function moveAllVisibleRangeBoutsToLabeling(targetLabelingName) {
+    if (!dragContext.currentSession?.bouts) {
+        console.error('No session or bouts found');
+        return;
+    }
+
+    // Get current visible range
+    const plotDiv = document.getElementById('timeSeriesPlot');
+    if (!plotDiv || !plotDiv._fullLayout || !plotDiv._fullLayout.xaxis) {
+        console.error('Plot not available - cannot determine visible range');
+        alert('Cannot determine visible range. Please ensure the plot is loaded.');
+        return;
+    }
+
+    const xAxis = plotDiv._fullLayout.xaxis;
+    const visibleMin = xAxis.range[0];
+    const visibleMax = xAxis.range[1];
+
+    console.log(`Moving all bouts in visible range ${visibleMin} to ${visibleMax} to labeling "${targetLabelingName}"`);
+
+    // Find all bouts that are at least partially visible in the current range
+    const visibleBouts = [];
+    const boutIndices = [];
+    
+    dragContext.currentSession.bouts.forEach((bout, index) => {
+        const boutStart = bout.start;
+        const boutEnd = bout.end;
+        
+        // Check if bout overlaps with visible range
+        const isVisible = (boutStart <= visibleMax && boutEnd >= visibleMin);
+        
+        // Skip self-reported bouts and bouts already in target labeling
+        const isSelfReported = bout.label === 'SELF REPORTED SMOKING';
+        const isAlreadyInTarget = bout.label === targetLabelingName;
+        
+        if (isVisible && !isSelfReported && !isAlreadyInTarget) {
+            visibleBouts.push(bout);
+            boutIndices.push(index);
+        }
+    });
+
+    if (visibleBouts.length === 0) {
+        alert('No moveable bouts found in visible range');
+        return;
+    }
+
+    // Prevent moving bouts to self-reported labeling
+    if (targetLabelingName === 'SELF REPORTED SMOKING') {
+        console.warn('Cannot move bouts to self-reported smoking labeling');
+        alert('Cannot move bouts to self-reported smoking labeling');
+        return;
+    }
+
+    // Confirm the bulk move action
+    const confirmMessage = `Move ${visibleBouts.length} bouts in visible range to "${targetLabelingName}"?`;
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+
+    console.log(`Moving ${visibleBouts.length} bouts to "${targetLabelingName}"`);
+
+    // Store original labels for potential rollback
+    const originalLabels = visibleBouts.map(bout => bout.label);
+
+    try {
+        // Update all bout labels
+        visibleBouts.forEach(bout => {
+            bout.label = targetLabelingName;
+        });
+
+        // Update session metadata
+        await SessionAPI.updateSessionMetadata(dragContext.currentSession);
+        console.log(`Successfully moved ${visibleBouts.length} bouts to "${targetLabelingName}"`);
+
+        // Update plot to reflect changes
+        await refreshCurrentSessionPlot();
+        
+    } catch (error) {
+        console.error('Error moving bouts:', error);
+        
+        // Revert the changes
+        visibleBouts.forEach((bout, index) => {
+            bout.label = originalLabels[index];
+        });
+        
+        alert('Failed to move bouts. Please try again.');
     }
 }
 
