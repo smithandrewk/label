@@ -1315,9 +1315,17 @@ async function moveAllVisibleRangeBoutsToLabeling(targetLabelingName) {
 
     console.log(`Moving all bouts in visible range ${visibleMin} to ${visibleMax} to labeling "${targetLabelingName}"`);
 
-    // Find all bouts that are at least partially visible in the current range
+    // Find all bouts from the currently selected labeling that are at least partially visible in the current range
     const visibleBouts = [];
     const boutIndices = [];
+    
+    // Get the currently selected labeling name
+    const currentLabelingName = window.currentLabelingName;
+    
+    if (!currentLabelingName || currentLabelingName === 'No Labeling') {
+        alert('Please select a labeling first before moving bouts');
+        return;
+    }
     
     dragContext.currentSession.bouts.forEach((bout, index) => {
         const boutStart = bout.start;
@@ -1326,18 +1334,18 @@ async function moveAllVisibleRangeBoutsToLabeling(targetLabelingName) {
         // Check if bout overlaps with visible range
         const isVisible = (boutStart <= visibleMax && boutEnd >= visibleMin);
         
-        // Skip self-reported bouts and bouts already in target labeling
-        const isSelfReported = bout.label === 'SELF REPORTED SMOKING';
+        // Only include bouts from the currently selected labeling
+        const isFromCurrentLabeling = bout.label === currentLabelingName;
         const isAlreadyInTarget = bout.label === targetLabelingName;
         
-        if (isVisible && !isSelfReported && !isAlreadyInTarget) {
+        if (isVisible && isFromCurrentLabeling && !isAlreadyInTarget) {
             visibleBouts.push(bout);
             boutIndices.push(index);
         }
     });
 
     if (visibleBouts.length === 0) {
-        alert('No moveable bouts found in visible range');
+        alert(`No bouts from "${currentLabelingName}" found in visible range`);
         return;
     }
 
@@ -1349,12 +1357,12 @@ async function moveAllVisibleRangeBoutsToLabeling(targetLabelingName) {
     }
 
     // Confirm the bulk move action
-    const confirmMessage = `Move ${visibleBouts.length} bouts in visible range to "${targetLabelingName}"?`;
+    const confirmMessage = `Move ${visibleBouts.length} bouts from "${currentLabelingName}" in visible range to "${targetLabelingName}"?`;
     if (!confirm(confirmMessage)) {
         return;
     }
 
-    console.log(`Moving ${visibleBouts.length} bouts to "${targetLabelingName}"`);
+    console.log(`Moving ${visibleBouts.length} bouts from "${currentLabelingName}" to "${targetLabelingName}"`);
 
     // Store original labels for potential rollback
     const originalLabels = visibleBouts.map(bout => bout.label);
