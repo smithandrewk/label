@@ -16,6 +16,16 @@ currentLabeling: (labelingName, labelingColor, boutCount) => `
 `,
 
     /**
+     * Move visible range bouts button template
+     */
+    moveVisibleRangeBoutsButton: () => `
+        <span id="move-visible-range-bouts-btn" style="display: inline-flex; align-items: center; margin-right: 8px; padding: 4px 8px; background: rgba(108, 117, 125, 0.1); border-radius: 12px; font-size: 12px; color: #6c757d; font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease;" title="Move all bouts in visible range to another labeling">
+            <i class="bi bi-collection me-1" style="font-size: 10px;"></i>
+            Move visible range
+        </span>
+    `,
+
+    /**
      * Score button template
      */
     scoreButton: () => `
@@ -103,6 +113,7 @@ currentLabeling: (labelingName, labelingColor, boutCount) => `
         return [
             ActionButtonTemplates.modelStatusIndicator(),
             ActionButtonTemplates.currentLabeling(labelingName, labelingColor, boutCount),
+            ActionButtonTemplates.moveVisibleRangeBoutsButton(),
             '<span id="verification-percentage-pill-viz" class="badge bg-secondary me-2" style="font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, \'Helvetica Neue\', Arial, \'Noto Sans\', sans-serif; font-size: 0.75rem; font-weight: 500;">Puffs 0% | Smoking 0%</span>',
             ActionButtonTemplates.darkModeButton(),
             ActionButtonTemplates.scoreButton(),
@@ -151,6 +162,9 @@ export const ActionButtonHandlers = {
 
         // Setup current labeling button
         ActionButtonHandlers.setupCurrentLabelingButton(onLabeling);
+
+        // Setup move visible range bouts button
+        ActionButtonHandlers.setupMoveVisibleRangeBoutsButton();
     },
 
     /**
@@ -636,6 +650,131 @@ export const ActionButtonHandlers = {
         // Click handling
         darkMode_btn_overlay.addEventListener('click', () => {
             if (onDarkMode) onDarkMode();
+        });
+    },
+
+    /**
+     * Setup move visible range bouts button
+     */
+    setupMoveVisibleRangeBoutsButton: () => {
+        const moveBtn = document.getElementById('move-visible-range-bouts-btn');
+        if (!moveBtn) return;
+
+        // Hover effects
+        moveBtn.addEventListener('mouseenter', () => {
+            moveBtn.style.background = 'rgba(108, 117, 125, 0.2)';
+        });
+        
+        moveBtn.addEventListener('mouseleave', () => {
+            moveBtn.style.background = 'rgba(108, 117, 125, 0.1)';
+        });
+
+        // Click handling - show labeling selection modal
+        moveBtn.addEventListener('click', () => {
+            ActionButtonHandlers.showMoveVisibleRangeBoutsModal();
+        });
+    },
+
+    /**
+     * Show modal for selecting target labeling for bulk move
+     */
+    showMoveVisibleRangeBoutsModal: () => {
+        // Check if plot is available
+        const plotDiv = document.getElementById('timeSeriesPlot');
+        if (!plotDiv || !plotDiv._fullLayout || !plotDiv._fullLayout.xaxis) {
+            alert('Cannot determine visible range. Please ensure the plot is loaded.');
+            return;
+        }
+
+        // Check if we have labelings available
+        if (!window.labelings || window.labelings.length === 0) {
+            alert('No labelings available. Please create a labeling first.');
+            return;
+        }
+
+        // Get current visible range
+        const xAxis = plotDiv._fullLayout.xaxis;
+        const visibleMin = xAxis.range[0];
+        const visibleMax = xAxis.range[1];
+
+        // Count moveable bouts in visible range
+        let moveableBoutsCount = 0;
+        if (window.dragContext?.currentSession?.bouts) {
+            window.dragContext.currentSession.bouts.forEach(bout => {
+                const isVisible = (bout.start <= visibleMax && bout.end >= visibleMin);
+                const isSelfReported = bout.label === 'SELF REPORTED SMOKING';
+                if (isVisible && !isSelfReported) {
+                    moveableBoutsCount++;
+                }
+            });
+        }
+
+        if (moveableBoutsCount === 0) {
+            alert('No moveable bouts found in visible range.');
+            return;
+        }
+
+        // Create modal HTML
+        const modalHTML = `
+            <div class="modal fade" id="moveVisibleRangeBoutsModal" tabindex="-1" aria-labelledby="moveVisibleRangeBoutsModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="moveVisibleRangeBoutsModalLabel">Move Visible Range Bouts</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>Move <strong>${moveableBoutsCount}</strong> bouts in the current visible range to:</p>
+                            <div class="list-group" id="labeling-selection-list">
+                                ${window.labelings.map(labeling => `
+                                    <button type="button" class="list-group-item list-group-item-action d-flex align-items-center" data-labeling="${labeling.name}">
+                                        <div class="labeling-color-indicator me-2" style="width: 16px; height: 16px; background-color: ${labeling.color}; border-radius: 2px;"></div>
+                                        <span>${labeling.name}</span>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById('moveVisibleRangeBoutsModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Add modal to body
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+        // Setup event listeners for labeling selection
+        const modal = document.getElementById('moveVisibleRangeBoutsModal');
+        const labelingButtons = modal.querySelectorAll('[data-labeling]');
+        
+        labelingButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const targetLabeling = e.currentTarget.dataset.labeling;
+                
+                // Close modal first
+                const bsModal = new bootstrap.Modal(modal);
+                bsModal.hide();
+                
+                // Execute the move
+                window.moveAllVisibleRangeBoutsToLabeling(targetLabeling);
+            });
+        });
+
+        // Show the modal
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+
+        // Clean up when modal is closed
+        modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
         });
     }
 };

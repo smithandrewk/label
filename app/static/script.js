@@ -1151,68 +1151,6 @@ function showBoutContextMenu(event, boutIndex) {
     moveToItem.appendChild(submenu);
     contextMenu.appendChild(moveToItem);
 
-    // Create "Move all visible range bouts to" submenu item
-    const moveAllVisibleItem = document.createElement('div');
-    moveAllVisibleItem.className = 'dropdown-item dropdown-toggle';
-    moveAllVisibleItem.innerHTML = '<i class="bi bi-collection me-2"></i>Move all visible range bouts to';
-    moveAllVisibleItem.style.cursor = 'pointer';
-
-    // Create submenu container for bulk move
-    const bulkSubmenu = document.createElement('div');
-    bulkSubmenu.className = 'dropdown-menu';
-    bulkSubmenu.style.position = 'absolute';
-    bulkSubmenu.style.left = '100%';
-    bulkSubmenu.style.top = '0';
-    bulkSubmenu.style.display = 'none';
-
-    // Populate bulk move submenu with available labelings
-    if (currentProjectId && labelings) {
-        labelings.forEach(labeling => {
-            // Skip current labeling
-            if (labeling.name === currentBout.label) {
-                return;
-            }
-
-            const bulkLabelingItem = document.createElement('a');
-            bulkLabelingItem.className = 'dropdown-item d-flex align-items-center';
-            bulkLabelingItem.href = '#';
-            bulkLabelingItem.innerHTML = `
-                <div class="labeling-color-indicator me-2" style="width: 12px; height: 12px; background-color: ${labeling.color}; border-radius: 2px;"></div>
-                <span>${labeling.name}</span>
-            `;
-            
-            bulkLabelingItem.addEventListener('click', (e) => {
-                e.preventDefault();
-                moveAllVisibleRangeBoutsToLabeling(labeling.name);
-                contextMenu.remove();
-            });
-
-            bulkSubmenu.appendChild(bulkLabelingItem);
-        });
-    }
-
-    // Show/hide bulk submenu on hover
-    moveAllVisibleItem.addEventListener('mouseenter', () => {
-        bulkSubmenu.style.display = 'block';
-    });
-
-    moveAllVisibleItem.addEventListener('mouseleave', (e) => {
-        // Only hide if not moving to submenu
-        setTimeout(() => {
-            if (!bulkSubmenu.matches(':hover') && !moveAllVisibleItem.matches(':hover')) {
-                bulkSubmenu.style.display = 'none';
-            }
-        }, 100);
-    });
-
-    bulkSubmenu.addEventListener('mouseleave', () => {
-        bulkSubmenu.style.display = 'none';
-    });
-
-    // Append bulk submenu to move all visible item
-    moveAllVisibleItem.appendChild(bulkSubmenu);
-    contextMenu.appendChild(moveAllVisibleItem);
-
     // Add separator
     const separator = document.createElement('hr');
     separator.className = 'dropdown-divider';
@@ -2258,6 +2196,7 @@ window.duplicateLabeling = ProjectController.duplicateLabeling;
 window.deleteLabeling = ProjectController.deleteLabeling;
 window.selectLabeling = selectLabeling;
 window.deleteCurrentLabelingBouts = deleteCurrentLabelingBouts;
+window.moveAllVisibleRangeBoutsToLabeling = moveAllVisibleRangeBoutsToLabeling;
 window.scoreSession = SessionController.scoreSession;
 window.showTableView = showTableView;
 window.decideSession = decideSession;
