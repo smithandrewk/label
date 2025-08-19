@@ -6,6 +6,7 @@
  * - 'k': Navigate to previous labeling (with wraparound)
  * - 's': Toggle split mode
  * - 'v': Toggle smoking verified status
+ * - 'c': Toggle puff verified status
  * - 'r': Create new bout
  * - 'b': Score visible range with selected model
  * - 'f': Fullscreen/zoom out to show all data
@@ -131,7 +132,7 @@ export function addEventListeners() {
         }
         
         // Check if user is trying to use a shortcut
-        const shortcutKeys = ['n', 'p', 'l', 'k', 's', 'r', 'b', 'v', 'f','d'];
+        const shortcutKeys = ['n', 'p', 'l', 'k', 's', 'r', 'b', 'v', 'c', 'f','d'];
         const isShortcutAttempt = shortcutKeys.includes(event.key.toLowerCase()) || 
                                 ((event.metaKey || event.ctrlKey) && ['s', 'd'].includes(event.key.toLowerCase()));
         
@@ -163,6 +164,9 @@ export function addEventListeners() {
         } else if (event.key.toLowerCase() === 'v') {
             event.preventDefault(); // Prevent browser save dialog
             toggleVerifiedStatus();
+        } else if (event.key.toLowerCase() === 'c') {
+            event.preventDefault(); // Prevent browser save dialog
+            togglePuffsVerifiedStatus();
         } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd') {
             event.preventDefault(); // Prevent browser save dialog
             showTableView();
