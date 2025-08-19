@@ -183,7 +183,29 @@ function renderVerificationStatus(participant) {
         const projectName = projectNames[index] || `Project ${projectId}`;
         const status = participant.project_verification_status[projectId];
         
-        if (status) {
+        if (status && status.smoking && status.puffs) {
+            // Smoking verification badge
+            const smokingBadgeClass = status.smoking.all_verified ? 'bg-success' : 'bg-warning';
+            const smokingIcon = status.smoking.all_verified ? 'fa-check-circle' : 'fa-exclamation-triangle';
+            const smokingTitle = `${projectName} Smoking: ${status.smoking.verified_count}/${status.total_count} sessions verified (${status.smoking.percentage}%)`;
+            
+            // Puff verification badge  
+            const puffsBadgeClass = status.puffs.all_verified ? 'bg-success' : 'bg-warning';
+            const puffsIcon = status.puffs.all_verified ? 'fa-check-circle' : 'fa-exclamation-triangle';
+            const puffsTitle = `${projectName} Puffs: ${status.puffs.verified_count}/${status.total_count} sessions verified (${status.puffs.percentage}%)`;
+            
+            verificationStatuses.push(`
+                <div class="d-flex gap-1 mb-1">
+                    <span class="badge ${smokingBadgeClass}" title="${smokingTitle}" style="font-size: 0.7em;">
+                        <i class="fa-solid fa-smoking me-1"></i>${status.smoking.percentage}%
+                    </span>
+                    <span class="badge ${puffsBadgeClass}" title="${puffsTitle}" style="font-size: 0.7em;">
+                        <i class="fa-solid fa-wind me-1"></i>${status.puffs.percentage}%
+                    </span>
+                </div>
+            `);
+        } else if (status) {
+            // Fallback for old data structure
             const badgeClass = status.all_verified ? 'bg-success' : 'bg-warning';
             const icon = status.all_verified ? 'fa-check-circle' : 'fa-exclamation-triangle';
             const title = `${projectName}: ${status.verified_count}/${status.total_count} sessions verified (${status.percentage}%)`;
@@ -195,9 +217,14 @@ function renderVerificationStatus(participant) {
             `);
         } else {
             verificationStatuses.push(`
-                <span class="badge bg-secondary me-1" title="${projectName}: No sessions">
-                    <i class="fa-solid fa-minus me-1"></i>0%
-                </span>
+                <div class="d-flex gap-1 mb-1">
+                    <span class="badge bg-secondary" title="${projectName}: No sessions" style="font-size: 0.7em;">
+                        <i class="fa-solid fa-smoking me-1"></i>0%
+                    </span>
+                    <span class="badge bg-secondary" title="${projectName}: No sessions" style="font-size: 0.7em;">
+                        <i class="fa-solid fa-wind me-1"></i>0%
+                    </span>
+                </div>
             `);
         }
     });

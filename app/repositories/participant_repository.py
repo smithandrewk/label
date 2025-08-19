@@ -122,7 +122,7 @@ class ParticipantRepository(BaseRepository):
         return participants
     
     def _get_project_verification_status(self, project_ids_str):
-        """Get verification status for each project based on whether all sessions have 100% smoking verification"""
+        """Get verification status for each project based on smoking and puff verification"""
         if not project_ids_str:
             return {}
             
@@ -130,11 +130,12 @@ class ParticipantRepository(BaseRepository):
         verification_status = {}
         
         for project_id in project_ids:
-            # Check if all sessions in this project have 100% smoking verification
+            # Check verification status for both smoking and puffs
             query = """
                 SELECT 
                     COUNT(*) as total_sessions,
-                    COUNT(CASE WHEN (smoking_verified = 1 OR smoking_verified = 100) THEN 1 END) as verified_sessions
+                    COUNT(CASE WHEN (smoking_verified = 1 OR smoking_verified = 100) THEN 1 END) as smoking_verified_sessions,
+                    COUNT(CASE WHEN (puffs_verified = 1 OR puffs_verified = 100) THEN 1 END) as puffs_verified_sessions
                 FROM sessions 
                 WHERE project_id = %s 
                     AND (keep != 0 OR keep IS NULL)
@@ -143,18 +144,41 @@ class ParticipantRepository(BaseRepository):
             result = self._execute_query(query, (project_id,), fetch_one=True)
             
             if result and result['total_sessions'] > 0:
+                smoking_percentage = round((result['smoking_verified_sessions'] / result['total_sessions']) * 100, 1)
+                puffs_percentage = round((result['puffs_verified_sessions'] / result['total_sessions']) * 100, 1)
+                
                 verification_status[project_id] = {
-                    'all_verified': result['total_sessions'] == result['verified_sessions'],
-                    'verified_count': result['verified_sessions'],
+                    'all_verified': result['total_sessions'] == result['smoking_verified_sessions'],
+                    'verified_count': result['smoking_verified_sessions'],
                     'total_count': result['total_sessions'],
-                    'percentage': round((result['verified_sessions'] / result['total_sessions']) * 100, 1)
+                    'percentage': smoking_percentage,
+                    'smoking': {
+                        'all_verified': result['total_sessions'] == result['smoking_verified_sessions'],
+                        'verified_count': result['smoking_verified_sessions'],
+                        'percentage': smoking_percentage
+                    },
+                    'puffs': {
+                        'all_verified': result['total_sessions'] == result['puffs_verified_sessions'],
+                        'verified_count': result['puffs_verified_sessions'],
+                        'percentage': puffs_percentage
+                    }
                 }
             else:
                 verification_status[project_id] = {
                     'all_verified': False,
                     'verified_count': 0,
                     'total_count': 0,
-                    'percentage': 0
+                    'percentage': 0,
+                    'smoking': {
+                        'all_verified': False,
+                        'verified_count': 0,
+                        'percentage': 0
+                    },
+                    'puffs': {
+                        'all_verified': False,
+                        'verified_count': 0,
+                        'percentage': 0
+                    }
                 }
         
         return verification_status
