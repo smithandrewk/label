@@ -31,6 +31,18 @@ class LabelController:
             logging.error(f"Unexpected error: {e}")
             traceback.print_exc()
             return jsonify({"error": "An unexpected error occurred"}), 500
+            
+    def get_all_labelings(self, project_id):
+        try:
+            labelings = self.project_service.get_all_labelings(project_id, include_deleted=True)
+            return jsonify(labelings), 200
+        except DatabaseError as e:
+            logging.error(f"Database error: {e}")
+            return jsonify({"error": "Database error occurred"}), 500
+        except Exception as e:
+            logging.error(f"Unexpected error: {e}")
+            traceback.print_exc()
+            return jsonify({"error": "An unexpected error occurred"}), 500
         
     def rename_labeling(self, project_id):
         try:
@@ -176,6 +188,34 @@ class LabelController:
             return jsonify({
                 "status": "success",
                 "message": f"Labeling '{labeling_name}' deleted successfully",
+                "labeling_name": labeling_name
+            }), 200
+            
+        except DatabaseError as e:
+            logging.error(f"Database error: {str(e)}")
+            return jsonify({"error": f"Database error: {str(e)}"}), 500
+        except Exception as e:
+            logging.error(f"Unexpected error: {str(e)}")
+            traceback.print_exc()
+            return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+
+    def permanently_delete_labeling(self, project_id):
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({"error": "Invalid input: No data provided"}), 400
+            
+            labeling_name = data.get('name', '').strip()
+            
+            if not labeling_name:
+                return jsonify({"error": "Labeling name cannot be empty"}), 400
+            
+            # Permanently delete the labeling
+            result = self.project_service.permanently_delete_labeling(project_id, labeling_name)
+            
+            return jsonify({
+                "status": "success",
+                "message": f"Labeling '{labeling_name}' permanently deleted successfully",
                 "labeling_name": labeling_name
             }), 200
             
@@ -457,6 +497,10 @@ def init_controller(project_service, session_service, model_service):
 def get_labelings(project_id):
     return controller.get_labelings(project_id)
 
+@labelings_bp.route('/api/labelings/<int:project_id>/all')
+def get_all_labelings(project_id):
+    return controller.get_all_labelings(project_id)
+
 # Update labelings to include the new labeling
 @labelings_bp.route('/api/labelings/<int:project_id>/update', methods=['POST'])
 def update_labelings(project_id):
@@ -574,6 +618,11 @@ def duplicate_labeling(project_id):
 @labelings_bp.route('/api/labelings/<int:project_id>/delete', methods=['DELETE'])
 def delete_labeling(project_id):
     return controller.delete_labeling(project_id)
+
+# Permanently delete labeling
+@labelings_bp.route('/api/labelings/<int:project_id>/permanent-delete', methods=['DELETE'])
+def permanently_delete_labeling(project_id):
+    return controller.permanently_delete_labeling(project_id)
 
 # Export labeling
 @labelings_bp.route('/api/export/labeling/<int:project_id>/<labeling_name>')

@@ -636,6 +636,18 @@ if (labelingModal) {
     });
 }
 
+// Add event listener for the show deleted toggle
+const showDeletedToggle = document.getElementById('showDeletedLabelings');
+if (showDeletedToggle) {
+    showDeletedToggle.addEventListener('change', function() {
+        console.log('Show deleted toggle changed:', this.checked);
+        // Refresh the labelings display when toggle changes
+        if (window.currentProjectId) {
+            ProjectController.fetchAndDisplayLabelings(window.currentProjectId);
+        }
+    });
+}
+
 
 // You can also initialize it in the DOMContentLoaded event listener
 document.addEventListener('DOMContentLoaded', function() {
@@ -735,6 +747,32 @@ function selectLabeling(labelingName) {
     }
     
     // You can add more logic here for what happens when a labeling is selected
+}
+
+async function permanentlyDeleteLabeling(labelingName) {
+    console.log(`Permanently deleting labeling: ${labelingName}`);
+    
+    // Confirm with user since this is irreversible
+    const confirmed = confirm(`Are you sure you want to PERMANENTLY delete the labeling "${labelingName}"? This action cannot be undone and will remove all associated bouts.`);
+    
+    if (!confirmed) {
+        return;
+    }
+    
+    try {
+        const result = await ProjectAPI.permanentlyDeleteLabeling(window.currentProjectId, labelingName);
+        
+        console.log('Labeling permanently deleted successfully:', result);
+        
+        // Refresh the labelings display to reflect the permanent deletion
+        await ProjectController.fetchAndDisplayLabelings(window.currentProjectId);
+        
+        alert(`Labeling "${labelingName}" has been permanently deleted.`);
+        
+    } catch (error) {
+        console.error('Error permanently deleting labeling:', error);
+        alert('Failed to permanently delete labeling: ' + error.message);
+    }
 }
 
 function updateCurrentLabelingHeader(labelingName = null) {
@@ -2194,6 +2232,7 @@ window.updateLabelingColor = ProjectController.updateLabelingColor;
 window.editLabeling = ProjectController.editLabeling;
 window.duplicateLabeling = ProjectController.duplicateLabeling;
 window.deleteLabeling = ProjectController.deleteLabeling;
+window.permanentlyDeleteLabeling = permanentlyDeleteLabeling;
 window.selectLabeling = selectLabeling;
 window.deleteCurrentLabelingBouts = deleteCurrentLabelingBouts;
 window.moveAllVisibleRangeBoutsToLabeling = moveAllVisibleRangeBoutsToLabeling;

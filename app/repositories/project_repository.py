@@ -350,6 +350,75 @@ class ProjectRepository(BaseRepository):
             'status': 'success',
             'labeling_name': labeling_name
         }
+
+    def permanently_delete_labeling(self, project_id, labeling_name):
+        """
+        Permanently delete a labeling from a project (remove completely)
+        
+        Args:
+            project_id: ID of the project containing the labeling
+            labeling_name: Name of the labeling to permanently delete
+            
+        Returns:
+            dict: Status and message indicating success or failure
+        """
+        import json
+        
+        # First, get the current labelings
+        query = """
+            SELECT labelings
+            FROM projects
+            WHERE project_id = %s
+        """
+        result = self._execute_query(query, (project_id,), fetch_one=True)
+        
+        if not result or not result.get('labelings'):
+            raise DatabaseError('Project not found or no labelings exist')
+            
+        # Parse the labelings JSON
+        labelings = json.loads(result['labelings'])
+        found = False
+        updated_labelings = []
+        
+        # Remove the matching labeling completely
+        for labeling in labelings:
+            if isinstance(labeling, str) and labeling == labeling_name:
+                found = True
+                # Don't add to updated_labelings (effectively removing it)
+            elif isinstance(labeling, dict) and labeling.get('name') == labeling_name:
+                found = True
+                # Don't add to updated_labelings (effectively removing it)
+            elif isinstance(labeling, str) and labeling.startswith('{'):
+                try:
+                    labeling_obj = json.loads(labeling)
+                    if isinstance(labeling_obj, dict) and labeling_obj.get('name') == labeling_name:
+                        found = True
+                        # Don't add to updated_labelings (effectively removing it)
+                    else:
+                        updated_labelings.append(labeling)
+                except:
+                    updated_labelings.append(labeling)
+            else:
+                updated_labelings.append(labeling)
+
+        if not found:
+            raise DatabaseError(f'Labeling "{labeling_name}" not found in project')
+            
+        # Save the updated labelings back to the database
+        update_query = """
+            UPDATE projects
+            SET labelings = %s
+            WHERE project_id = %s
+        """
+        rows_affected = self._execute_query(update_query, (json.dumps(updated_labelings), project_id), commit=True)
+        
+        if rows_affected == 0:
+            raise DatabaseError('Failed to permanently delete labeling')
+            
+        return {
+            'status': 'success',
+            'labeling_name': labeling_name
+        }
     
     def update_participant(self, project_id, new_participant_id):
         """Update the participant assigned to a project"""

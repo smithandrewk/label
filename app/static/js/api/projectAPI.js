@@ -43,6 +43,28 @@ export class ProjectAPI {
     }
 
     /**
+     * Fetch all labelings for a given project (including deleted ones)
+     * @param {string|number} projectId
+     * @returns {Promise<Object[]>}
+     */
+    static async fetchAllLabelings(projectId) {
+        const response = await fetch(`/api/labelings/${projectId}/all`);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        // Parse the labelings JSON string
+        let labelings = [];
+        if (data.length > 0 && data[0].labelings) {
+            try {
+                labelings = JSON.parse(data[0].labelings);
+            } catch (e) {
+                console.error('Error parsing labelings JSON:', e);
+                labelings = [];
+            }
+        }
+        return labelings;
+    }
+
+    /**
      * Create or update a labeling for a project
      * @param {string|number} projectId
      * @param {string} name - The labeling name
@@ -192,6 +214,36 @@ export class ProjectAPI {
             return await response.json();
         } catch (error) {
             console.error('Error deleting labeling:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Permanently delete a labeling
+     * @param {string|number} projectId
+     * @param {string} labelingName
+     * @returns {Promise<Object>}
+     */
+    static async permanentlyDeleteLabeling(projectId, labelingName) {
+        try {
+            const response = await fetch(`/api/labelings/${projectId}/permanent-delete`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: labelingName
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to permanently delete labeling');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error permanently deleting labeling:', error);
             throw error;
         }
     }

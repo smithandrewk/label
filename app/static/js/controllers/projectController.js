@@ -95,7 +95,17 @@ export class ProjectController {
      */
     static async fetchAndDisplayLabelings(projectId) {
         try {
-            window.labelings = await ProjectAPI.fetchLabelings(projectId);
+            // Check if we should show deleted labelings
+            const showDeletedToggle = document.getElementById('showDeletedLabelings');
+            const showDeleted = showDeletedToggle && showDeletedToggle.checked;
+            
+            // Fetch labelings based on toggle state
+            if (showDeleted) {
+                window.labelings = await ProjectAPI.fetchAllLabelings(projectId);
+            } else {
+                window.labelings = await ProjectAPI.fetchLabelings(projectId);
+            }
+            
             const labelingsList = document.getElementById('available-labelings-list');
             
             // Reset current labeling header when refreshing the list
@@ -120,35 +130,54 @@ export class ProjectController {
                     console.log('Labeling item:', labeling.name);
                     const currentColor = labeling.color || generateDefaultColor(index);
                     const labelingName = labeling.name;
+                    const isDeleted = labeling.is_deleted === true;
+                    
                     const labelingItem = document.createElement('div');
-                    labelingItem.className = 'labeling-item d-flex justify-content-between align-items-center py-1';
+                    labelingItem.className = `labeling-item d-flex justify-content-between align-items-center py-1 ${isDeleted ? 'opacity-75' : ''}`;
 
-                    labelingItem.innerHTML = `
-                        <div class="d-flex align-items-center">
-                            <div class="color-picker-container me-2" style="position: relative;">
-                                <div class="color-circle" style="width: 20px; height: 20px; border-radius: 50%; background-color: ${currentColor}; border: 1px solid #ccc; cursor: pointer;" onclick="openColorPicker('${labelingName.replace(/'/g, "\\'")}', this)"></div>
-                                <input type="color" class="color-picker" value="${currentColor}" style="position: absolute; opacity: 0; width: 20px; height: 20px; cursor: pointer;" onchange="updateLabelingColor('${labelingName.replace(/'/g, "\\'")}', this.value, this)">
+                    // Different UI for deleted vs active labelings
+                    if (isDeleted) {
+                        labelingItem.innerHTML = `
+                            <div class="d-flex align-items-center">
+                                <div class="color-picker-container me-2" style="position: relative;">
+                                    <div class="color-circle" style="width: 20px; height: 20px; border-radius: 50%; background-color: ${currentColor}; border: 1px solid #ccc;"></div>
+                                </div>
+                                <span class="text-decoration-line-through text-muted">${labelingName} (deleted)</span>
                             </div>
-                            <span>${labelingName}</span>
-                        </div>
-                        <div class="labeling-actions d-flex gap-1">
-                            <button class="btn btn-sm btn-outline-success" onclick="exportLabelingJSON('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Export Labeling">
-                                <i class="bi bi-download"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="editLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Edit Labeling">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-info" onclick="duplicateLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Duplicate Labeling">
-                                <i class="bi bi-files"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="deleteLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Delete Labeling">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-primary" onclick="selectLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;">
-                                Select
-                            </button>
-                        </div>
-                    `;
+                            <div class="labeling-actions d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-danger" onclick="permanentlyDeleteLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Permanently Delete">
+                                    <i class="bi bi-trash-fill"></i>
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        labelingItem.innerHTML = `
+                            <div class="d-flex align-items-center">
+                                <div class="color-picker-container me-2" style="position: relative;">
+                                    <div class="color-circle" style="width: 20px; height: 20px; border-radius: 50%; background-color: ${currentColor}; border: 1px solid #ccc; cursor: pointer;" onclick="openColorPicker('${labelingName.replace(/'/g, "\\'")}', this)"></div>
+                                    <input type="color" class="color-picker" value="${currentColor}" style="position: absolute; opacity: 0; width: 20px; height: 20px; cursor: pointer;" onchange="updateLabelingColor('${labelingName.replace(/'/g, "\\'")}', this.value, this)">
+                                </div>
+                                <span>${labelingName}</span>
+                            </div>
+                            <div class="labeling-actions d-flex gap-1">
+                                <button class="btn btn-sm btn-outline-success" onclick="exportLabelingJSON('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Export Labeling">
+                                    <i class="bi bi-download"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="editLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Edit Labeling">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-info" onclick="duplicateLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Duplicate Labeling">
+                                    <i class="bi bi-files"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;" title="Delete Labeling">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" onclick="selectLabeling('${labelingName.replace(/'/g, "\\'")}'); return false;">
+                                    Select
+                                </button>
+                            </div>
+                        `;
+                    }
                     labelingsList.appendChild(labelingItem);
                 });
             } else {

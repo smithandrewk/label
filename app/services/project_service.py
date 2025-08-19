@@ -259,6 +259,19 @@ class ProjectService:
             
         return labelings_data
 
+    def get_all_labelings(self, project_id=None, include_deleted=True):
+        """Get all labelings for a project, including deleted ones if specified"""
+        import json
+        
+        labelings_data = self.project_repo.get_labelings(project_id)
+        
+        # If no labelings data or not including deleted ones, return as is
+        if not labelings_data or not labelings_data[0].get('labelings') or not include_deleted:
+            return labelings_data
+            
+        # Return all labelings without filtering
+        return labelings_data
+
     def add_list_of_labeling_names_to_project(self, project_id, labels):
         """Add new labels to a project's labelings"""
         logger.info(f'Adding labels to project {project_id}: {labels}')
@@ -334,6 +347,19 @@ class ProjectService:
         """
         logger.info(f'Marking labeling "{labeling_name}" as deleted in project {project_id}')
         return self.project_repo.delete_labeling(project_id, labeling_name)
+
+    def permanently_delete_labeling(self, project_id, labeling_name):
+        """Permanently delete a labeling from a project
+        
+        Args:
+            project_id: ID of the project containing the labeling
+            labeling_name: Name of the labeling to permanently delete
+            
+        Returns:
+            dict: Status and message indicating success or failure
+        """
+        logger.info(f'Permanently deleting labeling "{labeling_name}" from project {project_id}')
+        return self.project_repo.permanently_delete_labeling(project_id, labeling_name)
 
     def discover_project_sessions(self, project_path):
         """
