@@ -78,10 +78,12 @@ class OverlayManager {
      * @param {Object} session - Session object to validate
      */
     ensureSessionBoutsIsArray(session) {
-        if (!session.bouts) {
+        // CRITICAL FIX: Don't destructively overwrite existing bout data
+        if (session.bouts === undefined) {
             session.bouts = [];
-        } else if (!Array.isArray(session.bouts)) {
-            console.warn('Session bouts is not an array, converting:', session.bouts);
+        } else if (session.bouts === null || !Array.isArray(session.bouts)) {
+            console.warn('Session bouts is not an array but not overwriting to preserve database data:', session.bouts);
+            // Only set to empty as last resort for UI functionality - this may still cause issues
             session.bouts = [];
         }
     }

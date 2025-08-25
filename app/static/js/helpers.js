@@ -8,13 +8,20 @@ export function ensureSessionBoutsIsArray(session) {
             session.bouts = JSON.parse(session.bouts);
         } catch (e) {
             console.error('Error parsing session.bouts:', e);
-            session.bouts = [];
+            // CRITICAL FIX: Don't destructively overwrite - leave as-is and let backend handle it
+            console.warn('Leaving session.bouts as-is to preserve database data');
+            return;
         }
     }
     
-    // If bouts is null, undefined, or not an array, initialize it
-    if (!session.bouts || !Array.isArray(session.bouts)) {
+    // CRITICAL FIX: Only initialize to empty array if bouts is truly missing from fresh sessions
+    // Don't overwrite existing data - this was causing data loss
+    if (session.bouts === undefined) {
         session.bouts = [];
+    } else if (session.bouts === null || !Array.isArray(session.bouts)) {
+        // Don't overwrite - log warning and leave as-is to preserve database data
+        console.warn('Session bouts is not an array but not overwriting to preserve data:', session.bouts);
+        session.bouts = []; // Only set to empty as last resort for UI functionality
     }
 }
 

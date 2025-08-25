@@ -69,17 +69,25 @@ export class SessionAPI {
 
     static async updateSessionMetadata(session) {
         try {
+            // CRITICAL FIX: Only include bouts in the update if we have valid bout data
+            // Don't send bouts parameter if session.bouts is undefined/null to avoid overwriting existing database data
+            const updateData = {
+                status: session.status,
+                keep: session.keep,
+                verified: session.verified || 0,
+                puffs_verified: session.puffs_verified || 0,
+                smoking_verified: session.smoking_verified || 0
+            };
+            
+            // Only include bouts if we have actual bout data (not null/undefined)
+            if (session.bouts !== undefined && session.bouts !== null) {
+                updateData.bouts = JSON.stringify(session.bouts);
+            }
+            
             const response = await fetch(`/api/session/${session.session_id}/metadata`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    status: session.status,
-                    keep: session.keep,
-                    verified: session.verified || 0,
-                    puffs_verified: session.puffs_verified || 0,
-                    smoking_verified: session.smoking_verified || 0,
-                    bouts: JSON.stringify(session.bouts || [])
-                })
+                body: JSON.stringify(updateData)
             });
             if (!response.ok) throw new Error('Failed to update metadata');
             const result = await response.json();
